@@ -229,7 +229,7 @@ CEREBRAS_API_KEY=csk-xxxxxxxxxxxxxxxxxxxx
 
 **Why needed:** Powers the news impact panel, geopolitical events, and sentiment analysis.
 
-1. Go to: https://newsapi.org
+1. Go to: 
 2. Click **Get API Key** (top right)
 3. Fill in the registration form:
    - Choose **Developer** plan (free)
