@@ -1,0 +1,59 @@
+import { create } from "zustand"
+import type { WatchlistItem, Alert, TradeMode, SSEEvent } from "./types/index"
+
+interface StoreState {
+  // Trade mode
+  mode: TradeMode
+  setMode: (mode: TradeMode) => void
+
+  // Watchlist
+  watchlist: WatchlistItem[]
+  setWatchlist: (items: WatchlistItem[]) => void
+  addToWatchlist: (item: WatchlistItem) => void
+  removeFromWatchlist: (ticker: string) => void
+
+  // Live alerts (WebSocket)
+  alerts: Alert[]
+  addAlert: (alert: Alert) => void
+  dismissAlert: (id: number) => void
+  clearAlerts: () => void
+
+  // SSE stream state
+  streamEvents: SSEEvent[]
+  isStreaming: boolean
+  addStreamEvent: (event: SSEEvent) => void
+  clearStream: () => void
+  setStreaming: (v: boolean) => void
+
+  // WebSocket connection
+  wsConnected: boolean
+  setWsConnected: (v: boolean) => void
+}
+
+export const useStore = create<StoreState>((set) => ({
+  mode: "both",
+  setMode: (mode) => set({ mode }),
+
+  watchlist: [],
+  setWatchlist: (items) => set({ watchlist: items }),
+  addToWatchlist: (item) =>
+    set((s) => ({ watchlist: [...s.watchlist.filter((w) => w.ticker !== item.ticker), item] })),
+  removeFromWatchlist: (ticker) =>
+    set((s) => ({ watchlist: s.watchlist.filter((w) => w.ticker !== ticker) })),
+
+  alerts: [],
+  addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts].slice(0, 50) })),
+  dismissAlert: (id) =>
+    set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
+  clearAlerts: () => set({ alerts: [] }),
+
+  streamEvents: [],
+  isStreaming: false,
+  addStreamEvent: (event) =>
+    set((s) => ({ streamEvents: [...s.streamEvents, event] })),
+  clearStream: () => set({ streamEvents: [], isStreaming: false }),
+  setStreaming: (v) => set({ isStreaming: v }),
+
+  wsConnected: false,
+  setWsConnected: (v) => set({ wsConnected: v }),
+}))
