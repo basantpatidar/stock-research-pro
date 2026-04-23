@@ -1,13 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal
 from langchain_core.messages import HumanMessage
 import json
 import asyncio
+import logging
 
 from app.agent.graph import get_agent
 from app.auth import verify_api_key
+from app.tools.price import get_price
+from app.tools.technicals import get_technicals
+from app.tools.analyst import get_analyst_consensus
+from app.tools.earnings import get_earnings
+from app.tools.news import get_news_impact
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -60,6 +68,63 @@ async def run_research(
         if "quota" in msg or "rate" in msg or "429" in msg or "exhausted" in msg:
             raise HTTPException(status_code=429, detail="LLM quota exhausted — all providers failed. Try again later.")
         raise HTTPException(status_code=500, detail=f"Research failed: {str(e)}")
+
+
+@router.get("/data")
+async def get_research_data(
+    ticker: str = Query(..., description="Stock ticker symbol"),
+    _: str = Depends(verify_api_key),
+):
+    """
+    Fetch structured stock data directly from tools — no LLM, no agent, fast.
+    Returns price, technicals, analyst consensus, earnings, and news.
+    """
+    sym = ticker.upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="Ticker is required")
+
+    def _call_tools():
+        price = get_price.invoke({"ticker": sym})
+        technicals = get_technicals.invoke({"ticker": sym})
+        analyst = get_analyst_consensus.invoke({"ticker": sym})
+        earnings = get_earnings.invoke({"ticker": sym})
+        news = get_news_impact.invoke({"ticker": sym})
+        return price, technicals, analyst, earnings, news
+
+    try:
+        price, technicals, analyst, earnings, news = await asyncio.to_thread(_call_tools)
+
+        logger.info(
+            "research/data %s — price_ok=%s technicals_ok=%s analyst_ok=%s earnings_ok=%s news_ok=%s",
+            sym,
+            "error" not in price,
+            "error" not in technicals,
+            "error" not in analyst,
+            "error" not in earnings,
+            "error" not in news,
+        )
+        if "error" in price:
+            logger.warning("price error for %s: %s", sym, price["error"])
+        if "error" in technicals:
+            logger.warning("technicals error for %s: %s", sym, technicals["error"])
+        if "error" in analyst:
+            logger.warning("analyst error for %s: %s", sym, analyst["error"])
+        if "error" in earnings:
+            logger.warning("earnings error for %s: %s", sym, earnings["error"])
+        if "error" in news:
+            logger.warning("news error for %s: %s", sym, news["error"])
+
+        return {
+            "ticker": sym,
+            "price": price,
+            "technicals": technicals,
+            "analyst": analyst,
+            "earnings": earnings,
+            "news": news,
+        }
+    except Exception as e:
+        logger.exception("research/data failed for %s", sym)
+        raise HTTPException(status_code=500, detail=f"Data fetch failed: {str(e)}")
 
 
 @router.get("/stream")

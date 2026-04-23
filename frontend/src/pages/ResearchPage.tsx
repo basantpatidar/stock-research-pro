@@ -43,10 +43,15 @@ export function ResearchPage() {
     try {
       const res = await api.get(`/research/data?ticker=${sym}`)
       const d = res.data
+      const priceData = d.price?.error ? null : d.price
+      const errors = [d.price, d.technicals, d.analyst, d.earnings, d.news]
+        .filter(x => x?.error)
+        .map((x: any) => x.error)
       setState(s => ({
         ...s,
         loading: false,
-        price: d.price?.error ? null : d.price,
+        error: !priceData && errors.length > 0 ? errors[0] : null,
+        price: priceData,
         technicals: d.technicals?.error ? null : d.technicals,
         analyst: d.analyst?.error ? null : d.analyst,
         earnings: d.earnings?.error ? null : d.earnings,
