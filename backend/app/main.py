@@ -12,6 +12,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
+# yfinance logs ERROR for invalid/delisted tickers before returning empty data.
+# Our tools handle empty responses explicitly, so these logs are redundant noise.
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
