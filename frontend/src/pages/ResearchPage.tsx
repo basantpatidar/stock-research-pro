@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react"
 import { api } from "../services/api"
-import { useSSE } from "../hooks/useSSE"
 import { useStore } from "../store"
 import { ModeToggle } from "../components/shared/ModeToggle"
 import { PriceChart } from "../components/research/PriceChart"
@@ -32,21 +31,24 @@ export function ResearchPage() {
   const [ticker, setTicker] = useState("")
   const [state, setState] = useState<ResearchState>({ price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null, loading: false, error: null })
   const { mode } = useStore()
-  const { startResearch } = useSSE()
 
   const runResearch = useCallback(async (t: string) => {
     if (!t.trim()) return
     const sym = t.toUpperCase().trim()
     setState(s => ({ ...s, loading: true, error: null, price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null }))
-    startResearch(sym, mode)
 
     try {
       const res = await api.get(`/research/data?ticker=${sym}`)
       const d = res.data
+      const priceData = d.price?.error ? null : d.price
+      const errors = [d.price, d.technicals, d.analyst, d.earnings, d.news]
+        .filter(x => x?.error)
+        .map((x: any) => x.error)
       setState(s => ({
         ...s,
         loading: false,
-        price: d.price?.error ? null : d.price,
+        error: !priceData && errors.length > 0 ? errors[0] : null,
+        price: priceData,
         technicals: d.technicals?.error ? null : d.technicals,
         analyst: d.analyst?.error ? null : d.analyst,
         earnings: d.earnings?.error ? null : d.earnings,
@@ -55,7 +57,7 @@ export function ResearchPage() {
     } catch (e: any) {
       setState(s => ({ ...s, loading: false, error: e.response?.data?.detail || e.message }))
     }
-  }, [mode, startResearch])
+  }, [mode])
 
   const fmt = (n: number | null | undefined, prefix = "", suffix = "") =>
     n != null ? `${prefix}${n.toLocaleString()}${suffix}` : "—"
