@@ -4,12 +4,51 @@ from datetime import datetime, timedelta
 from app.config import get_settings
 
 
+def _resolve_query(ticker: str, company_name: str) -> str:
+    """
+    Build the best possible NewsAPI search query for a ticker.
+
+    Priority:
+      1. Caller-supplied company_name  → use as-is (already authoritative)
+      2. yfinance longName             → look it up from the ticker's info
+      3. Fallback                      → ticker symbol only
+
+    The query is quoted ("ServiceNow") so NewsAPI does exact-phrase matching
+    instead of treating each word independently.  This prevents ambiguous
+    tickers like NOW, IT, A, or WELL from matching unrelated articles.
+    """
+    if company_name:
+        name = company_name
+    else:
+        try:
+            from app.tools._yf_client import get_ticker
+            info = get_ticker(ticker).info
+            name = info.get("longName") or info.get("shortName") or ""
+        except Exception:
+            name = ""
+
+    # Strip common legal suffixes that add noise to the search
+    for suffix in (", Inc.", " Inc.", ", Corp.", " Corp.", ", Ltd.", " Ltd.",
+                   ", LLC", " LLC", " Holdings", " Group", " Corporation"):
+        name = name.replace(suffix, "")
+    name = name.strip()
+
+    # Use the cleaner of company name vs ticker (prefer name when available)
+    search_term = name if name else ticker.upper()
+
+    # Exact-phrase quoting: "ServiceNow" beats  NOW stock
+    return f'"{search_term}"'
+
+
 @tool
 def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
     """
     Fetch recent news for a stock and analyze the impact of each headline.
     Returns headlines tagged positive/negative/neutral with estimated price impact.
-    Uses NewsAPI — requires NEWSAPI_KEY in .env
+    Uses NewsAPI — requires NEWSAPI_KEY in .env.
+
+    company_name is optional — when omitted the tool looks it up from yfinance
+    so that ambiguous tickers (NOW, IT, A, WELL, etc.) return relevant results.
     """
     try:
         settings = get_settings()
@@ -17,12 +56,12 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
         if not settings.newsapi_key:
             return {"error": "NEWSAPI_KEY not configured. Get a free key at newsapi.org"}
 
-        query = company_name if company_name else ticker
+        query = _resolve_query(ticker, company_name)
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         url = "https://newsapi.org/v2/everything"
         params = {
-            "q": f"{query} stock",
+            "q": query,
             "from": from_date,
             "sortBy": "publishedAt",
             "language": "en",
@@ -48,7 +87,6 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             source = article.get("source", {}).get("name", "Unknown")
             url_link = article.get("url", "")
 
-            # Simple sentiment classification on headline
             title_lower = title.lower()
             negative_words = [
                 "lawsuit", "investigation", "decline", "fall", "drop", "loss",
@@ -65,12 +103,11 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             neg_count = sum(1 for w in negative_words if w in title_lower)
             pos_count = sum(1 for w in positive_words if w in title_lower)
 
-            if neg_count > pos_count:
-                sentiment = "negative"
-            elif pos_count > neg_count:
-                sentiment = "positive"
-            else:
-                sentiment = "neutral"
+            sentiment = (
+                "negative" if neg_count > pos_count
+                else "positive" if pos_count > neg_count
+                else "neutral"
+            )
 
             news_items.append({
                 "headline": title,
@@ -93,6 +130,7 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
 
         return {
             "ticker": ticker.upper(),
+            "query_used": query,
             "period_days": days,
             "articles_found": len(news_items),
             "sentiment_breakdown": {
