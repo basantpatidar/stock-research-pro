@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react"
 import { api } from "../services/api"
 import { useStore } from "../store"
+import { useSSE } from "../hooks/useSSE"
 import { ModeToggle } from "../components/shared/ModeToggle"
 import { PriceChart } from "../components/research/PriceChart"
 import { SignalScore } from "../components/research/SignalScore"
@@ -31,11 +32,13 @@ export function ResearchPage() {
   const [ticker, setTicker] = useState("")
   const [state, setState] = useState<ResearchState>({ price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null, loading: false, error: null })
   const { mode } = useStore()
+  const { startResearch } = useSSE()
 
   const runResearch = useCallback(async (t: string) => {
     if (!t.trim()) return
     const sym = t.toUpperCase().trim()
     setState(s => ({ ...s, loading: true, error: null, price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null }))
+    startResearch(sym, mode)
 
     try {
       const res = await api.get(`/research/data?ticker=${sym}`)
@@ -57,7 +60,7 @@ export function ResearchPage() {
     } catch (e: any) {
       setState(s => ({ ...s, loading: false, error: e.response?.data?.detail || e.message }))
     }
-  }, [mode])
+  }, [mode, startResearch])
 
   const fmt = (n: number | null | undefined, prefix = "", suffix = "") =>
     n != null ? `${prefix}${n.toLocaleString()}${suffix}` : "—"
