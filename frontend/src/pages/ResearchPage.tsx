@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react"
 import { api } from "../services/api"
 import { useStore } from "../store"
+import { useSSE } from "../hooks/useSSE"
 import { ModeToggle } from "../components/shared/ModeToggle"
 import { PriceChart } from "../components/research/PriceChart"
 import { SignalScore } from "../components/research/SignalScore"
@@ -31,11 +32,13 @@ export function ResearchPage() {
   const [ticker, setTicker] = useState("")
   const [state, setState] = useState<ResearchState>({ price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null, loading: false, error: null })
   const { mode } = useStore()
+  const { startResearch } = useSSE()
 
   const runResearch = useCallback(async (t: string) => {
     if (!t.trim()) return
     const sym = t.toUpperCase().trim()
     setState(s => ({ ...s, loading: true, error: null, price: null, technicals: null, analyst: null, earnings: null, news: null, convergence: null }))
+    startResearch(sym, mode)
 
     try {
       const res = await api.get(`/research/data?ticker=${sym}`)
@@ -57,7 +60,7 @@ export function ResearchPage() {
     } catch (e: any) {
       setState(s => ({ ...s, loading: false, error: e.response?.data?.detail || e.message }))
     }
-  }, [mode])
+  }, [mode, startResearch])
 
   const fmt = (n: number | null | undefined, prefix = "", suffix = "") =>
     n != null ? `${prefix}${n.toLocaleString()}${suffix}` : "—"
@@ -139,26 +142,42 @@ export function ResearchPage() {
 
             {analyst && (
               <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, padding: "1rem 1.25rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
                   Analyst consensus
                   {analyst.consensus && (
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: "#6b7280" }}>({analyst.consensus})</span>
                   )}
                 </div>
                 {analyst.num_analysts && (
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>{analyst.num_analysts} analysts</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 10 }}>{analyst.num_analysts} analysts</div>
                 )}
-                {analyst.recent_rating_changes?.slice(0, 3).map((rc: any, i: number) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", padding: "3px 0", borderBottom: "0.5px solid #f3f4f6" }}>
-                    <span>{rc.firm}</span>
-                    <span style={{ color: rc.action === "up" ? "#16a34a" : rc.action === "down" ? "#dc2626" : "#6b7280", fontWeight: 500 }}>
-                      {rc.from_grade ? `${rc.from_grade} → ` : ""}{rc.to_grade}
-                    </span>
-                  </div>
-                ))}
+
+                {/* Buy / Hold / Sell bars from recommendations_summary */}
+                {analyst.total_ratings > 0 && (() => {
+                  const rc = analyst.rating_counts
+                  const total = analyst.total_ratings
+                  const bars = [
+                    { label: "Buy", count: rc.strong_buy + rc.buy, color: "#16a34a" },
+                    { label: "Hold", count: rc.hold, color: "#d97706" },
+                    { label: "Sell", count: rc.sell + rc.strong_sell, color: "#dc2626" },
+                  ]
+                  return bars.map(({ label, count, color }) => {
+                    const pct = Math.round((count / total) * 100)
+                    return (
+                      <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                        <span style={{ fontSize: 11, color: "#6b7280", width: 28 }}>{label}</span>
+                        <div style={{ flex: 1, height: 7, background: "#f3f4f6", borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4 }} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 500, width: 36, textAlign: "right", color }}>{count} <span style={{ color: "#9ca3af", fontWeight: 400 }}>({pct}%)</span></span>
+                      </div>
+                    )
+                  })
+                })()}
+
                 {analyst.price_target && (
                   <div style={{ borderTop: "0.5px solid #f3f4f6", marginTop: 8, paddingTop: 8 }}>
-                    <div style={{ fontSize: 12, color: "#6b7280" }}>Price target</div>
+                    <div style={{ fontSize: 11, color: "#6b7280" }}>Price target</div>
                     <div style={{ fontSize: 16, fontWeight: 500 }}>
                       ${analyst.price_target.toFixed(2)}
                       {analyst.upside_pct != null && (

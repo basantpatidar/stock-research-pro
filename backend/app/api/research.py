@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, Any
 from langchain_core.messages import HumanMessage
 import json
 import asyncio
 import logging
+import numpy as np
 
 from app.agent.graph import get_agent
 from app.auth import verify_api_key
@@ -16,6 +17,23 @@ from app.tools.earnings import get_earnings
 from app.tools.news import get_news_impact
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize(obj: Any) -> Any:
+    """Recursively convert numpy scalars to JSON-serializable Python types."""
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -114,14 +132,14 @@ async def get_research_data(
         if "error" in news:
             logger.warning("news error for %s: %s", sym, news["error"])
 
-        return {
+        return _sanitize({
             "ticker": sym,
             "price": price,
             "technicals": technicals,
             "analyst": analyst,
             "earnings": earnings,
             "news": news,
-        }
+        })
     except Exception as e:
         logger.exception("research/data failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Data fetch failed: {str(e)}")

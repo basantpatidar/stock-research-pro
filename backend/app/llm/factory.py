@@ -2,18 +2,18 @@ from langchain_core.language_models import BaseChatModel
 from app.config import Settings
 
 
-def get_llm(settings: Settings) -> BaseChatModel:
+def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
     """
-    Returns a LangChain BaseChatModel for the configured provider.
-    LangGraph receives this and never knows which provider is behind it.
-    Swap MODEL_TYPE in .env — zero code changes needed anywhere else.
+    Instantiates a LangChain BaseChatModel for the given provider + model name.
+    Separated from get_llm() so any provider+model combo can be built independently
+    of what's in settings.model_type / settings.model_name.
     """
-    match settings.model_type.lower():
+    match provider.lower():
 
         case "groq":
             from langchain_groq import ChatGroq
             return ChatGroq(
-                model=settings.model_name,
+                model=model,
                 api_key=settings.groq_api_key,
                 temperature=0.1,
             )
@@ -21,14 +21,14 @@ def get_llm(settings: Settings) -> BaseChatModel:
         case "ollama":
             from langchain_ollama import ChatOllama
             return ChatOllama(
-                model=settings.ollama_model,
+                model=model,
                 temperature=0.1,
             )
 
         case "gemini":
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(
-                model=settings.model_name,
+                model=model,
                 google_api_key=settings.gemini_api_key,
                 temperature=0.1,
             )
@@ -36,7 +36,7 @@ def get_llm(settings: Settings) -> BaseChatModel:
         case "claude":
             from langchain_anthropic import ChatAnthropic
             return ChatAnthropic(
-                model=settings.model_name,
+                model=model,
                 api_key=settings.anthropic_api_key,
                 temperature=0.1,
             )
@@ -44,7 +44,7 @@ def get_llm(settings: Settings) -> BaseChatModel:
         case "openai":
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
-                model=settings.model_name,
+                model=model,
                 api_key=settings.openai_api_key,
                 temperature=0.1,
             )
@@ -52,7 +52,7 @@ def get_llm(settings: Settings) -> BaseChatModel:
         case "openrouter":
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
-                model=settings.model_name,
+                model=model,
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.openrouter_api_key,
                 temperature=0.1,
@@ -61,7 +61,7 @@ def get_llm(settings: Settings) -> BaseChatModel:
         case "cerebras":
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
-                model=settings.model_name,
+                model=model,
                 base_url="https://api.cerebras.ai/v1",
                 api_key=settings.cerebras_api_key,
                 temperature=0.1,
@@ -69,38 +69,70 @@ def get_llm(settings: Settings) -> BaseChatModel:
 
         case _:
             raise ValueError(
-                f"Unknown model_type: '{settings.model_type}'. "
+                f"Unknown provider: '{provider}'. "
                 f"Valid options: groq, ollama, gemini, claude, openai, openrouter, cerebras"
             )
 
 
-def get_llm_with_fallback(settings: Settings) -> BaseChatModel:
+def get_llm(settings: Settings) -> BaseChatModel:
+    """Returns the default LLM (model_type / model_name from settings)."""
+    return _build_llm(settings.model_type, settings.model_name, settings)
+
+
+def get_llm_for_task(task: str, settings: Settings) -> BaseChatModel:
     """
-    Tries providers in order. Falls back if a key is missing.
-    Useful for background jobs that must not fail silently.
-    Order: configured provider → groq → cerebras → ollama
+    Returns an LLM configured for the given task: "agent", "tier2", or "tier3".
+    Falls back to model_type / model_name when no task-specific override is set.
+
+    Two models from the same provider are fine — e.g. tier2=gemini/gemini-2.5-flash
+    and tier3=gemini/gemini-2.5-pro both use GEMINI_API_KEY, different model names.
+
+    Example .env overrides:
+        LLM_AGENT_TYPE=groq
+        LLM_AGENT_MODEL=llama-3.3-70b-versatile
+        LLM_TIER2_TYPE=gemini
+        LLM_TIER2_MODEL=gemini-2.5-flash
+        LLM_TIER3_TYPE=claude
+        LLM_TIER3_MODEL=claude-haiku-4-5-20251001
     """
-    providers_to_try = [settings.model_type]
+    provider = getattr(settings, f"llm_{task}_type", "") or settings.model_type
+    model = getattr(settings, f"llm_{task}_model", "") or settings.model_name
+    return _build_llm(provider, model, settings)
 
-    if "groq" not in providers_to_try and settings.groq_api_key:
-        providers_to_try.append("groq")
-    if "cerebras" not in providers_to_try and settings.cerebras_api_key:
-        providers_to_try.append("cerebras")
-    if "ollama" not in providers_to_try:
-        providers_to_try.append("ollama")
 
-    last_error = None
-    for provider in providers_to_try:
-        try:
-            original_type = settings.model_type
-            settings.model_type = provider
-            llm = get_llm(settings)
-            settings.model_type = original_type
-            return llm
-        except Exception as e:
-            last_error = e
-            continue
+def _try_build(provider: str, model: str, settings: Settings) -> BaseChatModel | None:
+    """Build an LLM for provider+model, return None if key is missing or build fails."""
+    try:
+        return _build_llm(provider, model, settings)
+    except Exception:
+        return None
 
-    raise RuntimeError(
-        f"All LLM providers failed. Last error: {last_error}"
-    )
+
+def get_llm_with_fallback(settings: Settings, task: str = "agent") -> BaseChatModel:
+    """
+    Returns a LangChain runnable that falls back at *runtime* — catches 429s,
+    quota errors, and timeouts mid-request, not just missing keys at startup.
+
+    Uses task-specific config as the primary model (falls back to model_type if unset).
+    Fallback chain: task-configured primary → groq → cerebras → ollama
+    """
+    primary_provider = getattr(settings, f"llm_{task}_type", "") or settings.model_type
+    primary_model = getattr(settings, f"llm_{task}_model", "") or settings.model_name
+
+    candidates: list[tuple[str, str]] = [(primary_provider, primary_model)]
+
+    if "groq" != primary_provider and settings.groq_api_key:
+        candidates.append(("groq", "llama-3.3-70b-versatile"))
+    if "cerebras" != primary_provider and settings.cerebras_api_key:
+        candidates.append(("cerebras", "llama3.3-70b"))
+    if "ollama" != primary_provider:
+        candidates.append(("ollama", settings.ollama_model))
+
+    built = [llm for p, m in candidates if (llm := _try_build(p, m, settings)) is not None]
+
+    if not built:
+        raise RuntimeError("All LLM providers failed — no valid model could be constructed.")
+
+    from langchain_core.runnables import RunnableWithFallbacks
+    primary, *fallbacks = built
+    return primary.with_fallbacks(fallbacks) if fallbacks else primary

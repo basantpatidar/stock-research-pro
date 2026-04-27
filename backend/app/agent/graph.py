@@ -55,7 +55,7 @@ ALL_TOOLS = [
 
 def build_agent_graph():
     settings = get_settings()
-    llm = get_llm_with_fallback(settings)
+    llm = get_llm_with_fallback(settings, task="agent")
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
     def agent_node(state: AgentState):
