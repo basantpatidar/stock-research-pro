@@ -6,8 +6,9 @@ import { ResearchPage } from "./pages/ResearchPage"
 import { WatchlistPage } from "./pages/WatchlistPage"
 import { ScreenerPage } from "./pages/ScreenerPage"
 import { MacroPage } from "./pages/MacroPage"
+import { T } from "./theme"
 
-const NAV_LINKS = [
+const NAV_ITEMS = [
   { to: "/", label: "Research" },
   { to: "/watchlist", label: "Watchlist" },
   { to: "/screener", label: "Screener" },
@@ -15,68 +16,93 @@ const NAV_LINKS = [
 ]
 
 function AppShell() {
-  // Mount WebSocket once at app level — persists across page navigation
   useWebSocket()
   const { wsConnected, alerts } = useStore()
   const unread = alerts.length
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      {/* Nav */}
+    <div style={{ minHeight: "100vh", background: T.bg }}>
       <nav style={{
-        background: "#fff",
-        borderBottom: "0.5px solid #e5e7eb",
+        background: T.surface,
+        borderBottom: `1px solid ${T.border}`,
         padding: "0 1.5rem",
         display: "flex",
         alignItems: "center",
         height: 52,
-        gap: 4,
         position: "sticky",
         top: 0,
         zIndex: 50,
       }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: "#111", marginRight: 24 }}>
-          📈 Stock Research Pro
-        </div>
-        {NAV_LINKS.map(({ to, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === "/"}
-            style={({ isActive }) => ({
-              fontSize: 13,
-              fontWeight: isActive ? 500 : 400,
-              color: isActive ? "#111" : "#6b7280",
-              textDecoration: "none",
-              padding: "4px 12px",
-              borderRadius: 6,
-              background: isActive ? "#f3f4f6" : "transparent",
-            })}
-          >
-            {label}
-            {label === "Watchlist" && unread > 0 && (
-              <span style={{
-                marginLeft: 6, background: "#dc2626", color: "#fff",
-                borderRadius: 20, fontSize: 10, fontWeight: 500,
-                padding: "1px 5px",
-              }}>{unread}</span>
-            )}
-          </NavLink>
-        ))}
-
-        {/* WS status */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 32 }}>
           <div style={{
-            width: 7, height: 7, borderRadius: "50%",
-            background: wsConnected ? "#16a34a" : "#d1d5db",
-          }} />
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>
-            {wsConnected ? "Live" : "Connecting..."}
+            fontFamily: T.mono,
+            fontSize: 16,
+            fontWeight: 500,
+            background: `linear-gradient(135deg, ${T.blue} 0%, ${T.purple} 100%)`,
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            letterSpacing: "0.02em",
+          }}>SRP</div>
+          <span style={{ color: T.text2, fontSize: 13 }}>Stock Research Pro</span>
+        </div>
+
+        {/* Nav links */}
+        <div style={{ display: "flex", gap: 2 }}>
+          {NAV_ITEMS.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              style={({ isActive }) => ({
+                fontSize: 13,
+                fontWeight: isActive ? 500 : 400,
+                color: isActive ? T.text : T.text2,
+                textDecoration: "none",
+                padding: "5px 13px",
+                borderRadius: 6,
+                background: isActive ? T.surface2 : "transparent",
+                border: `1px solid ${isActive ? T.borderBright : "transparent"}`,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                transition: "all 0.12s ease",
+              })}
+            >
+              {label}
+              {label === "Watchlist" && unread > 0 && (
+                <span style={{
+                  background: T.red, color: "#fff", borderRadius: 20,
+                  fontSize: 10, fontWeight: 600, padding: "1px 6px", lineHeight: 1.4,
+                }}>{unread}</span>
+              )}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* Live status */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: wsConnected ? T.green : T.text3,
+              position: "absolute",
+              animation: wsConnected ? "pulse-dot 2s ease-in-out infinite" : "none",
+            }} />
+            {wsConnected && (
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: T.green, position: "absolute",
+                animation: "pulse-ring 1.8s ease-out infinite",
+              }} />
+            )}
+          </div>
+          <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono, letterSpacing: "0.05em" }}>
+            {wsConnected ? "LIVE" : "OFFLINE"}
           </span>
         </div>
       </nav>
 
-      {/* Pages */}
       <main>
         <Routes>
           <Route path="/" element={<ResearchPage />} />
@@ -86,7 +112,6 @@ function AppShell() {
         </Routes>
       </main>
 
-      {/* Toast notifications */}
       <AlertToast />
     </div>
   )

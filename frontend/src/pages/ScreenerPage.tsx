@@ -1,8 +1,43 @@
 import { useState } from "react"
 import { useScreener } from "../hooks/useScreener"
 import { useWatchlist } from "../hooks/useWatchlist"
+import { T, chgColor } from "../theme"
 
 const SECTORS = ["all", "Technology", "Healthcare", "Financials", "Energy", "Consumer Discretionary", "Industrials", "Communication Services"]
+
+const oppStyle = (change: number) => {
+  if (change <= -15) return { bg: T.greenDim,  color: T.green,  label: "Buy now",     border: T.green }
+  if (change <= -10) return { bg: "rgba(16,185,129,0.07)", color: "#34d399", label: "Buy — 1wk", border: "#34d399" }
+  if (change <= -5)  return { bg: T.amberDim,  color: T.amber,  label: "Monitor",     border: T.amber }
+  return                    { bg: T.surface2,  color: T.text2,  label: "Neutral",     border: T.borderBright }
+}
+
+const FilterSelect = ({
+  label, value, options, onChange
+}: {
+  label: string
+  value: number | string
+  options: [number | string, string][]
+  onChange: (v: number | string) => void
+}) => (
+  <div style={{ background: T.surface2, borderRadius: 8, padding: "10px 13px", border: `1px solid ${T.border}` }}>
+    <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>
+      {label}
+    </div>
+    <select
+      value={value}
+      onChange={e => onChange(typeof value === "number" ? Number(e.target.value) : e.target.value)}
+      style={{
+        width: "100%", padding: "6px 8px", fontSize: 13,
+        border: `1px solid ${T.border}`, borderRadius: 6,
+        background: T.surface, color: T.text, outline: "none",
+        cursor: "pointer",
+      }}
+    >
+      {options.map(([val, lbl]) => <option key={String(val)} value={val}>{lbl}</option>)}
+    </select>
+  </div>
+)
 
 export function ScreenerPage() {
   const { filters, setFilters, results, loading, error, runScreener, savePreset, fetchPresets, presets } = useScreener()
@@ -21,110 +56,172 @@ export function ScreenerPage() {
 
   const handleAddToWatchlist = async (ticker: string) => {
     await addTicker(ticker)
-    setAddedTickers((s) => new Set([...s, ticker]))
-  }
-
-  const oppColor = (change: number) => {
-    if (change <= -15) return { bg: "#d1fae5", color: "#065f46", label: "Buy now" }
-    if (change <= -10) return { bg: "#dcfce7", color: "#14532d", label: "Buy — 1 week" }
-    if (change <= -5) return { bg: "#ecfdf5", color: "#166534", label: "Monitor" }
-    return { bg: "#f3f4f6", color: "#374151", label: "Neutral" }
+    setAddedTickers(s => new Set([...s, ticker]))
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem 1rem" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
 
-      {/* Filters */}
-      <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Screener filters</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-          {[
-            { label: "Market cap (min)", key: "min_market_cap_b", options: [[100, "$100B+"], [50, "$50B+"], [10, "$10B+"], [1, "$1B+"]] },
-            { label: "Daily volume (min)", key: "min_volume", options: [[1_000_000, "1M+ shares"], [500_000, "500K+ shares"], [100_000, "100K+ shares"]] },
-            { label: "Price drop trigger (7d)", key: "min_price_drop_pct", options: [[5, "−5%+"], [10, "−10%+"], [15, "−15%+"], [20, "−20%+"]] },
-            { label: "Max P/E ratio", key: "max_pe", options: [[0, "Any"], [20, "Under 20x"], [30, "Under 30x"], [50, "Under 50x"]] },
-          ].map(({ label, key, options }) => (
-            <div key={key} style={{ background: "#f9fafb", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
-              <select
-                value={(filters as any)[key]}
-                onChange={(e) => setFilters({ ...filters, [key]: Number(e.target.value) })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, background: "#fff" }}
-              >
-                {options.map(([val, lbl]) => (
-                  <option key={val} value={val}>{lbl}</option>
-                ))}
-              </select>
-            </div>
-          ))}
-          <div style={{ background: "#f9fafb", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Sector</div>
-            <select
-              value={filters.sector}
-              onChange={(e) => setFilters({ ...filters, sector: e.target.value })}
-              style={{ width: "100%", padding: "5px 8px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, background: "#fff" }}
-            >
-              {SECTORS.map((s) => <option key={s} value={s}>{s === "all" ? "All sectors" : s}</option>)}
-            </select>
-          </div>
+      {/* Page header */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>Stock Screener</div>
+        <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>Filter large-cap stocks by fundamentals &amp; momentum</div>
+      </div>
+
+      {/* Filters panel */}
+      <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <FilterSelect
+            label="Market cap (min)"
+            value={filters.min_market_cap_b}
+            options={[[100, "$100B+"], [50, "$50B+"], [10, "$10B+"], [1, "$1B+"]]}
+            onChange={v => setFilters({ ...filters, min_market_cap_b: v as number })}
+          />
+          <FilterSelect
+            label="Daily volume (min)"
+            value={filters.min_volume}
+            options={[[1_000_000, "1M+ shares"], [500_000, "500K+"], [100_000, "100K+"]]}
+            onChange={v => setFilters({ ...filters, min_volume: v as number })}
+          />
+          <FilterSelect
+            label="Price drop trigger (7d)"
+            value={filters.min_price_drop_pct}
+            options={[[5, "−5%+"], [10, "−10%+"], [15, "−15%+"], [20, "−20%+"]]}
+            onChange={v => setFilters({ ...filters, min_price_drop_pct: v as number })}
+          />
+          <FilterSelect
+            label="Max P/E ratio"
+            value={filters.max_pe}
+            options={[[0, "Any"], [20, "Under 20×"], [30, "Under 30×"], [50, "Under 50×"]]}
+            onChange={v => setFilters({ ...filters, max_pe: v as number })}
+          />
+          <FilterSelect
+            label="Sector"
+            value={filters.sector}
+            options={SECTORS.map(s => [s, s === "all" ? "All sectors" : s])}
+            onChange={v => setFilters({ ...filters, sector: v as string })}
+          />
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={() => runScreener()}
             disabled={loading}
-            style={{ padding: "7px 20px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 8, background: loading ? "#f3f4f6" : "#111", color: loading ? "#9ca3af" : "#fff", cursor: loading ? "not-allowed" : "pointer" }}
+            style={{
+              padding: "8px 22px", fontSize: 13, fontWeight: 500, border: "none",
+              borderRadius: 8, cursor: loading ? "not-allowed" : "pointer",
+              background: loading ? T.surface2 : T.blue,
+              color: loading ? T.text2 : "#fff",
+              boxShadow: loading ? "none" : T.blueGlow,
+              transition: "all 0.15s ease",
+            }}
           >
-            {loading ? "Scanning..." : "Run screener"}
+            {loading ? "Scanning…" : "Run Screener →"}
           </button>
           <button
             onClick={() => setSaveModalOpen(true)}
-            style={{ padding: "7px 14px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 8, background: "transparent", cursor: "pointer", color: "#374151" }}
+            style={{
+              padding: "8px 14px", fontSize: 13, border: `1px solid ${T.border}`,
+              borderRadius: 8, background: "transparent", cursor: "pointer", color: T.text2,
+              transition: "all 0.12s ease",
+            }}
           >
             Save preset
           </button>
           <button
             onClick={fetchPresets}
-            style={{ padding: "7px 14px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 8, background: "transparent", cursor: "pointer", color: "#374151" }}
+            style={{
+              padding: "8px 14px", fontSize: 13, border: `1px solid ${T.border}`,
+              borderRadius: 8, background: "transparent", cursor: "pointer", color: T.text2,
+            }}
           >
             Load preset
           </button>
+          {presets.length > 0 && (
+            <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+              {presets.length} saved presets
+            </span>
+          )}
         </div>
       </div>
 
-      {error && <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div style={{
+          background: T.redDim, color: T.red, border: `1px solid ${T.red}`,
+          borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 12,
+        }}>
+          {error}
+        </div>
+      )}
 
       {/* Results */}
       {results.length > 0 && (
-        <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #e5e7eb", fontSize: 13 }}>
-            <strong>{results.length}</strong> stocks match your filters
+        <div className="animate-in" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, overflow: "hidden" }}>
+          <div style={{
+            padding: "10px 16px", borderBottom: `1px solid ${T.border}`,
+            background: T.surface2, fontSize: 13, color: T.text2,
+          }}>
+            <span style={{ fontFamily: T.mono, fontWeight: 600, color: T.blue }}>{results.length}</span>
+            <span style={{ marginLeft: 5 }}>stocks match your filters</span>
           </div>
 
-          {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 70px 70px 60px 100px 100px", gap: 10, padding: "8px 16px", borderBottom: "0.5px solid #e5e7eb" }}>
-            {["Ticker", "Company", "Mkt cap", "Volume", "7d chg", "Opportunity", ""].map((h, i) => (
-              <span key={i} style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{h}</span>
+          {/* Table header */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "64px 1fr 80px 70px 64px 100px 110px",
+            gap: 10, padding: "8px 16px", borderBottom: `1px solid ${T.border}`,
+            background: T.surface2,
+          }}>
+            {["Ticker", "Company", "Mkt Cap", "Volume", "7d", "Opportunity", ""].map((h, i) => (
+              <span key={i} style={{ fontSize: 10, color: T.text3, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                {h}
+              </span>
             ))}
           </div>
 
-          {results.map((r) => {
-            const opp = oppColor(r.change_7d_pct)
+          {results.map((r, idx) => {
+            const opp = oppStyle(r.change_7d_pct)
             const added = addedTickers.has(r.ticker)
             return (
-              <div key={r.ticker} style={{ display: "grid", gridTemplateColumns: "56px 1fr 70px 70px 60px 100px 100px", gap: 10, padding: "10px 16px", borderBottom: "0.5px solid #f9fafb", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>{r.ticker}</span>
-                <span style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.company}</span>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>${r.market_cap_b}B</span>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>{(r.avg_volume / 1_000_000).toFixed(1)}M</span>
-                <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 500 }}>{r.change_7d_pct.toFixed(1)}%</span>
-                <span style={{ display: "inline-block", fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: opp.bg, color: opp.color }}>{opp.label}</span>
+              <div
+                key={r.ticker}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "64px 1fr 80px 70px 64px 100px 110px",
+                  gap: 10, padding: "10px 16px",
+                  borderBottom: idx < results.length - 1 ? `1px solid ${T.border}` : "none",
+                  alignItems: "center",
+                  transition: "background 0.1s ease",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = T.surfaceHover)}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, fontFamily: T.mono, color: T.text }}>{r.ticker}</span>
+                <span style={{ fontSize: 12, color: T.text2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.company}</span>
+                <span style={{ fontSize: 12, fontFamily: T.mono, color: T.text2 }}>${r.market_cap_b}B</span>
+                <span style={{ fontSize: 12, fontFamily: T.mono, color: T.text2 }}>{(r.avg_volume / 1_000_000).toFixed(1)}M</span>
+                <span style={{ fontSize: 12, fontFamily: T.mono, fontWeight: 600, color: chgColor(r.change_7d_pct) }}>
+                  {r.change_7d_pct >= 0 ? "+" : ""}{r.change_7d_pct.toFixed(1)}%
+                </span>
+                <span style={{
+                  display: "inline-block", fontSize: 10, fontWeight: 600, padding: "3px 8px",
+                  borderRadius: 20, background: opp.bg, color: opp.color,
+                  border: `1px solid ${opp.border}`, letterSpacing: "0.02em",
+                }}>
+                  {opp.label}
+                </span>
                 <button
                   onClick={() => handleAddToWatchlist(r.ticker)}
                   disabled={added}
-                  style={{ fontSize: 11, padding: "3px 10px", border: "0.5px solid #d1d5db", borderRadius: 6, background: added ? "#f3f4f6" : "transparent", cursor: added ? "default" : "pointer", color: added ? "#9ca3af" : "#374151" }}
+                  style={{
+                    fontSize: 11, padding: "4px 10px", border: `1px solid ${added ? T.border : T.borderBright}`,
+                    borderRadius: 6, cursor: added ? "default" : "pointer",
+                    background: added ? T.surface2 : "transparent",
+                    color: added ? T.text3 : T.text2,
+                    transition: "all 0.12s ease",
+                  }}
                 >
-                  {added ? "Added ✓" : "+ Watchlist"}
+                  {added ? "✓ Added" : "+ Watchlist"}
                 </button>
               </div>
             )
@@ -133,30 +230,63 @@ export function ScreenerPage() {
       )}
 
       {results.length === 0 && !loading && (
-        <div style={{ background: "#f9fafb", borderRadius: 12, padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-          <div>Run the screener to find opportunities matching your filters</div>
+        <div style={{
+          background: T.surface, border: `1px solid ${T.border}`,
+          borderRadius: 14, padding: "3rem 2rem", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 28, color: T.text3, fontFamily: T.mono, marginBottom: 10 }}>⊛</div>
+          <div style={{ color: T.text, fontWeight: 500, marginBottom: 6 }}>Run the screener to find opportunities</div>
+          <div style={{ color: T.text2, fontSize: 13 }}>Adjust filters above and click "Run Screener"</div>
         </div>
       )}
 
       {/* Save preset modal */}
       {saveModalOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
-          <div style={{ background: "#fff", borderRadius: 12, padding: "1.5rem", width: 360 }}>
-            <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>Save screener preset</div>
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200,
+          backdropFilter: "blur(4px)",
+        }}>
+          <div className="animate-in" style={{
+            background: T.surface2, border: `1px solid ${T.borderBright}`,
+            borderRadius: 14, padding: "1.5rem", width: 380,
+            boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>
+              Save screener preset
+            </div>
             <input
               value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
+              onChange={e => setPresetName(e.target.value)}
               placeholder="Preset name, e.g. Large cap dips"
-              style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, marginBottom: 10, boxSizing: "border-box" }}
+              style={{
+                width: "100%", padding: "8px 11px", fontSize: 13,
+                border: `1px solid ${T.border}`, borderRadius: 7,
+                background: T.surface, color: T.text, outline: "none",
+                marginBottom: 12, boxSizing: "border-box", caretColor: T.blue,
+              }}
             />
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", marginBottom: 14, cursor: "pointer" }}>
-              <input type="checkbox" checked={autoMonitor} onChange={(e) => setAutoMonitor(e.target.checked)} />
-              Auto-monitor (runs every 15 minutes in background)
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.text2, marginBottom: 18, cursor: "pointer" }}>
+              <input type="checkbox" checked={autoMonitor} onChange={e => setAutoMonitor(e.target.checked)}
+                style={{ accentColor: T.blue }} />
+              Auto-monitor (runs every 15 minutes)
             </label>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setSaveModalOpen(false)} style={{ padding: "7px 14px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, background: "transparent", cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSavePreset} style={{ padding: "7px 14px", fontSize: 13, border: "none", borderRadius: 6, background: "#111", color: "#fff", cursor: "pointer" }}>Save</button>
+              <button
+                onClick={() => setSaveModalOpen(false)}
+                style={{
+                  padding: "7px 16px", fontSize: 13, border: `1px solid ${T.border}`,
+                  borderRadius: 7, background: "transparent", cursor: "pointer", color: T.text2,
+                }}
+              >Cancel</button>
+              <button
+                onClick={handleSavePreset}
+                style={{
+                  padding: "7px 16px", fontSize: 13, border: "none",
+                  borderRadius: 7, background: T.blue, color: "#fff", cursor: "pointer",
+                  fontWeight: 500,
+                }}
+              >Save</button>
             </div>
           </div>
         </div>

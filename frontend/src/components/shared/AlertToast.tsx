@@ -1,5 +1,12 @@
 import { useStore } from "../../store"
 import { api } from "../../services/api"
+import { T } from "../../theme"
+
+const typeStyle = (type: string) => {
+  if (type === "watchlist_alert") return { border: T.green, accent: T.greenDim, icon: "▲" }
+  if (type === "screener_alert")  return { border: T.blue,  accent: T.blueDim,  icon: "◈" }
+  return                                 { border: T.amber, accent: T.amberDim, icon: "⚡" }
+}
 
 export function AlertToast() {
   const { alerts, dismissAlert } = useStore()
@@ -12,32 +19,39 @@ export function AlertToast() {
     try { await api.patch(`/alerts/history/${id}/dismiss`) } catch {}
   }
 
-  const typeColor = (type: string) => {
-    if (type === "watchlist_alert") return { border: "#16a34a", bg: "#f0fdf4" }
-    if (type === "screener_alert") return { border: "#2563eb", bg: "#eff6ff" }
-    return { border: "#d97706", bg: "#fffbeb" }
-  }
-
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 100, display: "flex", flexDirection: "column", gap: 8, maxWidth: 360 }}>
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 100,
+      display: "flex", flexDirection: "column", gap: 8, maxWidth: 340,
+    }}>
       {active.map((alert) => {
-        const { border, bg } = typeColor(alert.type)
+        const s = typeStyle(alert.type)
         return (
-          <div key={alert.id} style={{
-            background: bg,
-            borderLeft: `3px solid ${border}`,
-            borderRadius: 8,
-            padding: "10px 14px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          <div key={alert.id} className="slide-in" style={{
+            background: T.surface2,
+            border: `1px solid ${T.border}`,
+            borderLeft: `3px solid ${s.border}`,
+            borderRadius: 10,
+            padding: "12px 14px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#111", marginBottom: 3 }}>{alert.title}</div>
-                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>{alert.body.slice(0, 120)}...</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+                  <span style={{ color: s.border, fontSize: 12 }}>{s.icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{alert.title}</span>
+                </div>
+                <div style={{ fontSize: 12, color: T.text2, lineHeight: 1.45 }}>
+                  {alert.body.slice(0, 120)}{alert.body.length > 120 ? "…" : ""}
+                </div>
               </div>
               <button
                 onClick={() => handleDismiss(alert.id)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: T.text3, fontSize: 18, lineHeight: 1, flexShrink: 0,
+                  padding: "0 2px",
+                }}
               >×</button>
             </div>
           </div>
