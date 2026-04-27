@@ -5,6 +5,7 @@ from typing import Literal, Any
 from langchain_core.messages import HumanMessage
 import json
 import asyncio
+import threading
 import logging
 import numpy as np
 
@@ -163,44 +164,47 @@ async def stream_research(
     async def event_generator():
         try:
             question = f"Give me a full research brief on {ticker}. Mode: {mode}. Depth: {depth}."
-
             yield f"data: {json.dumps({'type': 'start', 'ticker': ticker, 'mode': mode})}\n\n"
 
-            events = await asyncio.to_thread(
-                lambda: list(
-                    get_agent().stream(
-                        {
-                            "messages": [HumanMessage(content=question)],
-                            "ticker": ticker,
-                            "mode": mode,
-                            "research_depth": depth,
-                        }
-                    )
-                )
-            )
+            loop = asyncio.get_running_loop()
+            q: asyncio.Queue = asyncio.Queue()
 
-            for event in events:
+            def run_agent():
+                try:
+                    for event in get_agent().stream({
+                        "messages": [HumanMessage(content=question)],
+                        "ticker": ticker,
+                        "mode": mode,
+                        "research_depth": depth,
+                    }):
+                        loop.call_soon_threadsafe(q.put_nowait, event)
+                except Exception as e:
+                    loop.call_soon_threadsafe(q.put_nowait, {"__error__": str(e)})
+                finally:
+                    loop.call_soon_threadsafe(q.put_nowait, None)
+
+            threading.Thread(target=run_agent, daemon=True).start()
+
+            while True:
+                item = await q.get()
+                if item is None:
+                    break
+                if isinstance(item, dict) and "__error__" in item:
+                    yield f"data: {json.dumps({'type': 'error', 'message': item['__error__']})}\n\n"
+                    break
+
                 # LangGraph stream events are {node_name: {state_updates}},
-                # so we must unwrap each node's output before reading messages.
-                for node_output in event.values():
+                # so unwrap each node's output before reading messages.
+                for node_output in item.values():
                     messages = node_output.get("messages", [])
                     if not messages:
                         continue
-
                     last = messages[-1]
 
-                    # Tool call — agent is fetching data
                     if hasattr(last, "tool_calls") and last.tool_calls:
                         for tc in last.tool_calls:
-                            payload = {
-                                "type": "tool_call",
-                                "tool": tc["name"],
-                                "args": tc["args"],
-                            }
-                            yield f"data: {json.dumps(payload)}\n\n"
-                            await asyncio.sleep(0)
+                            yield f"data: {json.dumps({'type': 'tool_call', 'tool': tc['name'], 'args': tc['args']})}\n\n"
 
-                    # Tool result — data came back
                     elif hasattr(last, "name") and last.name:
                         content = last.content
                         if isinstance(content, str):
@@ -208,22 +212,10 @@ async def stream_research(
                                 content = json.loads(content)
                             except Exception:
                                 pass
-                        payload = {
-                            "type": "tool_result",
-                            "tool": last.name,
-                            "result": content,
-                        }
-                        yield f"data: {json.dumps(payload)}\n\n"
-                        await asyncio.sleep(0)
+                        yield f"data: {json.dumps({'type': 'tool_result', 'tool': last.name, 'result': content})}\n\n"
 
-                    # Agent reasoning / final answer
                     elif hasattr(last, "content") and last.content:
-                        payload = {
-                            "type": "reasoning",
-                            "content": last.content,
-                        }
-                        yield f"data: {json.dumps(payload)}\n\n"
-                        await asyncio.sleep(0)
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': last.content})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
