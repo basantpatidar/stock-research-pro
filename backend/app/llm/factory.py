@@ -1,6 +1,25 @@
 from langchain_core.language_models import BaseChatModel
 from app.config import Settings
 
+# Free-tier requests-per-second for each provider (sourced from provider docs)
+_FREE_TIER_RPS = {
+    "gemini":    4 / 60,   # 5 RPM limit → stay at 4
+    "groq":     25 / 60,   # 30 RPM limit → stay at 25
+    "cerebras": 25 / 60,   # 30 RPM limit → stay at 25
+    "openrouter": 5 / 60,  # varies by model; conservative default
+}
+
+
+def _rate_limiter(provider: str, settings: Settings):
+    """Returns an InMemoryRateLimiter for free tier, None for paid."""
+    if settings.llm_tier.lower() != "free":
+        return None
+    rps = _FREE_TIER_RPS.get(provider)
+    if rps is None:
+        return None
+    from langchain_core.rate_limiters import InMemoryRateLimiter
+    return InMemoryRateLimiter(requests_per_second=rps)
+
 
 def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
     """
@@ -16,6 +35,8 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 model=model,
                 api_key=settings.groq_api_key,
                 temperature=0.1,
+                max_retries=3,
+                rate_limiter=_rate_limiter("groq", settings),
             )
 
         case "ollama":
@@ -31,6 +52,8 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 model=model,
                 google_api_key=settings.gemini_api_key,
                 temperature=0.1,
+                max_retries=1,  # daily quota won't clear on retry — fail fast
+                rate_limiter=_rate_limiter("gemini", settings),
             )
 
         case "claude":
@@ -39,6 +62,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 model=model,
                 api_key=settings.anthropic_api_key,
                 temperature=0.1,
+                max_retries=3,
             )
 
         case "openai":
@@ -47,6 +71,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 model=model,
                 api_key=settings.openai_api_key,
                 temperature=0.1,
+                max_retries=3,
             )
 
         case "openrouter":
@@ -56,6 +81,8 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.openrouter_api_key,
                 temperature=0.1,
+                max_retries=3,
+                rate_limiter=_rate_limiter("openrouter", settings),
             )
 
         case "cerebras":
@@ -65,6 +92,8 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
                 base_url="https://api.cerebras.ai/v1",
                 api_key=settings.cerebras_api_key,
                 temperature=0.1,
+                max_retries=3,
+                rate_limiter=_rate_limiter("cerebras", settings),
             )
 
         case _:
