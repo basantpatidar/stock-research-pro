@@ -9,7 +9,7 @@
 
 **Name:** Stock Research Pro
 **Purpose:** AI-powered stock research platform for day trading and long-term investment decisions
-**Status:** V1 complete, V2 in progress (token optimization + new features)
+**Status:** V1 complete, infrastructure bootstrapped, V2 in progress (token optimization + new features)
 **GitHub:** Add your repo URL here
 **Owner:** Basant (Senior Full-Stack Engineer, NJ/NY area)
 
@@ -67,6 +67,7 @@ stock-research-pro/
 │       │   ├── state.py        # AgentState schema (ticker, mode, messages)
 │       │   └── prompts.py      # System prompts: day_trade / long_term / both
 │       ├── tools/              # 20 tools — one file each
+│       │   ├── _yf_client.py   # Thread-safe rate-limited yf.Ticker() wrapper — all tools use this
 │       │   ├── price.py        # yfinance — current price, OHLCV, history
 │       │   ├── technicals.py   # RSI, MACD, Bollinger, VWAP, 50d/200d MA
 │       │   ├── news.py         # NewsAPI — headlines + sentiment
@@ -87,10 +88,11 @@ stock-research-pro/
 │       │   ├── alert_engine.py # Background: evaluates watchlist signals
 │       │   └── scheduler.py    # APScheduler: watchlist every 5min, screener every 15min
 │       ├── db/
+│       │   ├── __init__.py
 │       │   ├── models.py       # WatchlistItem, ScreenerPreset, AlertHistory, ResearchCache
-│       │   └── database.py     # Async SQLAlchemy engine + get_db() dependency
+│       │   └── database.py     # engine, AsyncSessionLocal, create_tables(), get_db()
 │       ├── llm/
-│       │   └── factory.py      # Provider-agnostic get_llm() + get_llm_with_fallback()
+│       │   └── factory.py      # get_llm() + get_llm_with_fallback(); tier-aware rate limiting
 │       ├── config.py           # Pydantic settings — reads from .env
 │       ├── auth.py             # API key middleware — swap for JWT by replacing this file
 │       └── main.py             # FastAPI app — mounts all routers, lifespan startup
@@ -324,6 +326,13 @@ ENVIRONMENT=development
 # Background jobs
 SCREENER_INTERVAL_MINUTES=15
 WATCHLIST_ALERT_INTERVAL_MINUTES=5
+
+# Rate limiting
+# LLM_TIER=free applies provider-specific RPM caps (Gemini 4/min, Groq/Cerebras 25/min, OpenRouter 5/min)
+# LLM_TIER=paid disables all LLM rate limiters
+LLM_TIER=free
+# yfinance requests per second — lower = safer against Yahoo Finance 429s
+YF_REQUESTS_PER_SECOND=2
 ```
 
 ---
@@ -368,6 +377,8 @@ make clean        # Remove cache/artifacts
 | Tools return error dicts never raise | Agent loop survives tool failures gracefully |
 | SSE for agent stream, WS for alerts | SSE = unidirectional (agent reasoning), WS = bidirectional (live alerts need server push) |
 | Redis cache 15/30 min | yfinance rate limits + avoid hitting APIs on every search |
+| `_yf_client.py` shared wrapper | All tools use `get_ticker()` so Yahoo Finance requests are serialized through one global thread-safe rate limiter instead of firing concurrently |
+| `LLM_TIER` env var | Single toggle: `free` activates conservative RPM caps per provider via `InMemoryRateLimiter`; `paid` removes all caps — no code changes needed |
 | APScheduler async | Integrates with FastAPI lifespan, no separate process needed |
 | Soft delete on watchlist | Preserve history, easy re-activation |
 | Zustand over Redux | Lighter, no boilerplate, sufficient for this app's state complexity |
@@ -439,7 +450,6 @@ This project is part of Basant's GitHub portfolio alongside:
 
 ## Outstanding items / next steps
 
-- [ ] Update this file after V2 stabilizes
 - [ ] Add StockTwits API key to `.env.example` (currently no auth needed but rate-limited)
 - [ ] Expand screener `large_cap_tickers` list beyond 30 tickers
 - [ ] Add `get_congressional_trades` to the LangGraph `ALL_TOOLS` list in `graph.py`
@@ -450,3 +460,4 @@ This project is part of Basant's GitHub portfolio alongside:
 - [ ] Portfolio risk page (multi-stock exposure analysis)
 - [ ] Crypto correlation tracker (BTC/ETH vs tech stocks)
 - [ ] Dark pool FINRA data integration
+- [ ] Free-tier rate limits per provider need periodic review as providers change limits

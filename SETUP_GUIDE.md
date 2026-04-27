@@ -30,7 +30,8 @@ Install these before anything else.
 - Download: https://www.python.org/downloads/
 - Verify: `python3 --version` → should show `3.12.x` or higher
 - On Mac with Homebrew: `brew install python@3.12`
-- On Windows: download installer from python.org, check "Add to PATH"
+- On Windows: `winget install Python.Python.3.12 --source winget` or download from python.org
+- **Important:** Python 3.14 is NOT supported — `pydantic-core` requires Python ≤ 3.13. Use 3.12.
 
 ### Node.js 20+
 - Download: https://nodejs.org/en/download (choose LTS version)
@@ -146,7 +147,7 @@ MODEL_NAME=gemini-2.5-flash
 GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxx
 ```
 
-**Free tier limits:** 15 requests/minute, 1,500 requests/day.
+**Free tier limits:** 5 requests/minute for `gemini-2.5-flash`, 1,500 requests/day. Set `LLM_TIER=free` in `.env` to enable automatic throttling.
 
 ---
 
@@ -329,6 +330,14 @@ REDIS_URL=redis://localhost:6379
 # ─────────────────────────────────────────────────────────────
 SCREENER_INTERVAL_MINUTES=15     # How often screener auto-runs (minutes)
 WATCHLIST_ALERT_INTERVAL_MINUTES=5  # How often watchlist is evaluated (minutes)
+
+# ─────────────────────────────────────────────────────────────
+# RATE LIMITING
+# ─────────────────────────────────────────────────────────────
+# free = apply provider RPM caps (recommended for free-tier API keys)
+# paid = no LLM rate limiting (use after upgrading to a paid plan)
+LLM_TIER=free
+YF_REQUESTS_PER_SECOND=2         # yfinance throttle — lower if you see Yahoo 429 errors
 ```
 
 ### Important notes on the .env file
@@ -730,8 +739,19 @@ Expected: `45 passed, 1 skipped`
 **Cause:** Wrong or expired API key, or hit free tier limit.
 **Fix:**
 1. Double-check the key is correct and not truncated
-2. If rate-limited on Groq, wait a minute or switch to `MODEL_TYPE=ollama`
+2. If rate-limited, ensure `LLM_TIER=free` is set in `.env` — this enables automatic throttling before requests are sent
 3. Verify the key is set for the correct `MODEL_TYPE` (e.g., Groq key won't work for `MODEL_TYPE=gemini`)
+4. Free tier RPM caps: Gemini 5/min, Groq 30/min, Cerebras 30/min. Switch to `MODEL_TYPE=ollama` for no limits.
+
+---
+
+### Yahoo Finance 429 errors in logs
+
+**Cause:** Multiple tools hitting Yahoo Finance simultaneously during a research session.
+**Fix:**
+1. Lower `YF_REQUESTS_PER_SECOND` in `.env` (e.g., from `2` to `1`)
+2. Restart the backend: `docker compose restart backend`
+3. These are warnings — tools return `{"error": "..."}` gracefully and the agent continues
 
 ---
 

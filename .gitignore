@@ -57,3 +57,7 @@ backend/migrations/versions/__pycache__/
 
 
 PUSH_PLAN.md
+local_debugging
+settings.local.json
+
+backend/tests

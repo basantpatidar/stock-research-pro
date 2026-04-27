@@ -28,6 +28,24 @@ def get_analyst_consensus(ticker: str) -> dict:
                     "action": row.get("Action", ""),
                 })
 
+        # Buy/Hold/Sell counts from recommendations_summary (current month = row 0)
+        rating_counts = {"strong_buy": 0, "buy": 0, "hold": 0, "sell": 0, "strong_sell": 0}
+        try:
+            summary = stock.recommendations_summary
+            if summary is not None and not summary.empty:
+                row = summary.iloc[0]
+                rating_counts = {
+                    "strong_buy": int(row.get("strongBuy", 0)),
+                    "buy": int(row.get("buy", 0)),
+                    "hold": int(row.get("hold", 0)),
+                    "sell": int(row.get("sell", 0)),
+                    "strong_sell": int(row.get("strongSell", 0)),
+                }
+        except Exception:
+            pass
+
+        total_ratings = sum(rating_counts.values())
+
         consensus_label = "Unknown"
         if buy:
             if buy <= 1.5:
@@ -49,6 +67,8 @@ def get_analyst_consensus(ticker: str) -> dict:
             "current_price": current,
             "upside_pct": upside,
             "num_analysts": info.get("numberOfAnalystOpinions"),
+            "rating_counts": rating_counts,
+            "total_ratings": total_ratings,
             "recent_rating_changes": recent_changes,
         }
     except Exception as e:
