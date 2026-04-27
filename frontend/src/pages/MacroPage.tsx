@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
+import { T, chgColor, chgDim } from "../theme"
 import type { MacroEnvironment, SectorData, GeoEvent } from "../types"
 
 interface MacroState {
@@ -9,19 +10,19 @@ interface MacroState {
   loading: boolean
 }
 
-const heatColor = (change: number) => {
-  if (change >= 5)  return { bg: "#d1fae5", color: "#065f46" }
-  if (change >= 1)  return { bg: "#dcfce7", color: "#166534" }
-  if (change >= -1) return { bg: "#f3f4f6", color: "#374151" }
-  if (change >= -5) return { bg: "#fef3c7", color: "#92400e" }
-  if (change >= -10) return { bg: "#fee2e2", color: "#991b1b" }
-  return { bg: "#fecaca", color: "#7f1d1d" }
+const heatStyle = (pct: number) => {
+  if (pct >= 5)   return { bg: "rgba(16,185,129,0.25)", text: "#34d399", border: "#10b981" }
+  if (pct >= 2)   return { bg: "rgba(16,185,129,0.14)", text: T.green,   border: T.green }
+  if (pct >= -2)  return { bg: T.surface2,               text: T.text2,   border: T.border }
+  if (pct >= -5)  return { bg: "rgba(245,158,11,0.12)", text: T.amber,   border: T.amber }
+  if (pct >= -10) return { bg: "rgba(239,68,68,0.14)",  text: T.red,     border: T.red }
+  return                 { bg: "rgba(239,68,68,0.25)",  text: "#fca5a5", border: T.red }
 }
 
-const sevColor = (s: string) => {
-  if (s === "critical") return { dot: "#dc2626", bg: "#fee2e2" }
-  if (s === "high") return { dot: "#d97706", bg: "#fef3c7" }
-  return { dot: "#6b7280", bg: "#f3f4f6" }
+const sevStyle = (s: string) => {
+  if (s === "critical") return { dot: T.red,   badge: T.redDim }
+  if (s === "high")     return { dot: T.amber, badge: T.amberDim }
+  return                       { dot: T.text3, badge: T.surface2 }
 }
 
 export function MacroPage() {
@@ -37,7 +38,7 @@ export function MacroPage() {
         geoEvents: res.data.geopolitical?.all_events || [],
         loading: false,
       })
-    } catch (e) {
+    } catch {
       setState(s => ({ ...s, loading: false }))
     }
   }
@@ -46,95 +47,173 @@ export function MacroPage() {
 
   const { environment: env, sectors, geoEvents, loading } = state
 
-  const envBg = env?.environment?.includes("RISK-OFF") ? "#fee2e2"
-    : env?.environment?.includes("RISK-ON") ? "#d1fae5"
-    : "#f3f4f6"
-  const envColor = env?.environment?.includes("RISK-OFF") ? "#991b1b"
-    : env?.environment?.includes("RISK-ON") ? "#065f46"
-    : "#374151"
+  const isRiskOff = env?.environment?.includes("RISK-OFF")
+  const isRiskOn  = env?.environment?.includes("RISK-ON")
+  const envBannerBg    = isRiskOff ? T.redDim   : isRiskOn ? T.greenDim : T.surface2
+  const envBannerBord  = isRiskOff ? T.red       : isRiskOn ? T.green    : T.borderBright
+  const envBannerColor = isRiskOff ? T.red       : isRiskOn ? T.green    : T.text2
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem 1rem" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>Macro &amp; geopolitical environment</h2>
-        <button onClick={fetchMacro} disabled={loading} style={{ fontSize: 12, color: "#6b7280", background: "none", border: "0.5px solid #d1d5db", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>
-          {loading ? "Loading..." : "↻ Refresh"}
+      {/* Page header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>Macro Environment</div>
+          <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>Global indicators, sector rotation &amp; geopolitical events</div>
+        </div>
+        <button
+          onClick={fetchMacro}
+          disabled={loading}
+          style={{
+            fontSize: 12, color: T.text2, background: T.surface2,
+            border: `1px solid ${T.border}`, borderRadius: 7,
+            padding: "6px 14px", cursor: loading ? "not-allowed" : "pointer",
+            transition: "all 0.12s ease",
+          }}
+        >
+          {loading ? "Loading…" : "↻ Refresh"}
         </button>
       </div>
 
-      {/* Environment banner */}
+      {/* Environment risk banner */}
       {env && (
-        <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-            <span style={{ background: envBg, color: envColor, fontWeight: 500, fontSize: 13, padding: "4px 12px", borderRadius: 20 }}>
+        <div style={{
+          background: envBannerBg, border: `1px solid ${envBannerBord}`,
+          borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{
+              background: envBannerBg, color: envBannerColor, fontWeight: 700,
+              fontSize: 12, padding: "4px 12px", borderRadius: 20,
+              border: `1px solid ${envBannerBord}`, letterSpacing: "0.06em",
+              fontFamily: T.mono,
+            }}>
               {env.environment}
             </span>
-            <span style={{ fontSize: 12, color: "#6b7280" }}>{env.trading_recommendation}</span>
+            <span style={{ fontSize: 13, color: T.text2 }}>{env.trading_recommendation}</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {[
-              { label: "VIX", data: env.vix },
-              { label: "S&P 500", data: env.sp500 },
-              { label: "Oil (WTI)", data: env.oil_wti },
-              { label: "Gold", data: env.gold },
-              { label: "Nasdaq", data: env.nasdaq },
-              { label: "10Y Treasury", data: env.treasury_10y },
-            ].filter(x => x.data && !("error" in x.data)).map(({ label, data }) => (
-              <div key={label} style={{ background: "#f9fafb", borderRadius: 8, padding: "8px 12px" }}>
-                <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2 }}>{label}</div>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>{(data as any).current}</div>
-                <div style={{
-                  fontSize: 11, fontWeight: 500,
-                  color: (data as any).change_7d_pct >= 0 ? "#16a34a" : "#dc2626",
+              { label: "VIX",         data: env.vix },
+              { label: "S&P 500",     data: env.sp500 },
+              { label: "Oil (WTI)",   data: env.oil_wti },
+              { label: "Gold",        data: env.gold },
+              { label: "Nasdaq",      data: env.nasdaq },
+              { label: "10Y Treasury",data: env.treasury_10y },
+            ].filter(x => x.data && !("error" in x.data)).map(({ label, data }) => {
+              const d = data as any
+              const chg = d.change_7d_pct
+              return (
+                <div key={label} style={{
+                  background: T.surface, border: `1px solid ${T.border}`,
+                  borderRadius: 8, padding: "10px 13px",
                 }}>
-                  {(data as any).change_7d_pct >= 0 ? "+" : ""}{(data as any).change_7d_pct?.toFixed(1)}% (7d)
+                  <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
+                    {label}
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 600, fontFamily: T.mono, color: T.text, marginBottom: 3 }}>
+                    {d.current}
+                  </div>
+                  <div style={{
+                    fontSize: 11, fontFamily: T.mono, fontWeight: 500,
+                    color: chg >= 0 ? T.green : T.red,
+                  }}>
+                    {chg >= 0 ? "▲ +" : "▼ "}{chg?.toFixed(2)}% <span style={{ color: T.text3 }}>(7d)</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* Sector heatmap */}
       {sectors.length > 0 && (
-        <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>Sector heatmap — 5 day performance</div>
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+            Sector Heatmap — 5 Day Performance
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
             {sectors.map((s) => {
-              const c = heatColor(s.change_5d_pct)
+              const hs = heatStyle(s.change_5d_pct)
               return (
-                <div key={s.sector} style={{ background: c.bg, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: c.color, lineHeight: 1.3 }}>{s.sector}</div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: c.color, marginTop: 4 }}>
-                    {s.change_5d_pct >= 0 ? "+" : ""}{s.change_5d_pct.toFixed(1)}%
+                <div key={s.sector} style={{
+                  background: hs.bg, border: `1px solid ${hs.border}`,
+                  borderRadius: 8, padding: "10px 10px", textAlign: "center",
+                  transition: "transform 0.12s ease",
+                  cursor: "default",
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: hs.text, lineHeight: 1.3, marginBottom: 5 }}>
+                    {s.sector}
+                  </div>
+                  <div style={{
+                    fontSize: 15, fontWeight: 700, fontFamily: T.mono, color: hs.text,
+                  }}>
+                    {s.change_5d_pct >= 0 ? "+" : ""}{s.change_5d_pct.toFixed(2)}%
                   </div>
                 </div>
               )
             })}
           </div>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 8 }}>Green = outperforming · Red = most impacted</div>
+          <div style={{ fontSize: 11, color: T.text3, marginTop: 10, fontFamily: T.mono }}>
+            Green = outperforming · Red = underperforming · Based on 5-day ETF returns
+          </div>
         </div>
       )}
 
       {/* Geopolitical events */}
       {geoEvents.length > 0 && (
-        <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, padding: "1rem 1.25rem" }}>
-          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>Active geopolitical events</div>
-          {geoEvents.map((e, i) => {
-            const c = sevColor(e.severity)
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem" }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+            Active Geopolitical Events
+          </div>
+          {geoEvents.map((evt, i) => {
+            const sv = sevStyle(evt.severity)
             return (
-              <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: i < geoEvents.length - 1 ? "0.5px solid #f3f4f6" : "none", alignItems: "flex-start" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: c.dot, flexShrink: 0, marginTop: 4 }} />
+              <div key={i} style={{
+                display: "flex", gap: 12,
+                padding: "10px 0",
+                borderBottom: i < geoEvents.length - 1 ? `1px solid ${T.border}` : "none",
+                alignItems: "flex-start",
+              }}>
+                <div style={{ position: "relative", marginTop: 4, flexShrink: 0 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: sv.dot }} />
+                  {evt.severity === "critical" && (
+                    <div style={{
+                      width: 8, height: 8, borderRadius: "50%", background: sv.dot,
+                      position: "absolute", top: 0, left: 0,
+                      animation: "pulse-ring 1.5s ease-out infinite",
+                    }} />
+                  )}
+                </div>
                 <div style={{ flex: 1 }}>
-                  <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 500, color: "#111", textDecoration: "none" }}>
-                    {e.title}
+                  <a
+                    href={evt.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: 13, fontWeight: 500, color: T.text,
+                      textDecoration: "none", lineHeight: 1.4, display: "block", marginBottom: 4,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = T.blue)}
+                    onMouseLeave={e => (e.currentTarget.style.color = T.text)}
+                  >
+                    {evt.title}
                   </a>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{e.source} · {e.published}</div>
-                  {e.impacted_sectors.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
-                      {e.impacted_sectors.map((sec) => (
-                        <span key={sec} style={{ fontSize: 10, fontWeight: 500, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.dot }}>{sec}</span>
+                  <div style={{ fontSize: 11, color: T.text3, marginBottom: evt.impacted_sectors?.length ? 6 : 0 }}>
+                    {evt.source} · {evt.published}
+                  </div>
+                  {evt.impacted_sectors?.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {evt.impacted_sectors.map((sec: string) => (
+                        <span key={sec} style={{
+                          fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 4,
+                          background: sv.badge, color: sv.dot, border: `1px solid ${sv.dot}`,
+                        }}>
+                          {sec}
+                        </span>
                       ))}
                     </div>
                   )}
@@ -146,9 +225,12 @@ export function MacroPage() {
       )}
 
       {!env && !loading && (
-        <div style={{ background: "#f9fafb", borderRadius: 12, padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>🌍</div>
-          <div>Click refresh to load macro environment data</div>
+        <div style={{
+          background: T.surface, border: `1px solid ${T.border}`,
+          borderRadius: 14, padding: "3rem 2rem", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 28, color: T.text3, fontFamily: T.mono, marginBottom: 10 }}>🌐</div>
+          <div style={{ color: T.text2, fontSize: 14 }}>Click refresh to load macro environment data</div>
         </div>
       )}
     </div>

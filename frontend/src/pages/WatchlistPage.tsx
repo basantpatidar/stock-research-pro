@@ -2,141 +2,237 @@ import { useState } from "react"
 import { useWatchlist } from "../hooks/useWatchlist"
 import { useStore } from "../store"
 import { SignalTag } from "../components/shared/SignalTag"
+import { T, scoreStyle } from "../theme"
+
+type Filter = "all" | "buy" | "sell"
+
+const Label = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{children}</div>
+)
 
 export function WatchlistPage() {
   const { watchlist, addTicker, removeTicker, refresh } = useWatchlist()
   const { alerts } = useStore()
   const [newTicker, setNewTicker] = useState("")
   const [addError, setAddError] = useState("")
-  const [filter, setFilter] = useState<"all" | "buy" | "sell">("all")
+  const [filter, setFilter] = useState<Filter>("all")
 
   const handleAdd = async () => {
     if (!newTicker.trim()) return
     const result = await addTicker(newTicker.trim())
-    if (result.success) {
-      setNewTicker("")
-      setAddError("")
-    } else {
-      setAddError(result.error || "Failed to add")
-    }
+    if (result.success) { setNewTicker(""); setAddError("") }
+    else setAddError(result.error || "Failed to add")
   }
 
-  const filtered = watchlist.filter((item) => {
-    if (filter === "buy") return item.last_signal?.toLowerCase().includes("buy")
+  const filtered = watchlist.filter(item => {
+    if (filter === "buy")  return item.last_signal?.toLowerCase().includes("buy")
     if (filter === "sell") return item.last_signal?.toLowerCase().includes("sell") || item.last_signal?.toLowerCase().includes("avoid")
     return true
   })
 
-  const scoreColor = (score: number | null) => {
-    if (!score) return "#9ca3af"
-    if (score >= 70) return "#16a34a"
-    if (score >= 50) return "#d97706"
-    return "#dc2626"
-  }
-
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem 1rem" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
 
-      {/* Active alerts */}
+      {/* Live alerts */}
       {alerts.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-            Live alerts
-          </div>
+        <div style={{ marginBottom: 18 }}>
+          <Label>Live Alerts</Label>
           {alerts.slice(0, 3).map((alert) => (
             <div key={alert.id} style={{
-              borderLeft: `3px solid ${alert.type.includes("buy") ? "#16a34a" : "#d97706"}`,
-              background: alert.type.includes("buy") ? "#f0fdf4" : "#fffbeb",
+              borderLeft: `3px solid ${alert.type.includes("buy") ? T.green : T.amber}`,
+              background: alert.type.includes("buy") ? T.greenDim : T.amberDim,
+              border: `1px solid ${alert.type.includes("buy") ? T.green : T.amber}`,
               borderRadius: 8, padding: "10px 14px", marginBottom: 8,
             }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#111" }}>{alert.title}</div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{alert.body}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{alert.title}</div>
+              <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>{alert.body}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "0.5px solid #e5e7eb", marginBottom: 16, gap: 0 }}>
-        {(["all", "buy", "sell"] as const).map((f) => (
+      {/* Filter tabs */}
+      <div style={{
+        display: "flex", borderBottom: `1px solid ${T.border}`,
+        marginBottom: 16, gap: 0, alignItems: "center",
+      }}>
+        {(["all", "buy", "sell"] as Filter[]).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             style={{
-              padding: "6px 16px", fontSize: 13, border: "none", background: "transparent",
-              cursor: "pointer", borderBottom: filter === f ? "2px solid #111" : "2px solid transparent",
-              fontWeight: filter === f ? 500 : 400, color: filter === f ? "#111" : "#6b7280",
-              marginBottom: -1,
+              padding: "7px 18px", fontSize: 13, border: "none", background: "transparent",
+              cursor: "pointer", marginBottom: -1,
+              borderBottom: filter === f ? `2px solid ${T.blue}` : "2px solid transparent",
+              fontWeight: filter === f ? 500 : 400,
+              color: filter === f ? T.text : T.text2,
+              transition: "all 0.12s ease",
             }}
           >
             {f === "all" ? "All stocks" : f === "buy" ? "Buy signals" : "Sell signals"}
+            {f === "all" && watchlist.length > 0 && (
+              <span style={{
+                marginLeft: 6, background: T.surface2, color: T.text2,
+                borderRadius: 20, fontSize: 10, padding: "1px 6px", fontFamily: T.mono,
+              }}>{watchlist.length}</span>
+            )}
           </button>
         ))}
-        <button onClick={refresh} style={{ marginLeft: "auto", fontSize: 12, color: "#6b7280", background: "none", border: "none", cursor: "pointer" }}>
+        <button
+          onClick={refresh}
+          style={{
+            marginLeft: "auto", fontSize: 12, color: T.text2, background: "none",
+            border: `1px solid ${T.border}`, cursor: "pointer", borderRadius: 6,
+            padding: "4px 12px", transition: "all 0.12s ease",
+          }}
+        >
           ↻ Refresh
         </button>
       </div>
 
-      {/* Watchlist table */}
-      <div style={{ background: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+      {/* Table */}
+      <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
         {/* Header */}
-        <div style={{ display: "grid", gridTemplateColumns: "8px 60px 1fr 80px 70px 110px 32px", gap: 10, padding: "8px 16px", borderBottom: "0.5px solid #e5e7eb", alignItems: "center" }}>
-          {["", "Ticker", "Company", "Price", "7d chg", "Signal", ""].map((h, i) => (
-            <span key={i} style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{h}</span>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "10px 70px 1fr 90px 80px 80px 120px 34px",
+          gap: 10, padding: "9px 16px",
+          borderBottom: `1px solid ${T.border}`,
+          background: T.surface2,
+        }}>
+          {["", "Ticker", "Company", "Price", "Score", "7d", "Signal", ""].map((h, i) => (
+            <span key={i} style={{ fontSize: 10, color: T.text3, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {h}
+            </span>
           ))}
         </div>
 
         {filtered.length === 0 && (
-          <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
-            {watchlist.length === 0 ? "No stocks in watchlist yet. Add one below." : "No stocks match this filter."}
+          <div style={{ padding: "2.5rem", textAlign: "center", color: T.text3, fontSize: 13 }}>
+            {watchlist.length === 0
+              ? "Watchlist is empty. Add a ticker below."
+              : "No stocks match this filter."}
           </div>
         )}
 
-        {filtered.map((item) => {
-          const hasAlert = alerts.some((a) => a.ticker === item.ticker)
+        {filtered.map((item, idx) => {
+          const hasAlert = alerts.some(a => a.ticker === item.ticker)
+          const sc = item.last_score ? scoreStyle(item.last_score) : null
           return (
             <div
               key={item.ticker}
               style={{
-                display: "grid", gridTemplateColumns: "8px 60px 1fr 80px 70px 110px 32px",
-                gap: 10, padding: "10px 16px", borderBottom: "0.5px solid #f9fafb",
+                display: "grid",
+                gridTemplateColumns: "10px 70px 1fr 90px 80px 80px 120px 34px",
+                gap: 10, padding: "10px 16px",
+                borderBottom: idx < filtered.length - 1 ? `1px solid ${T.border}` : "none",
                 alignItems: "center",
+                transition: "background 0.1s ease",
               }}
+              onMouseEnter={e => (e.currentTarget.style.background = T.surfaceHover)}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: hasAlert ? "#dc2626" : item.last_score && item.last_score >= 70 ? "#16a34a" : "#e5e7eb" }} />
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{item.ticker}</span>
-              <span style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.company_name || "—"}</span>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{item.last_price ? `$${item.last_price.toFixed(2)}` : "—"}</span>
-              <span style={{ fontSize: 12, color: "#6b7280" }}>
-                {item.last_score ? <span style={{ color: scoreColor(item.last_score), fontWeight: 500 }}>{item.last_score}/100</span> : "—"}
+              {/* Status dot */}
+              <div style={{ position: "relative", width: 8, height: 8 }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: hasAlert ? T.red : sc ? sc.text : T.text3,
+                }} />
+                {hasAlert && (
+                  <div style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: T.red, position: "absolute", top: 0, left: 0,
+                    animation: "pulse-ring 1.5s ease-out infinite",
+                  }} />
+                )}
+              </div>
+
+              <span style={{ fontSize: 13, fontWeight: 600, fontFamily: T.mono, color: T.text }}>{item.ticker}</span>
+              <span style={{ fontSize: 12, color: T.text2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {item.company_name || "—"}
               </span>
-              <div>{item.last_signal ? <SignalTag signal={item.last_signal} size="sm" /> : <span style={{ fontSize: 11, color: "#9ca3af" }}>Pending...</span>}</div>
+              <span style={{ fontSize: 13, fontFamily: T.mono, color: T.text }}>
+                {item.last_price ? `$${item.last_price.toFixed(2)}` : "—"}
+              </span>
+
+              {/* Score with mini bar */}
+              <div>
+                {item.last_score ? (
+                  <div>
+                    <div style={{ fontSize: 12, fontFamily: T.mono, fontWeight: 600, color: sc!.text, marginBottom: 3 }}>
+                      {item.last_score}<span style={{ fontSize: 10, color: T.text3 }}>/100</span>
+                    </div>
+                    <div style={{ height: 3, background: T.border, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${item.last_score}%`, height: "100%",
+                        background: sc!.text, borderRadius: 2,
+                      }} />
+                    </div>
+                  </div>
+                ) : <span style={{ fontSize: 12, color: T.text3 }}>—</span>}
+              </div>
+
+              <span style={{ fontSize: 12, color: T.text3, fontFamily: T.mono }}>—</span>
+
+              <div>
+                {item.last_signal
+                  ? <SignalTag signal={item.last_signal} size="sm" />
+                  : <span style={{ fontSize: 11, color: T.text3 }}>Pending…</span>}
+              </div>
+
               <button
                 onClick={() => removeTicker(item.ticker)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 16 }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: T.text3, fontSize: 18, lineHeight: 1, padding: "0 2px",
+                  transition: "color 0.12s ease",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = T.red)}
+                onMouseLeave={e => (e.currentTarget.style.color = T.text3)}
               >×</button>
             </div>
           )
         })}
 
         {/* Add row */}
-        <div style={{ padding: "10px 16px", borderTop: "0.5px solid #f3f4f6", display: "flex", gap: 8 }}>
-          <input
-            value={newTicker}
-            onChange={(e) => { setNewTicker(e.target.value.toUpperCase()); setAddError("") }}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="Add ticker... e.g. META"
-            style={{ flex: 1, padding: "6px 10px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, outline: "none" }}
-          />
-          <button onClick={handleAdd} style={{ padding: "6px 14px", fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 6, background: "#111", color: "#fff", cursor: "pointer" }}>
-            + Add
+        <div style={{
+          padding: "10px 16px", borderTop: `1px solid ${T.border}`,
+          display: "flex", gap: 8, background: T.surface2,
+        }}>
+          <div style={{
+            flex: 1, display: "flex", alignItems: "center",
+            background: T.surface, border: `1px solid ${T.border}`, borderRadius: 7,
+            padding: "0 10px",
+          }}>
+            <span style={{ color: T.text3, fontFamily: T.mono, fontSize: 13, marginRight: 7 }}>+</span>
+            <input
+              value={newTicker}
+              onChange={e => { setNewTicker(e.target.value.toUpperCase()); setAddError("") }}
+              onKeyDown={e => e.key === "Enter" && handleAdd()}
+              placeholder="Add ticker… META, TSLA"
+              style={{
+                flex: 1, background: "transparent", border: "none", outline: "none",
+                color: T.text, fontSize: 13, fontFamily: T.mono, padding: "7px 0", caretColor: T.blue,
+              }}
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            style={{
+              padding: "7px 16px", fontSize: 13, fontWeight: 500, border: "none",
+              borderRadius: 7, background: T.blue, color: "#fff", cursor: "pointer",
+            }}
+          >
+            Add
           </button>
         </div>
-        {addError && <div style={{ padding: "4px 16px 8px", fontSize: 12, color: "#dc2626" }}>{addError}</div>}
+        {addError && (
+          <div style={{ padding: "4px 16px 10px", fontSize: 12, color: T.red }}>{addError}</div>
+        )}
       </div>
 
-      <div style={{ fontSize: 12, color: "#9ca3af" }}>
-        Signals refresh every 5 minutes in the background. Score is 0–100 convergence across technical + fundamental signals.
+      <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+        Signals refresh every 5 min · Score 0–100 convergence across technical + fundamental signals
       </div>
     </div>
   )
