@@ -193,26 +193,29 @@ async def stream_research(
                     yield f"data: {json.dumps({'type': 'error', 'message': item['__error__']})}\n\n"
                     break
 
-                messages = item.get("messages", [])
-                if not messages:
-                    continue
-                last = messages[-1]
+                # LangGraph stream events are {node_name: {state_updates}},
+                # so unwrap each node's output before reading messages.
+                for node_output in item.values():
+                    messages = node_output.get("messages", [])
+                    if not messages:
+                        continue
+                    last = messages[-1]
 
-                if hasattr(last, "tool_calls") and last.tool_calls:
-                    for tc in last.tool_calls:
-                        yield f"data: {json.dumps({'type': 'tool_call', 'tool': tc['name'], 'args': tc['args']})}\n\n"
+                    if hasattr(last, "tool_calls") and last.tool_calls:
+                        for tc in last.tool_calls:
+                            yield f"data: {json.dumps({'type': 'tool_call', 'tool': tc['name'], 'args': tc['args']})}\n\n"
 
-                elif hasattr(last, "name") and last.name:
-                    content = last.content
-                    if isinstance(content, str):
-                        try:
-                            content = json.loads(content)
-                        except Exception:
-                            pass
-                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': last.name, 'result': content})}\n\n"
+                    elif hasattr(last, "name") and last.name:
+                        content = last.content
+                        if isinstance(content, str):
+                            try:
+                                content = json.loads(content)
+                            except Exception:
+                                pass
+                        yield f"data: {json.dumps({'type': 'tool_result', 'tool': last.name, 'result': content})}\n\n"
 
-                elif hasattr(last, "content") and last.content:
-                    yield f"data: {json.dumps({'type': 'reasoning', 'content': last.content})}\n\n"
+                    elif hasattr(last, "content") and last.content:
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': last.content})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
