@@ -1,6 +1,96 @@
 // ── Core stock types ──────────────────────────────────────────────────────────
 
 export type TradeMode = "day_trade" | "long_term" | "both"
+export type ExecMode  = "saver" | "normal" | "deep"
+
+// ── V2 tiered API types ───────────────────────────────────────────────────────
+
+export interface NewsResult {
+  ticker: string
+  articles_found: number
+  news: NewsItem[]
+  sentiment_breakdown: {
+    positive: number
+    negative: number
+    neutral: number
+    overall: string
+  }
+}
+
+export interface Tier1Response {
+  ticker: string
+  price: PriceData | { error: string }
+  technicals: TechnicalData | { error: string }
+  analyst: AnalystData | { error: string }
+  earnings: EarningsData | { error: string }
+  fundamentals: FundamentalsData | { error: string }
+  short_interest: ShortInterestData | { error: string }
+  congressional: CongressionalData | { error: string }
+  news: NewsResult | { error: string }
+  macro: any
+  sectors: any
+  cached: boolean
+  exec_mode: ExecMode
+}
+
+export interface Tier2Response {
+  ticker: string
+  tool: string
+  result: any
+  tokens_used: number
+  cached: boolean
+  exec_mode: ExecMode
+}
+
+export interface Tier3Response {
+  ticker: string
+  tool: string
+  result: any
+  tokens_used: number
+  cached: boolean
+}
+
+export interface TokenEstimate {
+  tool: string
+  estimated_tokens: number
+  estimated_cost_usd: number
+  cached: boolean
+}
+
+export interface FundamentalsData {
+  ticker: string
+  pe_ratio: number | null
+  peg_ratio: number | null
+  price_to_book: number | null
+  profit_margin: number | null
+  debt_to_equity: number | null
+  free_cash_flow: number | null
+  revenue_growth: number | null
+}
+
+export interface ShortInterestData {
+  ticker: string
+  short_float_pct: number | null
+  days_to_cover: number | null
+  short_squeeze_potential: string
+}
+
+export interface CongressionalTrade {
+  politician: string
+  party: string
+  chamber: string
+  trade_date: string
+  transaction_type: string
+  amount_range: string
+  ticker: string
+}
+
+export interface CongressionalData {
+  ticker: string
+  recent_trades: CongressionalTrade[]
+  net_sentiment: "bullish" | "bearish" | "neutral"
+  total_trades: number
+}
 export type SignalLabel =
   | "Buy now"
   | "Buy — 1 week"
@@ -86,6 +176,14 @@ export interface AnalystData {
   current_price: number | null
   upside_pct: number | null
   num_analysts: number | null
+  total_ratings: number
+  rating_counts: {
+    strong_buy: number
+    buy: number
+    hold: number
+    sell: number
+    strong_sell: number
+  }
   recent_rating_changes: Array<{
     firm: string
     to_grade: string
