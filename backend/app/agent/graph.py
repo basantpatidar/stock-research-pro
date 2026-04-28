@@ -28,6 +28,12 @@ from app.tools.risk_reward import get_risk_reward
 from app.tools.screener import run_screener
 from app.tools.convergence import get_convergence_score
 from app.tools.google_trends import get_trends
+from app.tools.new.investor_personas import investor_personas
+from app.tools.new.bull_bear import bull_bear_debate
+from app.tools.new.congressional import get_congressional_trades
+from app.tools.new.backtester import run_backtest
+from app.tools.new.earnings_transcript import analyze_earnings_transcript
+from app.tools.new.paper_trade import analyze_paper_trade
 
 ALL_TOOLS = [
     get_price,
@@ -50,6 +56,12 @@ ALL_TOOLS = [
     run_screener,
     get_convergence_score,
     get_trends,
+    investor_personas,
+    bull_bear_debate,
+    get_congressional_trades,
+    run_backtest,
+    analyze_earnings_transcript,
+    analyze_paper_trade,
 ]
 
 

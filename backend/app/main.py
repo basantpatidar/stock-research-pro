@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.db.database import create_tables
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.api import research, watchlist, screener, alerts, macro
+from app.api import research_v2, usage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +60,8 @@ app.add_middleware(
 
 # ── Mount all routers ─────────────────────────────────────────────────────────
 app.include_router(research.router)
+app.include_router(research_v2.router)
+app.include_router(usage.router)
 app.include_router(watchlist.router)
 app.include_router(screener.router)
 app.include_router(alerts.router)

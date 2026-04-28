@@ -36,8 +36,10 @@ def _resolve_query(ticker: str, company_name: str) -> str:
     # Use the cleaner of company name vs ticker (prefer name when available)
     search_term = name if name else ticker.upper()
 
-    # Exact-phrase quoting: "ServiceNow" beats  NOW stock
-    return f'"{search_term}"'
+    # Exact-phrase + financial context: prevents matches on PyPI packages,
+    # GitHub repos, or any non-financial content that shares the company name.
+    financial_terms = "(stock OR shares OR earnings OR revenue OR investor OR quarterly OR NYSE OR NASDAQ OR SEC OR market)"
+    return f'"{search_term}" AND {financial_terms}'
 
 
 @tool
