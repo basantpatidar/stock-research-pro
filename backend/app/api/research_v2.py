@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Any
@@ -5,7 +7,18 @@ import asyncio
 import numpy as np
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.auth import verify_api_key
+from app.db.database import get_db
+from app.services.data_cache import (
+    earnings_expiry,
+    get_llm_cache,
+    get_stock_cache,
+    set_llm_cache,
+    set_stock_cache,
+    stock_data_expiry,
+)
 
 from app.tools.price import get_price
 from app.tools.technicals import get_technicals
@@ -103,47 +116,131 @@ class Tier3Request(BaseModel):
 
 
 @router.post("/tier1")
-async def tier1(request: Tier1Request, _: str = Depends(verify_api_key)):
+async def tier1(
+    request: Tier1Request,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
     sym = request.ticker.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
-    def _run_all():
+    # 1. Check cache in parallel for all slow-changing data types
+    (
+        cached_earnings,
+        cached_fundamentals,
+        cached_analyst,
+        cached_short_interest,
+        cached_news,
+        cached_congressional,
+    ) = await asyncio.gather(
+        get_stock_cache(db, sym, "earnings"),
+        get_stock_cache(db, sym, "fundamentals"),
+        get_stock_cache(db, sym, "analyst"),
+        get_stock_cache(db, sym, "short_interest"),
+        get_stock_cache(db, sym, "news"),
+        get_stock_cache(db, sym, "congressional"),
+    )
+
+    needs = {
+        "earnings": cached_earnings is None,
+        "fundamentals": cached_fundamentals is None,
+        "analyst": cached_analyst is None,
+        "short_interest": cached_short_interest is None,
+        "news": cached_news is None,
+        "congressional": cached_congressional is None,
+    }
+
+    # 2. Fetch fresh data in a thread — only call yfinance for cache misses.
+    #    Price, technicals, macro, sectors are always fresh (intraday data).
+    def _run_fresh():
         price = get_price.invoke({"ticker": sym})
-        # Pass company_name so news tool skips its own yfinance lookup
         company_name = price.get("company_name", "") if isinstance(price, dict) else ""
         technicals = get_technicals.invoke({"ticker": sym})
-        analyst = get_analyst_consensus.invoke({"ticker": sym})
-        earnings = get_earnings.invoke({"ticker": sym})
-        fundamentals = get_fundamentals.invoke({"ticker": sym})
-        short_interest = get_short_interest.invoke({"ticker": sym})
-        congressional = get_congressional_trades.invoke({"ticker": sym})
-        news = get_news_impact.invoke({"ticker": sym, "company_name": company_name})
         macro = get_macro_environment.invoke({})
         sectors = get_sector_heatmap.invoke({})
-        return price, technicals, analyst, earnings, fundamentals, short_interest, congressional, news, macro, sectors
+
+        fresh: dict[str, Any] = {}
+        if needs["earnings"]:
+            fresh["earnings"] = get_earnings.invoke({"ticker": sym})
+        if needs["fundamentals"]:
+            fresh["fundamentals"] = get_fundamentals.invoke({"ticker": sym})
+        if needs["analyst"]:
+            fresh["analyst"] = get_analyst_consensus.invoke({"ticker": sym})
+        if needs["short_interest"]:
+            fresh["short_interest"] = get_short_interest.invoke({"ticker": sym})
+        if needs["congressional"]:
+            fresh["congressional"] = get_congressional_trades.invoke({"ticker": sym})
+        if needs["news"]:
+            fresh["news"] = get_news_impact.invoke({"ticker": sym, "company_name": company_name})
+
+        return price, technicals, macro, sectors, fresh
 
     try:
-        results = await asyncio.to_thread(_run_all)
-        price, technicals, analyst, earnings, fundamentals, short_interest, congressional, news, macro, sectors = results
-        return _sanitize({
-            "ticker": sym,
-            "price": price,
-            "technicals": technicals,
-            "analyst": analyst,
-            "earnings": earnings,
-            "fundamentals": fundamentals,
-            "short_interest": short_interest,
-            "congressional": congressional,
-            "news": news,
-            "macro": macro,
-            "sectors": sectors,
-            "cached": False,
-            "exec_mode": request.exec_mode,
-        })
+        price, technicals, macro, sectors, fresh = await asyncio.to_thread(_run_fresh)
     except Exception as e:
         logger.exception("tier1 failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Tier1 fetch failed: {str(e)}")
+
+    # 3. Merge cached and fresh results
+    earnings = cached_earnings or fresh.get("earnings", {})
+    fundamentals = cached_fundamentals or fresh.get("fundamentals", {})
+    analyst = cached_analyst or fresh.get("analyst", {})
+    short_interest = cached_short_interest or fresh.get("short_interest", {})
+    congressional = cached_congressional or fresh.get("congressional", {})
+    news = cached_news or fresh.get("news", {})
+
+    # 4. Persist fresh results to cache (fire-and-forget — don't block the response)
+    cache_writes = []
+    if "earnings" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "earnings", fresh["earnings"], earnings_expiry(fresh["earnings"]))
+        )
+    if "fundamentals" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "fundamentals", fresh["fundamentals"], stock_data_expiry("fundamentals"))
+        )
+    if "analyst" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "analyst", fresh["analyst"], stock_data_expiry("analyst"))
+        )
+    if "short_interest" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "short_interest", fresh["short_interest"], stock_data_expiry("short_interest"))
+        )
+    if "congressional" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "congressional", fresh["congressional"], stock_data_expiry("congressional"))
+        )
+    if "news" in fresh:
+        cache_writes.append(
+            set_stock_cache(db, sym, "news", fresh["news"], stock_data_expiry("news"))
+        )
+    if cache_writes:
+        await asyncio.gather(*cache_writes, return_exceptions=True)
+
+    cache_hits = sum(
+        1 for v in [cached_earnings, cached_fundamentals, cached_analyst,
+                    cached_short_interest, cached_news, cached_congressional]
+        if v is not None
+    )
+
+    return _sanitize({
+        "ticker": sym,
+        "price": price,
+        "technicals": technicals,
+        "analyst": analyst,
+        "earnings": earnings,
+        "fundamentals": fundamentals,
+        "short_interest": short_interest,
+        "congressional": congressional,
+        "news": news,
+        "macro": macro,
+        "sectors": sectors,
+        "cached": cache_hits > 0,
+        "cache_hits": cache_hits,
+        "exec_mode": request.exec_mode,
+    })
 
 
 @router.post("/tier2")
