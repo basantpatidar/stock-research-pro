@@ -292,11 +292,26 @@ async def tier2(
 
 
 @router.post("/tier3")
-async def tier3(request: Tier3Request, _: str = Depends(verify_api_key)):
+async def tier3(
+    request: Tier3Request,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
     sym = request.ticker.upper().strip()
     tool_fn = _TIER3_TOOLS.get(request.tool)
     if not tool_fn:
         raise HTTPException(status_code=400, detail=f"Unknown tier3 tool: {request.tool}")
+
+    # Tier 3 tools are expensive (4k–6k tokens) — always check cache first
+    cached = await get_llm_cache(db, sym, request.tool)
+    if cached:
+        return _sanitize({
+            "ticker": sym,
+            "tool": request.tool,
+            "result": cached,
+            "tokens_used": 0,
+            "cached": True,
+        })
 
     invoke_params = {"ticker": sym, **request.params}
     try:
@@ -304,31 +319,42 @@ async def tier3(request: Tier3Request, _: str = Depends(verify_api_key)):
             asyncio.to_thread(tool_fn.invoke, invoke_params),
             timeout=90.0,
         )
-        return _sanitize({
-            "ticker": sym,
-            "tool": request.tool,
-            "result": result,
-            "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 1000),
-            "cached": False,
-        })
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail=f"{request.tool} timed out — LLM or data fetch took too long")
     except Exception as e:
         logger.exception("tier3 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier3 tool failed: {str(e)}")
 
+    await set_llm_cache(db, sym, request.tool, result)
+
+    return _sanitize({
+        "ticker": sym,
+        "tool": request.tool,
+        "result": result,
+        "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 1000),
+        "cached": False,
+    })
+
 
 @router.get("/tier3/estimate")
 async def tier3_estimate(
     tool: str = Query(...),
     ticker: str = Query(""),
+    db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
     estimated = _TOKEN_ESTIMATES.get(tool, 1000)
     cost = round(estimated / 1_000_000 * 0.60, 6)
+
+    is_cached = False
+    if ticker:
+        sym = ticker.upper().strip()
+        hit = await get_llm_cache(db, sym, tool)
+        is_cached = hit is not None
+
     return {
         "tool": tool,
-        "estimated_tokens": estimated,
-        "estimated_cost_usd": cost,
-        "cached": False,
+        "estimated_tokens": 0 if is_cached else estimated,
+        "estimated_cost_usd": 0.0 if is_cached else cost,
+        "cached": is_cached,
     }
