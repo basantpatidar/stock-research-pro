@@ -9,6 +9,7 @@ import { SignalScore } from "../components/research/SignalScore"
 import { NewsPanel } from "../components/research/NewsPanel"
 import { StreamPanel } from "../components/research/StreamPanel"
 import { InvestorPersonasPanel } from "../components/research/InvestorPersonasPanel"
+import { EarningsHistoryPanel } from "../components/research/EarningsHistoryPanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData } from "../types"
@@ -337,23 +338,7 @@ export function ResearchPage() {
 
             {earnings && (
               <ExpandablePanel title="Earnings History" tier={1} autoExpand>
-                {earnings.next_earnings_date && (
-                  <div style={{ fontSize: 12, color: T.text2, marginBottom: 10, padding: "5px 10px", background: T.blueDim, borderRadius: 6, border: `1px solid ${T.blue}` }}>
-                    Next: <span style={{ color: T.blue, fontFamily: T.mono }}>{earnings.next_earnings_date}</span>
-                  </div>
-                )}
-                {earnings.earnings_history.slice(0, 5).map((e: any, i: number) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < 4 ? `1px solid ${T.border}` : "none" }}>
-                    <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono }}>{e.date?.slice(0, 7)}</span>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, fontFamily: T.mono, padding: "1px 8px", borderRadius: 4,
-                      background: e.beat ? T.greenDim : e.beat === false ? T.redDim : T.surface2,
-                      color: e.beat ? T.green : e.beat === false ? T.red : T.text3,
-                    }}>
-                      {e.beat ? "▲ Beat" : e.beat === false ? "▼ Miss" : "—"}
-                    </span>
-                  </div>
-                ))}
+                <EarningsHistoryPanel earnings={earnings} />
               </ExpandablePanel>
             )}
           </div>
