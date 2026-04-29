@@ -37,7 +37,6 @@ function AppShell() {
         display: "flex",
         alignItems: "center",
         height: 52,
-        gap: 4,
         position: "sticky",
         top: 0,
         zIndex: 50,

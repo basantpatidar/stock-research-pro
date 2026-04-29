@@ -241,7 +241,7 @@ export function ResearchPage() {
             }}>
               {price.change_pct_7d >= 0 ? "▲" : "▼"} {Math.abs(price.change_pct_7d).toFixed(2)}% 7d
             </span>
-            {tier1.cached && (
+            {tier1?.cached && (
               <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, padding: "2px 7px", background: T.surface2, borderRadius: 4, border: `1px solid ${T.border}` }}>
                 cached
               </span>

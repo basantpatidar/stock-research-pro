@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     model_type: str = Field(default="groq", description="LLM provider")
     model_name: str = Field(default="llama-3.3-70b-versatile")
     ollama_model: str = Field(default="llama3.2")
+    # "free" applies conservative rate limits; "paid" removes them
+    llm_tier: str = Field(default="free", description="free or paid")
+    # yfinance requests per second — lower = safer against Yahoo 429s
+    yf_requests_per_second: float = Field(default=2.0)
 
     # Per-task LLM overrides — empty string falls back to model_type / model_name
     # agent: LangGraph ReAct loop (speed matters — use a fast/cheap model)
