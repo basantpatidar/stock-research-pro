@@ -78,7 +78,7 @@ def get_analyst_consensus(ticker: str) -> dict:
 @tool
 def get_earnings(ticker: str) -> dict:
     """
-    Fetch earnings history (beat/miss), next earnings date, and earnings surprises.
+    Fetch earnings history (beat/miss), next earnings date, EPS details, and quarterly revenue.
     """
     try:
         stock = get_ticker(ticker)
@@ -95,6 +95,42 @@ def get_earnings(ticker: str) -> dict:
                 else:
                     next_earnings = str(earnings_dates)
 
+        # Build revenue lookup: quarter-end timestamp → actual revenue value
+        revenue_map: dict = {}
+        try:
+            import pandas as pd
+            qi = stock.quarterly_income_stmt
+            if qi is not None and not qi.empty:
+                rev_label = next(
+                    (l for l in qi.index if "revenue" in str(l).lower()),
+                    None,
+                )
+                if rev_label is not None:
+                    for col, val in qi.loc[rev_label].items():
+                        try:
+                            if val is not None and val == val:  # skip NaN
+                                revenue_map[pd.Timestamp(col)] = float(val)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        def _nearest_revenue(date_str: str):
+            if not revenue_map or not date_str:
+                return None
+            try:
+                import pandas as pd
+                target = pd.Timestamp(date_str)
+                best_val, best_days = None, 120
+                for rev_ts, rev_val in revenue_map.items():
+                    diff = abs((target - rev_ts).days)
+                    if diff < best_days:
+                        best_days = diff
+                        best_val = rev_val
+                return best_val
+            except Exception:
+                return None
+
         history = []
         try:
             earnings_hist = stock.earnings_history
@@ -103,16 +139,20 @@ def get_earnings(ticker: str) -> dict:
                     eps_est = row.get("epsEstimate")
                     eps_act = row.get("epsActual")
                     surprise = row.get("epsDifference")
+                    surprise_pct = row.get("surprisePercent")
                     beat = None
                     if eps_est is not None and eps_act is not None:
-                        beat = eps_act >= eps_est
+                        beat = bool(eps_act >= eps_est)
 
+                    date_str = str(row.name)[:10] if hasattr(row, 'name') else ""
                     history.append({
-                        "date": str(row.name)[:10] if hasattr(row, 'name') else "",
-                        "eps_estimate": eps_est,
-                        "eps_actual": eps_act,
-                        "surprise": surprise,
+                        "date": date_str,
+                        "eps_estimate": round(float(eps_est), 2) if eps_est is not None else None,
+                        "eps_actual": round(float(eps_act), 2) if eps_act is not None else None,
+                        "surprise": round(float(surprise), 2) if surprise is not None else None,
+                        "surprise_pct": round(float(surprise_pct), 2) if surprise_pct is not None else None,
                         "beat": beat,
+                        "revenue_actual": _nearest_revenue(date_str),
                     })
         except Exception:
             pass
