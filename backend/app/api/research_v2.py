@@ -244,11 +244,27 @@ async def tier1(
 
 
 @router.post("/tier2")
-async def tier2(request: Tier2Request, _: str = Depends(verify_api_key)):
+async def tier2(
+    request: Tier2Request,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
     sym = request.ticker.upper().strip()
     tool_fn = _TIER2_TOOLS.get(request.tool)
     if not tool_fn:
         raise HTTPException(status_code=400, detail=f"Unknown tier2 tool: {request.tool}")
+
+    # Return cached LLM result if available (avoids re-running the same analysis)
+    cached = await get_llm_cache(db, sym, request.tool)
+    if cached:
+        return _sanitize({
+            "ticker": sym,
+            "tool": request.tool,
+            "result": cached,
+            "tokens_used": 0,
+            "cached": True,
+            "exec_mode": request.exec_mode,
+        })
 
     invoke_params = {"ticker": sym, **request.params}
     try:
@@ -256,19 +272,23 @@ async def tier2(request: Tier2Request, _: str = Depends(verify_api_key)):
             asyncio.to_thread(tool_fn.invoke, invoke_params),
             timeout=25.0,
         )
-        return _sanitize({
-            "ticker": sym,
-            "tool": request.tool,
-            "result": result,
-            "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 500),
-            "cached": False,
-            "exec_mode": request.exec_mode,
-        })
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail=f"{request.tool} timed out — try again")
     except Exception as e:
         logger.exception("tier2 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier2 tool failed: {str(e)}")
+
+    # Persist for next request within the TTL window
+    await set_llm_cache(db, sym, request.tool, result)
+
+    return _sanitize({
+        "ticker": sym,
+        "tool": request.tool,
+        "result": result,
+        "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 500),
+        "cached": False,
+        "exec_mode": request.exec_mode,
+    })
 
 
 @router.post("/tier3")
