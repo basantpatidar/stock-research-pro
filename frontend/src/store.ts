@@ -1,10 +1,19 @@
 import { create } from "zustand"
-import type { WatchlistItem, Alert, TradeMode, SSEEvent } from "./types/index"
+import type { WatchlistItem, Alert, TradeMode, SSEEvent, ExecMode } from "./types/index"
 
 interface StoreState {
   // Trade mode
   mode: TradeMode
   setMode: (mode: TradeMode) => void
+
+  // Execution mode (saver / normal / deep)
+  execMode: ExecMode
+  setExecMode: (mode: ExecMode) => void
+
+  // Token usage counter (session)
+  tokenCount: number
+  addTokens: (n: number) => void
+  resetTokens: () => void
 
   // Watchlist
   watchlist: WatchlistItem[]
@@ -33,6 +42,13 @@ interface StoreState {
 export const useStore = create<StoreState>((set) => ({
   mode: "both",
   setMode: (mode) => set({ mode }),
+
+  execMode: "normal",
+  setExecMode: (execMode) => set({ execMode }),
+
+  tokenCount: 0,
+  addTokens: (n) => set((s) => ({ tokenCount: s.tokenCount + n })),
+  resetTokens: () => set({ tokenCount: 0 }),
 
   watchlist: [],
   setWatchlist: (items) => set({ watchlist: items }),
