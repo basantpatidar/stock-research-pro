@@ -18,10 +18,14 @@ const NAV_ITEMS = [
   { to: "/usage",     label: "Usage" },
 ]
 
+const TOKEN_DAILY_LIMIT = 50_000
+
 function AppShell() {
   useWebSocket()
-  const { wsConnected, alerts } = useStore()
+  const { wsConnected, alerts, tokenCount } = useStore()
   const unread = alerts.length
+  const tokenPct = Math.min(100, Math.round((tokenCount / TOKEN_DAILY_LIMIT) * 100))
+  const tokenPctColor = tokenPct >= 80 ? T.red : tokenPct >= 50 ? T.amber : T.green
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg }}>
@@ -78,7 +82,7 @@ function AppShell() {
           ))}
         </div>
 
-        {/* Live status */}
+        {/* Live status + token counter */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
           <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
             <div style={{
@@ -93,6 +97,17 @@ function AppShell() {
           <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono, letterSpacing: "0.05em" }}>
             {wsConnected ? "LIVE" : "OFFLINE"}
           </span>
+          {tokenCount > 0 && (
+            <span style={{
+              fontSize: 10, fontFamily: T.mono, fontWeight: 600,
+              padding: "2px 8px", borderRadius: 20,
+              background: `${tokenPctColor}20`, color: tokenPctColor,
+              border: `1px solid ${tokenPctColor}`,
+              marginLeft: 4,
+            }}>
+              {tokenPct}% tokens
+            </span>
+          )}
         </div>
       </nav>
 

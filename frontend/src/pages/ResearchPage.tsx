@@ -9,7 +9,7 @@ import { SignalScore } from "../components/research/SignalScore"
 import { NewsPanel } from "../components/research/NewsPanel"
 import { StreamPanel } from "../components/research/StreamPanel"
 import { InvestorPersonasPanel } from "../components/research/InvestorPersonasPanel"
-import { BullBearPanel, BacktesterPanel, CongressionalPanel } from "../components/research/Tier3Panels"
+import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData } from "../types"
 
@@ -389,9 +389,11 @@ export function ResearchPage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {[
-                { tool: "investor_personas", title: "Investor Personas",   tokens: 5000, Component: InvestorPersonasPanel },
-                { tool: "bull_bear_debate",  title: "Bull vs Bear Debate", tokens: 6000, Component: BullBearPanel },
-                { tool: "run_backtest",      title: "Strategy Backtester", tokens: 0,    Component: BacktesterPanel },
+                { tool: "investor_personas",           title: "Investor Personas",   tokens: 5000, Component: InvestorPersonasPanel },
+                { tool: "bull_bear_debate",            title: "Bull vs Bear Debate", tokens: 6000, Component: BullBearPanel },
+                { tool: "run_backtest",                title: "Strategy Backtester", tokens: 0,    Component: BacktesterPanel },
+                { tool: "analyze_earnings_transcript", title: "Earnings Transcript", tokens: 4000, Component: EarningsTranscriptPanel },
+                { tool: "analyze_paper_trade",         title: "Paper Trade Coach",   tokens: 800,  Component: PaperTradePanel },
               ].map(({ tool, title, tokens, Component }) => {
                 const p = panels[tool]
                 return (

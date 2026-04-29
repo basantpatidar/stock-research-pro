@@ -198,3 +198,123 @@ export function CongressionalPanel({ data }: CongressionalProps) {
     </div>
   )
 }
+
+// ── Earnings Transcript ───────────────────────────────────────────────────────
+
+interface EarningsTranscriptProps { data: any }
+
+const TONE_COLOR: Record<string, string> = {
+  bullish: T.green, positive: T.green,
+  bearish: T.red,   negative: T.red,
+  neutral: T.amber, mixed: T.amber,
+}
+
+export function EarningsTranscriptPanel({ data }: EarningsTranscriptProps) {
+  if (!data) return null
+
+  const toneColor = TONE_COLOR[data.tone?.toLowerCase()] ?? T.text2
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {data.tone && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: T.text2 }}>Tone:</span>
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20,
+            background: `${toneColor}20`, color: toneColor,
+            border: `1px solid ${toneColor}`, letterSpacing: "0.04em",
+          }}>
+            {data.tone.toUpperCase()}
+          </span>
+        </div>
+      )}
+      {data.summary && (
+        <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, padding: "10px 12px", background: T.surface2, borderRadius: 8, border: `1px solid ${T.border}` }}>
+          {data.summary}
+        </div>
+      )}
+      {data.guidance && (
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>Forward Guidance</div>
+          <div style={{ fontSize: 12, color: T.text2, lineHeight: 1.55, padding: "8px 12px", background: T.blueDim, borderRadius: 6, border: `1px solid ${T.blue}` }}>
+            {data.guidance}
+          </div>
+        </div>
+      )}
+      {data.risks?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>Key Risks</div>
+          {data.risks.map((r: string, i: number) => (
+            <div key={i} style={{ display: "flex", gap: 6, fontSize: 12, color: T.text2, marginTop: 4, lineHeight: 1.4 }}>
+              <span style={{ color: T.red, flexShrink: 0 }}>!</span>
+              <span>{r}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {data.trade_implication && (
+        <div style={{ padding: "10px 12px", background: T.greenDim, borderRadius: 8, border: `1px solid ${T.green}` }}>
+          <div style={{ fontSize: 10, color: T.green, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Trade Implication</div>
+          <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{data.trade_implication}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Paper Trade Coach ─────────────────────────────────────────────────────────
+
+interface PaperTradeProps { data: any }
+
+const QUALITY_COLOR = (score: number) =>
+  score >= 70 ? T.green : score >= 40 ? T.amber : T.red
+
+export function PaperTradePanel({ data }: PaperTradeProps) {
+  if (!data) {
+    return (
+      <div style={{ fontSize: 12, color: T.text2, padding: "8px 12px", background: T.surface2, borderRadius: 6, border: `1px solid ${T.border}` }}>
+        Pass trade details via the API (entry_price, entry_date, position_size, status) to receive AI coaching.
+      </div>
+    )
+  }
+
+  const qScore = data.quality_score ?? 0
+  const qColor = QUALITY_COLOR(qScore)
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {data.verdict && (
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{data.verdict}</span>
+        )}
+        {qScore > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: T.text2 }}>Trade quality:</span>
+            <span style={{
+              fontSize: 12, fontWeight: 700, fontFamily: T.mono, padding: "2px 10px",
+              borderRadius: 20, background: `${qColor}20`, color: qColor, border: `1px solid ${qColor}`,
+            }}>
+              {qScore}/100
+            </span>
+          </div>
+        )}
+      </div>
+      {data.coaching && (
+        <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, padding: "10px 12px", background: T.surface2, borderRadius: 8, border: `1px solid ${T.border}` }}>
+          {data.coaching}
+        </div>
+      )}
+      {data.key_lessons?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>Key Lessons</div>
+          {data.key_lessons.map((lesson: string, i: number) => (
+            <div key={i} style={{ display: "flex", gap: 8, fontSize: 12, color: T.text2, marginTop: 5, lineHeight: 1.4 }}>
+              <span style={{ color: T.blue, flexShrink: 0, fontFamily: T.mono }}>{i + 1}.</span>
+              <span>{lesson}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
