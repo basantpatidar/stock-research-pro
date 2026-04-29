@@ -2,17 +2,20 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom"
 import { useWebSocket } from "./hooks/useWebSocket"
 import { useStore } from "./store"
 import { AlertToast } from "./components/shared/AlertToast"
+import { ExecModeBar } from "./components/shared/ExecModeBar"
 import { ResearchPage } from "./pages/ResearchPage"
 import { WatchlistPage } from "./pages/WatchlistPage"
 import { ScreenerPage } from "./pages/ScreenerPage"
 import { MacroPage } from "./pages/MacroPage"
+import { UsagePage } from "./pages/UsagePage"
 import { T } from "./theme"
 
 const NAV_ITEMS = [
-  { to: "/", label: "Research" },
+  { to: "/",          label: "Research" },
   { to: "/watchlist", label: "Watchlist" },
-  { to: "/screener", label: "Screener" },
-  { to: "/macro", label: "Macro" },
+  { to: "/screener",  label: "Screener" },
+  { to: "/macro",     label: "Macro" },
+  { to: "/usage",     label: "Usage" },
 ]
 
 function AppShell() {
@@ -22,6 +25,7 @@ function AppShell() {
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg }}>
+      {/* Top nav */}
       <nav style={{
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
@@ -36,12 +40,9 @@ function AppShell() {
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 32 }}>
           <div style={{
-            fontFamily: T.mono,
-            fontSize: 16,
-            fontWeight: 500,
+            fontFamily: T.mono, fontSize: 16, fontWeight: 500,
             background: `linear-gradient(135deg, ${T.blue} 0%, ${T.purple} 100%)`,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
             letterSpacing: "0.02em",
           }}>SRP</div>
           <span style={{ color: T.text2, fontSize: 13 }}>Stock Research Pro</span>
@@ -63,18 +64,15 @@ function AppShell() {
                 borderRadius: 6,
                 background: isActive ? T.surface2 : "transparent",
                 border: `1px solid ${isActive ? T.borderBright : "transparent"}`,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
+                display: "inline-flex", alignItems: "center", gap: 6,
                 transition: "all 0.12s ease",
               })}
             >
               {label}
               {label === "Watchlist" && unread > 0 && (
-                <span style={{
-                  background: T.red, color: "#fff", borderRadius: 20,
-                  fontSize: 10, fontWeight: 600, padding: "1px 6px", lineHeight: 1.4,
-                }}>{unread}</span>
+                <span style={{ background: T.red, color: "#fff", borderRadius: 20, fontSize: 10, fontWeight: 600, padding: "1px 6px", lineHeight: 1.4 }}>
+                  {unread}
+                </span>
               )}
             </NavLink>
           ))}
@@ -85,16 +83,11 @@ function AppShell() {
           <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
             <div style={{
               width: 8, height: 8, borderRadius: "50%",
-              background: wsConnected ? T.green : T.text3,
-              position: "absolute",
+              background: wsConnected ? T.green : T.text3, position: "absolute",
               animation: wsConnected ? "pulse-dot 2s ease-in-out infinite" : "none",
             }} />
             {wsConnected && (
-              <div style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: T.green, position: "absolute",
-                animation: "pulse-ring 1.8s ease-out infinite",
-              }} />
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.green, position: "absolute", animation: "pulse-ring 1.8s ease-out infinite" }} />
             )}
           </div>
           <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono, letterSpacing: "0.05em" }}>
@@ -103,12 +96,16 @@ function AppShell() {
         </div>
       </nav>
 
+      {/* ExecModeBar — shown below nav on all pages */}
+      <ExecModeBar />
+
       <main>
         <Routes>
-          <Route path="/" element={<ResearchPage />} />
+          <Route path="/"          element={<ResearchPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
-          <Route path="/screener" element={<ScreenerPage />} />
-          <Route path="/macro" element={<MacroPage />} />
+          <Route path="/screener"  element={<ScreenerPage />} />
+          <Route path="/macro"     element={<MacroPage />} />
+          <Route path="/usage"     element={<UsagePage />} />
         </Routes>
       </main>
 

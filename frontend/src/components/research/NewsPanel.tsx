@@ -11,10 +11,7 @@ const sentStyle = {
 
 export function NewsPanel({ news }: Props) {
   return (
-    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem" }}>
-      <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
-        News Impact
-      </div>
+    <div>
       {news.length === 0 && (
         <div style={{ fontSize: 12, color: T.text3 }}>No recent news found</div>
       )}
@@ -34,9 +31,7 @@ export function NewsPanel({ news }: Props) {
               </span>
             </div>
             <div style={{ fontSize: 12, color: T.text, lineHeight: 1.45, marginBottom: 4 }}>
-              <a href={item.url} target="_blank" rel="noreferrer" style={{
-                color: "inherit", textDecoration: "none",
-              }}>
+              <a href={item.url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }}>
                 {item.headline}
               </a>
             </div>
