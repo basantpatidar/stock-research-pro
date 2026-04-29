@@ -5,58 +5,123 @@
 
 ---
 
-## Design Principle: Every Data Point Must Be Actionable
+## Core Design Philosophy: Be the Analyst, Not the Data Feed
 
-Raw numbers are useless to most users. Every metric in this app must follow the **Signal-Explain-Act** framework:
+The app does not show data and leave the decision to the user.
+**The app makes the call. The user decides whether to follow it.**
 
-1. **Signal** — Convert the metric to a clear label: `BULLISH / BEARISH / NEUTRAL` with strength (strong/moderate/weak)
-2. **Plain English** — One sentence: "What this means for you right now"
-3. **Context** — Where does this reading sit historically? (e.g., "Top 10% of all readings in the past year")
-4. **Direction** — Is it improving or deteriorating vs last period? (↑ / ↓ / →)
-5. **Action context** — What should you consider doing given this signal?
+Every metric, every panel, and every ticker resolves to one of five verdicts:
 
-### Signal Interpretation System (applies to all sprints)
+| Verdict | Meaning |
+|---|---|
+| **STRONG BUY** | High-conviction opportunity. Multiple independent signals agree. Act. |
+| **BUY** | Bullish lean. More signals support buying than not. Worth entering. |
+| **HOLD** | No edge in either direction, or signals conflict. Stay put. |
+| **SELL** | More signals support reducing or exiting. Reduce exposure. |
+| **AVOID** | High-risk or high-manipulation flags. Do not enter. Exit if holding. |
 
-Every panel and every metric renders with:
-
-```
-[🟢 BULLISH] Piotroski F-Score: 8/9
-"Company is strengthening across profitability, debt, and efficiency.
-Historically, F-Score ≥ 8 precedes outperformance over the next 12 months."
-↑ Improved from 6 last quarter
-```
+These verdicts appear at three levels:
 
 ```
-[🔴 HIGH RISK] Beneish M-Score: -1.4
-"Earnings manipulation likely. Financial patterns match companies that
-later restated or restated earnings. Treat reported EPS with skepticism."
-→ Unchanged from prior quarter
+┌─────────────────────────────────────────────────────┐
+│  AAPL                                               │
+│  STRONG BUY (Long-Term)  │  HOLD (Day Trade)       │
+│  Conviction: HIGH · 9 of 11 signals agree          │
+└─────────────────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────────────────┐
+│  Earnings Quality    BUY    ████████░░  8/9 clean   │
+│  Options Market      HOLD   █████░░░░░  mixed IV    │
+│  Macro Environment   SELL   ███░░░░░░░  HY spreads  │
+│  Technical Setup     BUY    ███████░░░  VWAP hold   │
+└─────────────────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────────────────┐
+│  Piotroski F-Score    BUY      8/9                  │
+│  Beneish M-Score      HOLD    -2.1 (borderline)     │
+│  Altman Z-Score       BUY      3.4 (safe zone)      │
+│  Accruals Ratio       BUY      1.2% (cash-backed)   │
+└─────────────────────────────────────────────────────┘
 ```
 
-```
-[🟡 NEUTRAL] GEX: +$1.2B
-"Market makers are long gamma — they will buy dips and sell rips.
-Expect range-bound price action until the next catalyst or expiry."
-↓ Falling — gamma environment weakening
+### Rule: Every metric emits a verdict, not just a number
+
+Each tool returns a structured `SignalResult` alongside raw values:
+
+```json
+{
+  "value": 8,
+  "verdict": "BUY",
+  "conviction": "HIGH",
+  "headline": "Financially strong — 8 of 9 health checks passed",
+  "why": "Company shows improving profitability, declining debt load, and rising asset efficiency. This pattern has historically preceded 12-month outperformance.",
+  "action": "Supports entering or adding to a long-term position.",
+  "key_risk": "Score reflects trailing data — watch next earnings for deterioration.",
+  "direction": "IMPROVING",
+  "direction_note": "Up from 6 last quarter",
+  "score_contribution": 1.5
+}
 ```
 
-### LLM Signal Synthesis (per ticker)
-After all signals are computed, the LLM writes a 3–5 sentence narrative:
-> "AAPL shows strong earnings quality (Piotroski 8, clean accruals) but the
-> options market is pricing elevated near-term risk (IVR 72, negative skew).
-> For long-term investors, the financial strength supports accumulation on
-> weakness. Day traders should expect larger-than-normal intraday swings
-> given the negative GEX environment heading into expiry Friday."
+`score_contribution` is a value from **-2.0 to +2.0** that feeds the composite ticker verdict. Every signal votes. The verdict is the weighted majority.
 
-### Color and Icon System (consistent across all panels)
-| Signal | Color | Icon | Meaning |
-|---|---|---|---|
-| Strong Buy | `#00ff88` green | 🟢 ▲▲ | Multiple confirming bullish signals |
-| Bullish | `#22cc66` green | 🟢 ▲ | Bullish lean, not unanimous |
-| Neutral | `#ffaa00` amber | 🟡 → | No strong directional signal |
-| Bearish | `#ff6644` orange | 🔴 ▼ | Bearish lean |
-| Strong Sell | `#ff2222` red | 🔴 ▼▼ | Multiple confirming bearish signals |
-| Risk Flag | `#ff4400` red | ⚠️ | Risk/manipulation/distress detected |
+### Composite Verdict Thresholds
+
+| Composite Score | Verdict |
+|---|---|
+| ≥ 1.5 | STRONG BUY |
+| ≥ 0.5 | BUY |
+| ≥ -0.5 | HOLD |
+| ≥ -1.5 | SELL |
+| < -1.5 | AVOID |
+
+When long-term and day-trade signals diverge, both verdicts are shown separately. Conflict is information.
+
+### LLM Analyst Verdict (Tier 2 panel)
+
+After signals are computed the LLM writes a structured analyst-style call — not a description of the data, but a recommendation with reasoning:
+
+```
+VERDICT: STRONG BUY
+CONVICTION: HIGH
+TIME HORIZON: 3–12 months
+
+THESIS: Apple's earnings quality is exceptional — 8/9 Piotroski checks pass,
+accruals are minimal, and the Z-Score sits comfortably in the safe zone.
+The balance sheet supports this price level and the estimate revision trend
+is upward. The risk/reward favors accumulation on any pullback.
+
+KEY RISK: IVR at 68 suggests options market is pricing a near-term event.
+If you're entering now, consider waiting for post-event volatility reset.
+
+DAY TRADE NOTE: GEX is mildly negative — expect wider intraday ranges.
+VWAP is holding as support. Bias is long while price remains above $213.
+
+WATCH FOR: Any Beneish deterioration or accrual ratio increase next quarter
+would be an early warning to reduce position.
+```
+
+### Color and Verdict System (consistent across all UI)
+
+| Verdict | Color | Badge |
+|---|---|---|
+| STRONG BUY | `#00ff88` | `▲▲ STRONG BUY` |
+| BUY | `#22cc66` | `▲ BUY` |
+| HOLD | `#ffaa00` | `→ HOLD` |
+| SELL | `#ff6644` | `▼ SELL` |
+| AVOID | `#ff2222` | `▼▼ AVOID` |
+| RISK FLAG | `#ff4400` | `⚠ RISK` |
+
+### Checklist: Every new metric must have before shipping
+
+- [ ] `verdict` field: one of STRONG_BUY / BUY / HOLD / SELL / AVOID / RISK_FLAG
+- [ ] `conviction` field: HIGH / MODERATE / LOW / MIXED
+- [ ] `headline`: one-line plain English summary (no jargon)
+- [ ] `why`: 2-sentence explanation of what the number means and why it matters
+- [ ] `action`: direct sentence on what to do — "Safe to build position" / "Reduce exposure" / "Do not enter"
+- [ ] `key_risk`: what could make this signal wrong
+- [ ] `direction`: IMPROVING / DETERIORATING / STABLE vs prior period
+- [ ] `score_contribution`: float -2.0 to +2.0 for composite verdict
 
 ---
 
