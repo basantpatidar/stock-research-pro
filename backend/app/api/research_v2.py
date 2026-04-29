@@ -13,6 +13,7 @@ from app.auth import verify_api_key
 from app.db.database import get_db
 from app.services.data_cache import (
     earnings_expiry,
+    get_earnings_cache,
     get_llm_cache,
     get_stock_cache,
     set_llm_cache,
@@ -134,7 +135,7 @@ async def tier1(
         cached_news,
         cached_congressional,
     ) = await asyncio.gather(
-        get_stock_cache(db, sym, "earnings"),
+        get_earnings_cache(db, sym),          # smart check: invalidates if earnings passed
         get_stock_cache(db, sym, "fundamentals"),
         get_stock_cache(db, sym, "analyst"),
         get_stock_cache(db, sym, "short_interest"),

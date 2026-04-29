@@ -82,6 +82,37 @@ async def get_stock_cache(db: AsyncSession, ticker: str, data_type: str) -> dict
     return row.data if row else None
 
 
+async def get_earnings_cache(db: AsyncSession, ticker: str) -> dict | None:
+    """Fetch cached earnings, but treat the cache as stale if next_earnings_date has passed.
+
+    Prevents serving pre-earnings estimates after the actual report drops, regardless
+    of what expires_at says — including when CACHE_TTL_EARNINGS_FALLBACK_DAYS is long.
+    """
+    result = await db.execute(
+        select(StockDataCache).where(
+            StockDataCache.ticker == ticker,
+            StockDataCache.data_type == "earnings",
+            StockDataCache.expires_at > _now(),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+
+    data = row.data
+    ned = data.get("next_earnings_date") if isinstance(data, dict) else None
+    if ned:
+        try:
+            earnings_dt = datetime.fromisoformat(str(ned)[:10]).replace(tzinfo=timezone.utc)
+            if earnings_dt < _now():
+                # Earnings have occurred — cached pre-earnings data is stale
+                return None
+        except (ValueError, TypeError):
+            pass
+
+    return data
+
+
 async def set_stock_cache(
     db: AsyncSession,
     ticker: str,
