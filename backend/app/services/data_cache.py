@@ -1,17 +1,12 @@
 """
 Cache helpers for yfinance data (StockDataCache) and LLM results (ResearchCache).
 
-StockDataCache — keyed by (ticker, data_type), TTL varies by data_type:
-  earnings       → until next_earnings_date + 2 days  (quarterly data)
-  fundamentals   → 7 days
-  analyst        → 7 days
-  short_interest → 14 days
-  news           → 2 hours
-  congressional  → 2 hours
-
-ResearchCache — keyed by (ticker, tool_name), TTL varies by tool:
-  Tier 2 tools   → 2 hours
-  Tier 3 tools   → 4 hours
+All TTL values are read from app.config.Settings so they can be overridden via .env:
+  CACHE_TTL_EARNINGS_FALLBACK_DAYS, CACHE_TTL_FUNDAMENTALS_DAYS,
+  CACHE_TTL_ANALYST_DAYS, CACHE_TTL_SHORT_INTEREST_DAYS,
+  CACHE_TTL_NEWS_HOURS, CACHE_TTL_CONGRESSIONAL_HOURS,
+  CACHE_TTL_LLM_TIER2_HOURS, CACHE_TTL_LLM_TIER3_HOURS,
+  CACHE_TTL_LLM_BACKTEST_HOURS
 """
 
 from datetime import datetime, timedelta, timezone
@@ -20,36 +15,45 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.config import get_settings
 from app.db.models import ResearchCache, StockDataCache
-
-_STOCK_DATA_TTL_DAYS: dict[str, float] = {
-    "fundamentals": 7,
-    "analyst": 7,
-    "short_interest": 14,
-    "news": 2 / 24,        # 2 hours
-    "congressional": 2 / 24,
-}
-
-_LLM_CACHE_TTL_HOURS: dict[str, float] = {
-    "get_news_impact": 2,
-    "get_sentiment": 2,
-    "get_convergence_score": 2,
-    "get_price_forecast": 2,
-    "get_risk_reward": 2,
-    "investor_personas": 4,
-    "bull_bear_debate": 4,
-    "analyze_earnings_transcript": 4,
-    "run_backtest": 24,
-    "get_congressional_trades": 2,
-}
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _stock_data_ttl_days(data_type: str) -> float:
+    s = get_settings()
+    return {
+        "fundamentals": s.cache_ttl_fundamentals_days,
+        "analyst": s.cache_ttl_analyst_days,
+        "short_interest": s.cache_ttl_short_interest_days,
+        "news": s.cache_ttl_news_hours / 24,
+        "congressional": s.cache_ttl_congressional_hours / 24,
+    }.get(data_type, 1)
+
+
+def _llm_ttl_hours(tool_name: str) -> float:
+    s = get_settings()
+    tier2 = s.cache_ttl_llm_tier2_hours
+    tier3 = s.cache_ttl_llm_tier3_hours
+    return {
+        "get_news_impact": tier2,
+        "get_sentiment": tier2,
+        "get_convergence_score": tier2,
+        "get_price_forecast": tier2,
+        "get_risk_reward": tier2,
+        "get_congressional_trades": tier2,
+        "investor_personas": tier3,
+        "bull_bear_debate": tier3,
+        "analyze_earnings_transcript": tier3,
+        "run_backtest": s.cache_ttl_llm_backtest_hours,
+    }.get(tool_name, tier2)
+
+
 def earnings_expiry(result: dict) -> datetime:
-    """Set expiry to 2 days after the next earnings date, or 7 days if unknown."""
+    """Expire 2 days after next_earnings_date, or fall back to the configured day count."""
     ned = result.get("next_earnings_date") if isinstance(result, dict) else None
     if ned:
         try:
@@ -57,12 +61,11 @@ def earnings_expiry(result: dict) -> datetime:
             return dt.replace(tzinfo=timezone.utc) + timedelta(days=2)
         except (ValueError, TypeError):
             pass
-    return _now() + timedelta(days=7)
+    return _now() + timedelta(days=get_settings().cache_ttl_earnings_fallback_days)
 
 
 def stock_data_expiry(data_type: str) -> datetime:
-    days = _STOCK_DATA_TTL_DAYS.get(data_type, 1)
-    return _now() + timedelta(days=days)
+    return _now() + timedelta(days=_stock_data_ttl_days(data_type))
 
 
 # ── StockDataCache ────────────────────────────────────────────────────────────
@@ -125,7 +128,7 @@ async def set_llm_cache(
     tool_name: str,
     data: dict,
 ) -> None:
-    ttl_hours = _LLM_CACHE_TTL_HOURS.get(tool_name, 2.0)
+    ttl_hours = _llm_ttl_hours(tool_name)
     now = _now()
     expires_at = now + timedelta(hours=ttl_hours)
     stmt = (
