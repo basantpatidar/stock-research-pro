@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -53,7 +53,38 @@ class ResearchCache(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
-    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    # tool name, e.g. "get_convergence_score" — widened from 20 to support all tool names
+    mode: Mapped[str] = mapped_column(String(100), nullable=False)
     result: Mapped[Any] = mapped_column(JSONB, nullable=False)
     cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("ticker", "mode", name="uq_research_cache_ticker_mode"),
+    )
+
+
+class StockDataCache(Base):
+    """Caches slow-changing yfinance data keyed by (ticker, data_type).
+
+    data_type values and their TTLs:
+      earnings        — until next_earnings_date + 2 days (quarterly)
+      fundamentals    — 7 days
+      analyst         — 7 days
+      short_interest  — 14 days
+      news            — 2 hours
+      congressional   — 2 hours
+    """
+
+    __tablename__ = "stock_data_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    data_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    data: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("ticker", "data_type", name="uq_stock_data_cache_ticker_type"),
+    )
