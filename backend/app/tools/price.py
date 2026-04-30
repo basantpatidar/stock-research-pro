@@ -29,6 +29,24 @@ def get_price(ticker: str, period: str = "1y") -> dict:
         week_ago = hist["Close"].iloc[-6] if len(hist) >= 7 else hist["Close"].iloc[0]
         week_change_pct = ((current - week_ago) / week_ago) * 100
 
+        # Intraday 5-min candles for the 1d chart view
+        intraday_history = []
+        try:
+            intraday = stock.history(period="1d", interval="5m")
+            if not intraday.empty:
+                intraday_history = [
+                    {
+                        "date": idx.isoformat(),
+                        "close": round(row["Close"], 2),
+                        "volume": int(row["Volume"]),
+                        "high": round(row["High"], 2),
+                        "low": round(row["Low"], 2),
+                    }
+                    for idx, row in intraday.iterrows()
+                ]
+        except Exception:
+            pass
+
         return {
             "ticker": ticker.upper(),
             "current_price": round(current, 2),
@@ -47,6 +65,7 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             "industry": info.get("industry", "Unknown"),
             "history_period": period,
             "history_points": len(hist),
+            "intraday_history": intraday_history,
             "price_history": [
                 {
                     "date": str(idx.date()),

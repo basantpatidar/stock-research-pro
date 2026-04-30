@@ -125,6 +125,7 @@ export interface PriceData {
   market_cap: number | null
   sector: string
   price_history: PricePoint[]
+  intraday_history: PricePoint[]
 }
 
 export interface TechnicalData {
