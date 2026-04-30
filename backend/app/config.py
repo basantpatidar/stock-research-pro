@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     screener_interval_minutes: int = Field(default=15)
     watchlist_alert_interval_minutes: int = Field(default=5)
 
+    # Cache TTLs — stock data (days)
+    cache_ttl_earnings_fallback_days: int = Field(default=7)   # used when next_earnings_date is unknown
+    cache_ttl_fundamentals_days: int = Field(default=7)
+    cache_ttl_analyst_days: int = Field(default=7)
+    cache_ttl_short_interest_days: int = Field(default=14)
+    # Cache TTLs — stock data (hours)
+    cache_ttl_news_hours: int = Field(default=2)
+    cache_ttl_congressional_hours: int = Field(default=2)
+    # Cache TTLs — LLM results (hours)
+    cache_ttl_llm_tier2_hours: int = Field(default=2)    # convergence, forecast, risk/reward, sentiment
+    cache_ttl_llm_tier3_hours: int = Field(default=4)    # personas, bull/bear, earnings transcript
+    cache_ttl_llm_backtest_hours: int = Field(default=24)  # pure pandas — results are stable
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
