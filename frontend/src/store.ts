@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist } from "zustand/middleware"
 import type { WatchlistItem, Alert, TradeMode, SSEEvent, ExecMode } from "./types/index"
 
 interface StoreState {
@@ -9,6 +10,10 @@ interface StoreState {
   // Execution mode (saver / normal / deep)
   execMode: ExecMode
   setExecMode: (mode: ExecMode) => void
+
+  // Last searched ticker — restored on reload
+  lastTicker: string
+  setLastTicker: (ticker: string) => void
 
   // Token usage counter (session)
   tokenCount: number
@@ -39,37 +44,52 @@ interface StoreState {
   setWsConnected: (v: boolean) => void
 }
 
-export const useStore = create<StoreState>((set) => ({
-  mode: "both",
-  setMode: (mode) => set({ mode }),
+export const useStore = create<StoreState>()(
+  persist(
+    (set) => ({
+      mode: "both",
+      setMode: (mode) => set({ mode }),
 
-  execMode: "normal",
-  setExecMode: (execMode) => set({ execMode }),
+      execMode: "normal",
+      setExecMode: (execMode) => set({ execMode }),
 
-  tokenCount: 0,
-  addTokens: (n) => set((s) => ({ tokenCount: s.tokenCount + n })),
-  resetTokens: () => set({ tokenCount: 0 }),
+      lastTicker: "",
+      setLastTicker: (lastTicker) => set({ lastTicker }),
 
-  watchlist: [],
-  setWatchlist: (items) => set({ watchlist: items }),
-  addToWatchlist: (item) =>
-    set((s) => ({ watchlist: [...s.watchlist.filter((w) => w.ticker !== item.ticker), item] })),
-  removeFromWatchlist: (ticker) =>
-    set((s) => ({ watchlist: s.watchlist.filter((w) => w.ticker !== ticker) })),
+      tokenCount: 0,
+      addTokens: (n) => set((s) => ({ tokenCount: s.tokenCount + n })),
+      resetTokens: () => set({ tokenCount: 0 }),
 
-  alerts: [],
-  addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts].slice(0, 50) })),
-  dismissAlert: (id) =>
-    set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
-  clearAlerts: () => set({ alerts: [] }),
+      watchlist: [],
+      setWatchlist: (items) => set({ watchlist: items }),
+      addToWatchlist: (item) =>
+        set((s) => ({ watchlist: [...s.watchlist.filter((w) => w.ticker !== item.ticker), item] })),
+      removeFromWatchlist: (ticker) =>
+        set((s) => ({ watchlist: s.watchlist.filter((w) => w.ticker !== ticker) })),
 
-  streamEvents: [],
-  isStreaming: false,
-  addStreamEvent: (event) =>
-    set((s) => ({ streamEvents: [...s.streamEvents, event] })),
-  clearStream: () => set({ streamEvents: [], isStreaming: false }),
-  setStreaming: (v) => set({ isStreaming: v }),
+      alerts: [],
+      addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts].slice(0, 50) })),
+      dismissAlert: (id) =>
+        set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
+      clearAlerts: () => set({ alerts: [] }),
 
-  wsConnected: false,
-  setWsConnected: (v) => set({ wsConnected: v }),
-}))
+      streamEvents: [],
+      isStreaming: false,
+      addStreamEvent: (event) =>
+        set((s) => ({ streamEvents: [...s.streamEvents, event] })),
+      clearStream: () => set({ streamEvents: [], isStreaming: false }),
+      setStreaming: (v) => set({ isStreaming: v }),
+
+      wsConnected: false,
+      setWsConnected: (v) => set({ wsConnected: v }),
+    }),
+    {
+      name: "srp-settings",
+      partialize: (state) => ({
+        mode: state.mode,
+        execMode: state.execMode,
+        lastTicker: state.lastTicker,
+      }),
+    }
+  )
+)

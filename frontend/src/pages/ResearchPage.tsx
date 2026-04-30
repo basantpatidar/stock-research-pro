@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useStore } from "../store"
 import { useSSE } from "../hooks/useSSE"
 import { researchV2 } from "../services/researchV2"
@@ -111,8 +111,16 @@ export function ResearchPage() {
   const [error, setError] = useState<string | null>(null)
   const [panels, setPanels] = useState<Record<string, PanelEntry>>({})
 
-  const { mode, execMode, addTokens } = useStore()
+  const { mode, execMode, addTokens, lastTicker, setLastTicker } = useStore()
   const { startResearch } = useSSE()
+
+  // Restore last ticker on mount
+  useEffect(() => {
+    if (lastTicker) {
+      setTicker(lastTicker)
+      runSearch(lastTicker)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runSearch = useCallback(async (t: string) => {
     if (!t.trim()) return
@@ -121,6 +129,7 @@ export function ResearchPage() {
     setError(null)
     setTier1(null)
     setPanels({})
+    setLastTicker(sym)
     startResearch(sym, mode)
 
     try {
