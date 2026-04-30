@@ -223,6 +223,70 @@ export interface ConvergenceScore {
   bearish_signals: number
 }
 
+// ── Earnings Quality types ────────────────────────────────────────────────────
+
+export type Verdict = "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "AVOID" | "RISK_FLAG"
+export type Conviction = "HIGH" | "MODERATE" | "LOW" | "MIXED"
+export type SignalDirection = "IMPROVING" | "DETERIORATING" | "STABLE" | "UNKNOWN"
+
+export interface SignalResult {
+  value: string | number | null
+  verdict: Verdict
+  conviction: Conviction
+  headline: string
+  why: string
+  action: string
+  key_risk: string
+  direction: SignalDirection
+  direction_note: string
+  score_contribution: number
+}
+
+export interface CompositeVerdict {
+  verdict: Verdict
+  conviction: Conviction
+  score: number
+  signal_count: number
+  agree_count: number
+}
+
+export interface PiotroskiCheck {
+  passed: boolean
+  label: string
+}
+
+export interface EarningsQualityResult {
+  ticker: string
+  overall: CompositeVerdict
+  piotroski: {
+    score: number
+    max_score: number
+    checks: Record<string, PiotroskiCheck>
+    signal: SignalResult
+  }
+  beneish: {
+    score: number | null
+    threshold_manipulator: number
+    threshold_likely_manipulator: number
+    components: Record<string, number>
+    signal: SignalResult
+  }
+  altman: {
+    score: number | null
+    zone: "SAFE" | "GREY" | "DISTRESS" | "UNKNOWN"
+    thresholds: { distress: number; grey_zone: number }
+    components: Record<string, number>
+    signal: SignalResult
+  }
+  accruals: {
+    accruals_ratio_pct: number | null
+    net_income: number
+    operating_cash_flow: number
+    cash_earnings_pct_of_net_income: number | null
+    signal: SignalResult
+  }
+}
+
 // ── Watchlist types ───────────────────────────────────────────────────────────
 
 export interface WatchlistItem {
