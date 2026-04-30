@@ -32,7 +32,7 @@ def get_price(ticker: str, period: str = "1y") -> dict:
         # Intraday 5-min candles for the 1d chart view
         intraday_history = []
         try:
-            intraday = stock.history(period="1d", interval="5m")
+            intraday = stock.history(period="1d", interval="5m", prepost=True)
             if not intraday.empty:
                 intraday_history = [
                     {
