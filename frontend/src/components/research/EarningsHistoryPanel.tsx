@@ -21,11 +21,6 @@ interface Props {
   }
 }
 
-function getQuarterLabel(dateStr: string): string {
-  const parts = dateStr.split("-").map(Number)
-  if (parts.length < 2 || !parts[0] || !parts[1]) return dateStr.slice(0, 7)
-  return `Q${Math.ceil(parts[1] / 3)} ${parts[0]}`
-}
 
 function fmtEps(val: number | null): string {
   if (val == null) return "—"
@@ -52,10 +47,25 @@ function fmtRevenue(val: number | null): string {
   return `$${val.toFixed(0)}`
 }
 
+function relativeLabel(idx: number): string {
+  if (idx === 0) return "Latest"
+  if (idx === 1) return "1 qtr ago"
+  return `${idx} qtrs ago`
+}
+
+function isDatePast(dateStr: string | null): boolean {
+  if (!dateStr) return false
+  return new Date(dateStr.slice(0, 10)) < new Date(new Date().toISOString().slice(0, 10))
+}
+
 export function EarningsHistoryPanel({ earnings }: Props) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
-  const rows = earnings.earnings_history.slice(0, 5)
+  // Sort newest-first so index 0 = most recent quarter
+  const rows = [...earnings.earnings_history]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5)
   const total = earnings.beat_count + earnings.miss_count
+  const nextDatePast = isDatePast(earnings.next_earnings_date)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -102,9 +112,13 @@ export function EarningsHistoryPanel({ earnings }: Props) {
           <div style={{
             fontSize: 11, color: T.text2, fontFamily: T.mono,
             padding: "3px 10px", borderRadius: 5,
-            background: T.blueDim, border: `1px solid ${T.blue}`,
+            background: nextDatePast ? T.surface2 : T.blueDim,
+            border: `1px solid ${nextDatePast ? T.border : T.blue}`,
           }}>
-            Next: <span style={{ color: T.blue }}>{earnings.next_earnings_date.slice(0, 10)}</span>
+            {nextDatePast ? "Reported: " : "Next: "}
+            <span style={{ color: nextDatePast ? T.amber : T.blue }}>
+              {earnings.next_earnings_date.slice(0, 10)}
+            </span>
           </div>
         )}
       </div>
@@ -115,7 +129,7 @@ export function EarningsHistoryPanel({ earnings }: Props) {
         const beatColor = e.beat === true ? T.green : e.beat === false ? T.red : T.text3
         const beatBg    = e.beat === true ? T.greenDim : e.beat === false ? T.redDim : T.surface2
         const beatLabel = e.beat === true ? "BEAT" : e.beat === false ? "MISS" : "—"
-        const quarter   = getQuarterLabel(e.date)
+        const quarter   = relativeLabel(i)
         const shortDate = e.date.length >= 10 ? e.date.slice(5, 10).replace("-", "/") : e.date
 
         return (
