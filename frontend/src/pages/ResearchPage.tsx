@@ -239,6 +239,25 @@ export function ResearchPage() {
             <span style={{ fontSize: 24, fontWeight: 600, fontFamily: T.mono, color: T.text }}>{price.ticker}</span>
             <span style={{ fontSize: 14, color: T.text2 }}>{price.company_name}</span>
             <span style={{ fontSize: 22, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${price.current_price.toLocaleString()}</span>
+            {/* Session badge — only shown outside regular hours */}
+            {price.market_state && !["REGULAR", "CLOSED"].includes(price.market_state) && (
+              <span style={{
+                fontSize: 10, fontWeight: 600, fontFamily: T.mono, letterSpacing: "0.06em",
+                padding: "2px 7px", borderRadius: 4,
+                background: T.surface2, border: `1px solid ${T.amber}`, color: T.amber,
+              }}>
+                {["PRE", "PREPRE"].includes(price.market_state) ? "PRE-MKT" : "AFTER-HRS"}
+              </span>
+            )}
+            {/* Extended-hours change vs regular close */}
+            {price.extended_change_pct != null && (
+              <span style={{
+                fontSize: 12, fontWeight: 500, fontFamily: T.mono,
+                color: chgColor(price.extended_change_pct),
+              }}>
+                {price.extended_change_pct >= 0 ? "▲" : "▼"} {Math.abs(price.extended_change_pct).toFixed(2)}% from close
+              </span>
+            )}
             <span style={{
               fontSize: 13, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
               background: chgDim(price.change_pct_7d), color: chgColor(price.change_pct_7d),
