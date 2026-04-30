@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Any
 import asyncio
-import numpy as np
 import logging
+import time
+
+import numpy as np
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,6 +131,8 @@ async def tier1(
     if not sym:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
+    t0 = time.perf_counter()
+
     # 1. Check cache sequentially — AsyncSession does not support concurrent operations
     cached_earnings = await get_earnings_cache(db, sym)
     cached_fundamentals = await get_stock_cache(db, sym, "fundamentals")
@@ -171,11 +175,18 @@ async def tier1(
 
         return price, technicals, macro, sectors, fresh
 
+    fresh_keys = [k for k, needed in needs.items() if needed]
+    cached_keys = [k for k, needed in needs.items() if not needed]
+    logger.info("tier1 %s — cache: %d/6 hits %s, fetching: %s",
+                sym, len(cached_keys), cached_keys or "none", fresh_keys or "none")
+
     try:
         price, technicals, macro, sectors, fresh = await asyncio.to_thread(_run_fresh)
     except Exception as e:
         logger.exception("tier1 failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Tier1 fetch failed: {str(e)}")
+
+    logger.info("tier1 %s done in %.0fms", sym, (time.perf_counter() - t0) * 1000)
 
     # 3. Merge cached and fresh results
     earnings = cached_earnings or fresh.get("earnings", {})
@@ -255,6 +266,7 @@ async def tier2(
     # Return cached LLM result if available (avoids re-running the same analysis)
     cached = await get_llm_cache(db, sym, request.tool)
     if cached:
+        logger.info("tier2 %s %s — cache hit", request.tool, sym)
         return _sanitize({
             "ticker": sym,
             "tool": request.tool,
@@ -264,6 +276,7 @@ async def tier2(
             "exec_mode": request.exec_mode,
         })
 
+    t0 = time.perf_counter()
     invoke_params = {"ticker": sym, **request.params}
     try:
         result = await asyncio.wait_for(
@@ -271,10 +284,15 @@ async def tier2(
             timeout=25.0,
         )
     except asyncio.TimeoutError:
+        logger.warning("tier2 %s %s — timed out after 25s", request.tool, sym)
         raise HTTPException(status_code=504, detail=f"{request.tool} timed out — try again")
     except Exception as e:
         logger.exception("tier2 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier2 tool failed: {str(e)}")
+
+    logger.info("tier2 %s %s — %.0fms, ~%d tokens",
+                request.tool, sym, (time.perf_counter() - t0) * 1000,
+                _TOKEN_ESTIMATES.get(request.tool, 500))
 
     # Persist for next request within the TTL window
     await set_llm_cache(db, sym, request.tool, result)
@@ -303,6 +321,7 @@ async def tier3(
     # Tier 3 tools are expensive (4k–6k tokens) — always check cache first
     cached = await get_llm_cache(db, sym, request.tool)
     if cached:
+        logger.info("tier3 %s %s — cache hit", request.tool, sym)
         return _sanitize({
             "ticker": sym,
             "tool": request.tool,
@@ -311,6 +330,7 @@ async def tier3(
             "cached": True,
         })
 
+    t0 = time.perf_counter()
     invoke_params = {"ticker": sym, **request.params}
     try:
         result = await asyncio.wait_for(
@@ -318,10 +338,15 @@ async def tier3(
             timeout=90.0,
         )
     except asyncio.TimeoutError:
+        logger.warning("tier3 %s %s — timed out after 90s", request.tool, sym)
         raise HTTPException(status_code=504, detail=f"{request.tool} timed out — LLM or data fetch took too long")
     except Exception as e:
         logger.exception("tier3 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier3 tool failed: {str(e)}")
+
+    logger.info("tier3 %s %s — %.0fms, ~%d tokens",
+                request.tool, sym, (time.perf_counter() - t0) * 1000,
+                _TOKEN_ESTIMATES.get(request.tool, 1000))
 
     await set_llm_cache(db, sym, request.tool, result)
 

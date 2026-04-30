@@ -9,6 +9,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/stockresearch
       - REDIS_URL=redis://redis:6379
+      - LOG_DIR=/app/local_debugging
     env_file:
       - .env
     depends_on:
@@ -18,6 +19,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./local_debugging:/app/local_debugging
     restart: unless-stopped
 
   frontend:

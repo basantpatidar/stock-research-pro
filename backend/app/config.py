@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     screener_interval_minutes: int = Field(default=15)
     watchlist_alert_interval_minutes: int = Field(default=5)
 
+    # Logging
+    log_dir: str = Field(default="./local_debugging")
+
     # Cache TTLs — stock data (days)
     cache_ttl_earnings_fallback_days: int = Field(default=7)   # used when next_earnings_date is unknown
     cache_ttl_fundamentals_days: int = Field(default=7)
