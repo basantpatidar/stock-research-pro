@@ -39,7 +39,7 @@ const CustomTooltip = ({ active, payload, label, intraday }: any) => {
 }
 
 export function PriceChart({ data }: Props) {
-  const [activePeriod, setActivePeriod] = useState<Period>("3M")
+  const [activePeriod, setActivePeriod] = useState<Period>("1d")
   const isPositive = data.change_pct_7d >= 0
   const lineColor = isPositive ? T.green : T.red
   const gradId = `pg-${isPositive ? "g" : "r"}`
