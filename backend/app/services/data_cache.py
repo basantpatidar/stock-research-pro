@@ -70,7 +70,9 @@ def stock_data_expiry(data_type: str) -> datetime:
 
 # ── StockDataCache ────────────────────────────────────────────────────────────
 
-async def get_stock_cache(db: AsyncSession, ticker: str, data_type: str) -> dict | None:
+async def get_stock_cache(db: AsyncSession | None, ticker: str, data_type: str) -> dict | None:
+    if db is None:
+        return None
     result = await db.execute(
         select(StockDataCache).where(
             StockDataCache.ticker == ticker,
@@ -82,12 +84,14 @@ async def get_stock_cache(db: AsyncSession, ticker: str, data_type: str) -> dict
     return row.data if row else None
 
 
-async def get_earnings_cache(db: AsyncSession, ticker: str) -> dict | None:
+async def get_earnings_cache(db: AsyncSession | None, ticker: str) -> dict | None:
     """Fetch cached earnings, but treat the cache as stale if next_earnings_date has passed.
 
     Prevents serving pre-earnings estimates after the actual report drops, regardless
     of what expires_at says — including when CACHE_TTL_EARNINGS_FALLBACK_DAYS is long.
     """
+    if db is None:
+        return None
     result = await db.execute(
         select(StockDataCache).where(
             StockDataCache.ticker == ticker,
@@ -114,12 +118,14 @@ async def get_earnings_cache(db: AsyncSession, ticker: str) -> dict | None:
 
 
 async def set_stock_cache(
-    db: AsyncSession,
+    db: AsyncSession | None,
     ticker: str,
     data_type: str,
     data: dict,
     expires_at: datetime,
 ) -> None:
+    if db is None:
+        return
     now = _now()
     stmt = (
         pg_insert(StockDataCache)
@@ -141,7 +147,9 @@ async def set_stock_cache(
 
 # ── ResearchCache (LLM results) ───────────────────────────────────────────────
 
-async def get_llm_cache(db: AsyncSession, ticker: str, tool_name: str) -> dict | None:
+async def get_llm_cache(db: AsyncSession | None, ticker: str, tool_name: str) -> dict | None:
+    if db is None:
+        return None
     result = await db.execute(
         select(ResearchCache).where(
             ResearchCache.ticker == ticker,
@@ -154,11 +162,13 @@ async def get_llm_cache(db: AsyncSession, ticker: str, tool_name: str) -> dict |
 
 
 async def set_llm_cache(
-    db: AsyncSession,
+    db: AsyncSession | None,
     ticker: str,
     tool_name: str,
     data: dict,
 ) -> None:
+    if db is None:
+        return
     ttl_hours = _llm_ttl_hours(tool_name)
     now = _now()
     expires_at = now + timedelta(hours=ttl_hours)

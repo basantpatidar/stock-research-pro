@@ -10,7 +10,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import verify_api_key
-from app.db.database import get_db
+from app.db.database import get_db_optional as get_db
 from app.services.data_cache import (
     earnings_expiry,
     get_earnings_cache,
