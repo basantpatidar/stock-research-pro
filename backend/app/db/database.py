@@ -31,3 +31,21 @@ async def get_db():
         except Exception:
             await session.rollback()
             raise
+
+
+async def get_db_optional():
+    """Like get_db but yields None instead of raising if the DB is unreachable.
+
+    Use this for endpoints where DB is only needed for caching — the endpoint
+    still works without a DB connection, just without cache reads/writes.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    except Exception:
+        yield None
