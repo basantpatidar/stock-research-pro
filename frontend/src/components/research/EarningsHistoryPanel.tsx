@@ -61,11 +61,36 @@ function isDatePast(dateStr: string | null): boolean {
 export function EarningsHistoryPanel({ earnings }: Props) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   // Sort newest-first so index 0 = most recent quarter
-  const rows = [...earnings.earnings_history]
+  const rows = [...(earnings.earnings_history ?? [])]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5)
   const total = earnings.beat_count + earnings.miss_count
   const nextDatePast = isDatePast(earnings.next_earnings_date)
+
+  if (rows.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {earnings.next_earnings_date && (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{
+              fontSize: 11, color: T.text2, fontFamily: T.mono,
+              padding: "3px 10px", borderRadius: 5,
+              background: nextDatePast ? T.surface2 : T.blueDim,
+              border: `1px solid ${nextDatePast ? T.border : T.blue}`,
+            }}>
+              {nextDatePast ? "Reported: " : "Next: "}
+              <span style={{ color: nextDatePast ? T.amber : T.blue }}>
+                {earnings.next_earnings_date.slice(0, 10)}
+              </span>
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: 12, color: T.text3, padding: "16px 0", textAlign: "center" }}>
+          No earnings history available
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
