@@ -1,13 +1,22 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import type { PriceData } from "../../types"
-import { T, chgColor } from "../../theme"
+import { T } from "../../theme"
 
-const PERIODS = ["1d", "7D", "1M", "3M", "1Y"] as const
+const PERIODS = ["1W", "1M", "3M", "6M", "1Y"] as const
+type Period = typeof PERIODS[number]
+
+// Days of history to show per period label
+const PERIOD_DAYS: Record<Period, number> = {
+  "1W": 7,
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+}
 
 interface Props {
   data: PriceData
-  onPeriodChange?: (period: string) => void
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -27,16 +36,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-export function PriceChart({ data, onPeriodChange }: Props) {
-  const [activePeriod, setActivePeriod] = useState("7D")
+export function PriceChart({ data }: Props) {
+  const [activePeriod, setActivePeriod] = useState<Period>("3M")
   const isPositive = data.change_pct_7d >= 0
   const lineColor = isPositive ? T.green : T.red
   const gradId = `pg-${isPositive ? "g" : "r"}`
 
-  const handlePeriod = (p: string) => {
-    setActivePeriod(p)
-    onPeriodChange?.(p)
-  }
+  const filteredHistory = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - PERIOD_DAYS[activePeriod])
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+    return (data.price_history ?? []).filter(p => p.date >= cutoffStr)
+  }, [data.price_history, activePeriod])
 
   return (
     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem" }}>
@@ -48,7 +59,7 @@ export function PriceChart({ data, onPeriodChange }: Props) {
           {PERIODS.map((p) => (
             <button
               key={p}
-              onClick={() => handlePeriod(p)}
+              onClick={() => setActivePeriod(p)}
               style={{
                 padding: "3px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer",
                 border: `1px solid ${activePeriod === p ? T.blue : T.border}`,
@@ -66,7 +77,7 @@ export function PriceChart({ data, onPeriodChange }: Props) {
       </div>
 
       <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={data.price_history} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+        <AreaChart data={filteredHistory} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%"  stopColor={lineColor} stopOpacity={0.2} />

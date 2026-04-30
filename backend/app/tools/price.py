@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 @tool
-def get_price(ticker: str, period: str = "1mo") -> dict:
+def get_price(ticker: str, period: str = "1y") -> dict:
     """
     Fetch current price, today's OHLCV, and historical price data for a stock.
     Period options: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y
@@ -55,7 +55,7 @@ def get_price(ticker: str, period: str = "1mo") -> dict:
                     "high": round(row["High"], 2),
                     "low": round(row["Low"], 2),
                 }
-                for idx, row in hist.tail(30).iterrows()
+                for idx, row in hist.iterrows()
             ],
         }
     except Exception as e:
