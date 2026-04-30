@@ -129,22 +129,13 @@ async def tier1(
     if not sym:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
-    # 1. Check cache in parallel for all slow-changing data types
-    (
-        cached_earnings,
-        cached_fundamentals,
-        cached_analyst,
-        cached_short_interest,
-        cached_news,
-        cached_congressional,
-    ) = await asyncio.gather(
-        get_earnings_cache(db, sym),          # smart check: invalidates if earnings passed
-        get_stock_cache(db, sym, "fundamentals"),
-        get_stock_cache(db, sym, "analyst"),
-        get_stock_cache(db, sym, "short_interest"),
-        get_stock_cache(db, sym, "news"),
-        get_stock_cache(db, sym, "congressional"),
-    )
+    # 1. Check cache sequentially — AsyncSession does not support concurrent operations
+    cached_earnings = await get_earnings_cache(db, sym)
+    cached_fundamentals = await get_stock_cache(db, sym, "fundamentals")
+    cached_analyst = await get_stock_cache(db, sym, "analyst")
+    cached_short_interest = await get_stock_cache(db, sym, "short_interest")
+    cached_news = await get_stock_cache(db, sym, "news")
+    cached_congressional = await get_stock_cache(db, sym, "congressional")
 
     needs = {
         "earnings": cached_earnings is None,
@@ -220,8 +211,11 @@ async def tier1(
         cache_writes.append(
             set_stock_cache(db, sym, "news", fresh["news"], stock_data_expiry("news"))
         )
-    if cache_writes:
-        await asyncio.gather(*cache_writes, return_exceptions=True)
+    for coro in cache_writes:
+        try:
+            await coro
+        except Exception:
+            pass
 
     cache_hits = sum(
         1 for v in [cached_earnings, cached_fundamentals, cached_analyst,
