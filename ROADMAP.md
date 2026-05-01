@@ -1,7 +1,7 @@
 # Stock Research Pro — Feature Roadmap
 
 > Single-stop platform for day traders and long-term investors to make confident buy/sell decisions.
-> Last updated: 2026-04-29
+> Last updated: 2026-04-30
 
 ---
 
@@ -149,7 +149,7 @@ would be an early warning to reduce position.
 
 ---
 
-### Sprint 1 — Earnings Quality Scores
+### Sprint 1 — Earnings Quality Scores ✅ COMPLETE
 **Goal:** Surface the 4 models professional analysts use to assess whether earnings are real and the company is financially healthy.
 **Data source:** yfinance financial statements (already being pulled)
 **New API cost:** $0
@@ -172,7 +172,7 @@ would be an early warning to reduce position.
 
 ---
 
-### Sprint 2 — Options Intelligence Dashboard
+### Sprint 2 — Options Intelligence Dashboard ✅ COMPLETE
 **Goal:** Give day traders the options market signals professionals pay $150/month for.
 **Data source:** yfinance options chains (already pulling for implied move)
 **New API cost:** $0
@@ -196,7 +196,7 @@ would be an early warning to reduce position.
 
 ---
 
-### Sprint 3 — FRED Macro Dashboard
+### Sprint 3 — FRED Macro Dashboard ✅ COMPLETE
 **Goal:** Replace the basic VIX/yields macro panel with the credit and rates data institutional PMs actually watch.
 **Data source:** FRED API (St. Louis Fed) — completely free, no rate limits
 **New API cost:** $0
@@ -229,7 +229,7 @@ would be an early warning to reduce position.
 
 ---
 
-### Sprint 4 — Volume Profile on Price Charts
+### Sprint 4 — Volume Profile on Price Charts ✅ COMPLETE
 **Goal:** Add the single most-used professional technical tool that no retail platform surfaces well.
 **Data source:** yfinance OHLCV (already pulling)
 **New API cost:** $0

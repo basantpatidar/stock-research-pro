@@ -37,6 +37,7 @@ from app.tools.convergence import get_convergence_score
 from app.tools.forecast import get_price_forecast
 from app.tools.risk_reward import get_risk_reward
 from app.tools.earnings_quality import get_earnings_quality
+from app.tools.options_intelligence import get_options_intelligence
 
 from app.tools.new.investor_personas import investor_personas
 from app.tools.new.bull_bear import bull_bear_debate
@@ -55,6 +56,7 @@ _TOKEN_ESTIMATES: dict[str, int] = {
     "get_price_forecast": 800,
     "get_risk_reward": 500,
     "get_earnings_quality": 0,       # pure math — no LLM tokens
+    "get_options_intelligence": 0,   # pure math — no LLM tokens
     "investor_personas": 5000,
     "bull_bear_debate": 6000,
     "run_backtest": 0,
@@ -70,6 +72,7 @@ _TIER2_TOOLS = {
     "get_price_forecast": get_price_forecast,
     "get_risk_reward": get_risk_reward,
     "get_earnings_quality": get_earnings_quality,
+    "get_options_intelligence": get_options_intelligence,
 }
 
 _TIER3_TOOLS = {

@@ -109,6 +109,14 @@ export interface PricePoint {
   low: number
 }
 
+export interface VolumeProfile {
+  vpoc: number
+  vah: number
+  val: number
+  hvn_levels: number[]
+  period_days: number
+}
+
 export interface PriceData {
   ticker: string
   current_price: number
@@ -129,6 +137,7 @@ export interface PriceData {
   sector: string
   price_history: PricePoint[]
   intraday_history: PricePoint[]
+  volume_profile: VolumeProfile | null
 }
 
 export interface TechnicalData {
@@ -291,6 +300,68 @@ export interface EarningsQualityResult {
   }
 }
 
+// ── Options Intelligence types ────────────────────────────────────────────────
+
+export interface GEXLevel {
+  strike: number
+  gex: number
+}
+
+export interface TermPoint {
+  expiry: string
+  atm_iv_pct: number
+}
+
+export interface OptionsGEX {
+  net_gex: number
+  call_gex: number
+  put_gex: number
+  flip_level: number | null
+  top_levels: GEXLevel[]
+  signal: SignalResult
+}
+
+export interface OptionsMaxPain {
+  strike: number
+  distance_pct: number
+  signal: SignalResult
+}
+
+export interface OptionsIVAnalysis {
+  atm_iv_pct: number
+  realized_vol_30d_pct: number | null
+  iv_rv_ratio: number
+  signal: SignalResult
+}
+
+export interface OptionsSkew {
+  otm_put_iv_pct: number
+  otm_call_iv_pct: number
+  skew_pct: number
+  signal: SignalResult
+}
+
+export interface OptionsTermStructure {
+  shape: string
+  near_iv_pct: number
+  far_iv_pct: number
+  slope: number
+  term: TermPoint[]
+  signal: SignalResult
+}
+
+export interface OptionsIntelligenceResult {
+  ticker: string
+  spot_price: number
+  nearest_expiry: string
+  gex: OptionsGEX
+  max_pain: OptionsMaxPain
+  iv_analysis: OptionsIVAnalysis
+  skew: OptionsSkew
+  term_structure: OptionsTermStructure
+  composite: CompositeVerdict
+}
+
 // ── Watchlist types ───────────────────────────────────────────────────────────
 
 export interface WatchlistItem {
@@ -366,6 +437,48 @@ export type SSEEvent =
   | { type: "error"; message: string }
 
 // ── Macro types ───────────────────────────────────────────────────────────────
+
+// ── FRED Macro types ──────────────────────────────────────────────────────────
+
+export interface FREDIndicator {
+  label: string
+  series_id: string
+  current: number | null
+  change_7d: number | null
+  unit: string
+  verdict: string
+  color: string
+  signal: string
+  date: string | null
+  error?: string
+}
+
+export interface FREDCrossAsset {
+  label: string
+  current: number
+  change_7d: number
+  unit: string
+  verdict: string
+  color: string
+  signal: string
+}
+
+export interface FREDMacroData {
+  credit_spreads: { hy_spread: FREDIndicator; ig_spread: FREDIndicator }
+  rates: {
+    real_yield_10y: FREDIndicator
+    breakeven_10y: FREDIndicator
+    yield_curve_2s10s: FREDIndicator
+    yield_curve_3m10y: FREDIndicator
+    sofr: FREDIndicator
+  }
+  liquidity: { m2: FREDIndicator }
+  cross_asset: { copper_gold_ratio?: FREDCrossAsset; dxy?: FREDCrossAsset }
+  composite_verdict: string
+  composite_summary: string
+  error?: string
+  setup_url?: string
+}
 
 export interface MacroIndicator {
   current: number
