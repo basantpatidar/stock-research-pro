@@ -39,6 +39,9 @@ logs:
 logs-backend:
 	docker compose logs -f backend
 
+tail-log:
+	tail -f local_debugging/app.log
+
 # ── Local dev (no Docker) ─────────────────────────────────────────────────────
 backend:
 	cd backend && uvicorn app.main:app --reload --port 8000

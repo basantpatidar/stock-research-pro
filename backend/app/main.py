@@ -1,7 +1,11 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 import logging
+import logging.handlers
+import os
+import time
+
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.database import create_tables
@@ -9,22 +13,40 @@ from app.services.scheduler import start_scheduler, stop_scheduler
 from app.api import research, watchlist, screener, alerts, macro
 from app.api import research_v2, usage
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-# yfinance logs ERROR for invalid/delisted tickers before returning empty data.
-# Our tools handle empty responses explicitly, so these logs are redundant noise.
-logging.getLogger("yfinance").setLevel(logging.CRITICAL)
-logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+_LOG_FMT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+_formatter = logging.Formatter(_LOG_FMT)
+
+# stdout (always on)
+_stream_handler = logging.StreamHandler()
+_stream_handler.setFormatter(_formatter)
+
+# rotating file → local_debugging/app.log (daily, keep 7 days)
+os.makedirs(settings.log_dir, exist_ok=True)
+_file_handler = logging.handlers.TimedRotatingFileHandler(
+    filename=os.path.join(settings.log_dir, "app.log"),
+    when="midnight",
+    backupCount=7,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=logging.INFO, handlers=[_stream_handler, _file_handler])
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ──────────────────────────────────────────────
-    logger.info(f"Starting Stock Research Pro — env: {settings.environment}")
-    logger.info(f"LLM provider: {settings.model_type} / {settings.model_name}")
+    logger.info("Starting Stock Research Pro — env: %s", settings.environment)
+    logger.info("LLM provider: %s / %s", settings.model_type, settings.model_name)
+    logger.info("Logs writing to: %s/app.log", settings.log_dir)
 
     await create_tables()
     logger.info("Database tables ready")
@@ -33,7 +55,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────
     stop_scheduler()
     logger.info("Stock Research Pro shutdown complete")
 
@@ -48,7 +69,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow React dev server in development
+# ── Request logging middleware ────────────────────────────────────────────────
+_req_logger = logging.getLogger("app.requests")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - start) * 1000
+    # Skip noisy health/root pings at INFO; log them at DEBUG
+    level = logging.DEBUG if request.url.path in ("/health", "/") else logging.INFO
+    _req_logger.log(level, "%s %s %d %.0fms", request.method, request.url.path, response.status_code, ms)
+    return response
+
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=(
@@ -61,7 +96,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Mount all routers ─────────────────────────────────────────────────────────
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(research.router)
 app.include_router(research_v2.router)
 app.include_router(usage.router)
