@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="")
 
     # Data sources
+    fred_api_key: str = Field(default="")   # free key: https://fred.stlouisfed.org/docs/api/api_key.html
     newsapi_key: str = Field(default="")
     reddit_client_id: str = Field(default="")
     reddit_client_secret: str = Field(default="")
