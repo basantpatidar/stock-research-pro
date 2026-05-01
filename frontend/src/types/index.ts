@@ -112,6 +112,9 @@ export interface PricePoint {
 export interface PriceData {
   ticker: string
   current_price: number
+  regular_close: number
+  market_state: string
+  extended_change_pct: number | null
   previous_close: number
   change_pct_today: number
   change_pct_7d: number
@@ -125,6 +128,7 @@ export interface PriceData {
   market_cap: number | null
   sector: string
   price_history: PricePoint[]
+  intraday_history: PricePoint[]
 }
 
 export interface TechnicalData {
