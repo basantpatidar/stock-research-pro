@@ -192,6 +192,16 @@ export function EarningsHistoryPanel({ earnings }: Props) {
 
               <div style={{ flex: 1 }} />
 
+              {/* EPS estimate */}
+              {e.eps_estimate != null && (
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 9, color: T.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>Est</div>
+                  <div style={{ fontSize: 13, fontFamily: T.mono, fontWeight: 600, color: T.text2 }}>
+                    {fmtEps(e.eps_estimate)}
+                  </div>
+                </div>
+              )}
+
               {/* EPS actual */}
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 9, color: T.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>EPS</div>
