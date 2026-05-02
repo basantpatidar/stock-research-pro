@@ -62,6 +62,18 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Show expected EPS estimate in earnings card collapsed header (EarningsHistoryPanel) |
+| 2026-05-02 | Add volume profile overlay to PriceChart — VPOC (amber), VAH (green), VAL (red) on multi-day charts |
+| 2026-05-02 | Add FRED Macro Dashboard — credit spreads, yield curves, real yields, M2, cross-asset via `fred_macro.py` + `GET /macro/fred` |
+| 2026-05-02 | Add Options Intelligence panel (Tier 2, 0 tokens) — GEX, max pain, IV analysis, skew, term structure |
+| 2026-05-02 | Add Earnings Quality panel (Tier 2, 0 tokens) — Piotroski, Beneish, Altman, Accruals |
+| 2026-05-02 | Add `signal.py` — shared SignalResult + composite_verdict() used across quality and options tools |
+| 2026-05-02 | Persist mode, exec_mode, lastTicker in localStorage via zustand/middleware persist |
+| 2026-05-02 | True 1d intraday chart: 5-min candles + pre/after-market data |
+| 2026-05-02 | Structured logging to `local_debugging/app.log` with request timing and cache visibility |
+| 2026-05-02 | LLM cache for Tier 2/3 results; configurable CACHE_TTL_* env vars |
+| 2026-05-02 | StockDataCache DB model + data_cache service for Tier 1 yfinance caching |
+| 2026-05-02 | EarningsHistoryPanel: newest-first, relative labels, beat streak dots, expanded detail cards |
 | 2025-04-27 | Fix SSE stream: unwrap LangGraph node output before reading messages |
 | 2025-04-27 | Create `api/research_v2.py` + `api/usage.py` — were missing, caused 404s |
 | 2025-04-27 | Fix news panel hang: pass `company_name` from tier1 to skip yfinance lookup |

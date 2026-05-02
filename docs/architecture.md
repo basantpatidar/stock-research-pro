@@ -43,9 +43,13 @@ backend/app/
     prompts.py      # System prompts: day_trade / long_term / both
   tools/
     _yf_client.py   # Thread-safe rate-limited yf.Ticker() — ALL tools use this
+    signal.py       # Shared SignalResult, Verdict, composite_verdict() used by quality/options tools
     price.py        technicals.py  news.py  sentiment.py
     core_tools.py   # analyst, earnings, fundamentals, options, insider, institutional, short_interest
     remaining_tools.py  # macro, sector, cascade, forecast, risk_reward, screener, convergence, trends
+    earnings_quality.py    # Tier 2: Piotroski, Beneish, Altman, Accruals — 0 LLM tokens
+    options_intelligence.py # Tier 2: GEX, max pain, IV analysis, skew, term structure — 0 LLM tokens
+    fred_macro.py          # FRED API: credit spreads, yield curves, real yields, M2, cross-asset
     new/            # V2 tools: investor_personas, bull_bear, congressional, backtester,
                     #           earnings_transcript, paper_trade
   api/
@@ -68,7 +72,8 @@ backend/app/
 frontend/src/
   pages/          ResearchPage  WatchlistPage  ScreenerPage  MacroPage  UsagePage
   components/
-    research/     PriceChart  SignalScore  NewsPanel  StreamPanel
+    research/     PriceChart (+ volume profile overlay)  SignalScore  NewsPanel  StreamPanel
+                  EarningsHistoryPanel  EarningsQualityPanel  OptionsIntelligencePanel
                   InvestorPersonasPanel  Tier3Panels
     shared/       ModeToggle  ExecModeBar  ExpandablePanel  SignalTag  AlertToast
   hooks/          useSSE  useWebSocket  useWatchlist  useScreener
@@ -128,13 +133,13 @@ Rate limiting: `LLM_TIER=free` activates conservative RPM caps per provider via 
 <!-- SEC:CACHE -->
 ## Redis Cache Strategy
 
-| Data | TTL |
-|---|---|
-| Tier 1 (price, technicals, data) | 15 min |
-| Tier 2 LLM results | 30 min |
-| Tier 3 deep results | 4 hr |
-| Backtester results | 24 hr |
-| Congressional trades | 2 hr |
+| Data | TTL | Env var override |
+|---|---|---|
+| Tier 1 (price, technicals, data) | 15 min | `CACHE_TTL_TIER1` |
+| Tier 2 LLM results | 30 min | `CACHE_TTL_TIER2` |
+| Tier 3 deep results | 4 hr | `CACHE_TTL_TIER3` |
+| Backtester results | 24 hr | `CACHE_TTL_BACKTEST` |
+| Congressional trades | 2 hr | `CACHE_TTL_CONGRESSIONAL` |
 
 Cache hits cost 0 tokens. Cache hits are tracked in `usage.json`.
 
@@ -155,6 +160,10 @@ AlertHistory      # ticker, alert_type, title, body, score,
                   # triggered_at, source ("watchlist"|"screener"), dismissed
 
 ResearchCache     # ticker, mode, result (JSON), cached_at, expires_at
+                  # — stores Tier 2/3 LLM results; wider mode column supports all tool names
+
+StockDataCache    # ticker, tool, result (JSON), cached_at, expires_at
+                  # — stores Tier 1 data (price, technicals, earnings, etc.); separate from LLM cache
 ```
 
 Migration: `make migration MSG="description"` then `make migrate`

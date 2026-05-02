@@ -65,10 +65,11 @@ Screener filter body:
 ### Macro
 | Method | Path |
 |---|---|
-| GET | `/macro/all` — macro + sectors + geopolitical in one call |
+| GET | `/macro/all` — macro + sectors + geopolitical + FRED in one call |
 | GET | `/macro/environment` — VIX, S&P, oil, yields, gold, USD |
 | GET | `/macro/sectors` — 11 sector ETFs 5d performance |
 | GET | `/macro/geopolitical` — active geopolitical events |
+| GET | `/macro/fred` — FRED credit spreads, yield curves, real yields, M2, cross-asset (requires `FRED_API_KEY`) |
 
 ### Health
 `GET /health` → `{status, provider, model, environment}`
