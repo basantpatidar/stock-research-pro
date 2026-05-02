@@ -3,6 +3,78 @@ from app.tools._yf_client import get_ticker
 from datetime import datetime
 
 
+def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
+    """
+    Compute VPOC, VAH, VAL from daily OHLCV data.
+    Uses typical price ((H+L+C)/3) weighted by volume for accurate price-volume distribution.
+    """
+    try:
+        if len(hist) < 20:
+            return None
+
+        highs   = hist["High"].values.astype(float)
+        lows    = hist["Low"].values.astype(float)
+        closes  = hist["Close"].values.astype(float)
+        volumes = hist["Volume"].values.astype(float)
+
+        # Typical price for each bar
+        typical = (highs + lows + closes) / 3.0
+        p_min, p_max = typical.min(), typical.max()
+        price_range = p_max - p_min
+
+        if price_range < 0.01:
+            return None
+
+        bin_size = price_range / n_bins
+        bins: dict[int, float] = {}
+
+        for tp, vol in zip(typical, volumes):
+            idx = min(int((tp - p_min) / bin_size), n_bins - 1)
+            bins[idx] = bins.get(idx, 0.0) + vol
+
+        if not bins:
+            return None
+
+        # VPOC — bin with highest volume
+        vpoc_idx = max(bins, key=lambda k: bins[k])
+        vpoc = round(p_min + (vpoc_idx + 0.5) * bin_size, 2)
+
+        # Value area: 70% of total volume, expanding from VPOC
+        total_vol = sum(bins.values())
+        target    = total_vol * 0.70
+        sorted_by_vol = sorted(bins.items(), key=lambda x: x[1], reverse=True)
+        va_indices: set[int] = set()
+        accumulated = 0.0
+        for idx, vol in sorted_by_vol:
+            va_indices.add(idx)
+            accumulated += vol
+            if accumulated >= target:
+                break
+
+        vah_idx = max(va_indices)
+        val_idx = min(va_indices)
+        vah = round(p_min + (vah_idx + 0.5) * bin_size, 2)
+        val = round(p_min + (val_idx + 0.5) * bin_size, 2)
+
+        # HVN levels: top-volume bins excluding those in the value area (act as support/resistance)
+        hvn_candidates = [
+            round(p_min + (idx + 0.5) * bin_size, 2)
+            for idx, _ in sorted_by_vol[:10]
+            if idx not in va_indices
+        ]
+        hvn_levels = sorted(hvn_candidates[:4])
+
+        return {
+            "vpoc": vpoc,
+            "vah":  vah,
+            "val":  val,
+            "hvn_levels": hvn_levels,
+            "period_days": len(hist),
+        }
+    except Exception:
+        return None
+
+
 @tool
 def get_price(ticker: str, period: str = "1y") -> dict:
     """
@@ -61,6 +133,8 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             if in_extended and regular_close > 0 else None
         )
 
+        volume_profile = _compute_volume_profile(hist)
+
         return {
             "ticker": ticker.upper(),
             "current_price": round(current, 2),
@@ -80,6 +154,7 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             "market_cap": info.get("marketCap"),
             "sector": info.get("sector", "Unknown"),
             "industry": info.get("industry", "Unknown"),
+            "volume_profile": volume_profile,
             "history_period": period,
             "history_points": len(hist),
             "intraday_history": intraday_history,

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts"
 import type { PriceData } from "../../types"
 import { T } from "../../theme"
 
@@ -45,6 +45,10 @@ export function PriceChart({ data }: Props) {
   const gradId = `pg-${isPositive ? "g" : "r"}`
   const isIntraday = activePeriod === "1d"
 
+  const vp = data.volume_profile
+  // Only show volume profile levels on multi-day charts (computed from daily bars)
+  const showVP = !isIntraday && vp?.vpoc != null
+
   const chartData = useMemo(() => {
     if (isIntraday) return data.intraday_history ?? []
     const cutoff = new Date()
@@ -80,7 +84,7 @@ export function PriceChart({ data }: Props) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={180}>
+      <ResponsiveContainer width="100%" height={190}>
         <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -108,6 +112,15 @@ export function PriceChart({ data }: Props) {
             tickFormatter={(v) => `$${v}`}
           />
           <Tooltip content={<CustomTooltip intraday={isIntraday} />} />
+          {showVP && vp!.vpoc && (
+            <ReferenceLine y={vp!.vpoc} stroke="#ffaa00" strokeDasharray="5 3" strokeWidth={1.5} />
+          )}
+          {showVP && vp!.vah && (
+            <ReferenceLine y={vp!.vah} stroke="#22cc66" strokeDasharray="3 5" strokeWidth={1} />
+          )}
+          {showVP && vp!.val && (
+            <ReferenceLine y={vp!.val} stroke="#ff6644" strokeDasharray="3 5" strokeWidth={1} />
+          )}
           <Area
             type="monotone" dataKey="close"
             stroke={lineColor} strokeWidth={1.5}
@@ -115,6 +128,30 @@ export function PriceChart({ data }: Props) {
           />
         </AreaChart>
       </ResponsiveContainer>
+
+      {/* Volume Profile legend */}
+      {showVP && vp && (
+        <div style={{ display: "flex", gap: 14, marginTop: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          {vp.vpoc && (
+            <span style={{ fontSize: 9, fontFamily: T.mono, color: "#ffaa00" }}>
+              — — VPOC ${vp.vpoc.toFixed(2)}
+            </span>
+          )}
+          {vp.vah && (
+            <span style={{ fontSize: 9, fontFamily: T.mono, color: "#22cc66" }}>
+              - - VAH ${vp.vah.toFixed(2)}
+            </span>
+          )}
+          {vp.val && (
+            <span style={{ fontSize: 9, fontFamily: T.mono, color: "#ff6644" }}>
+              - - VAL ${vp.val.toFixed(2)}
+            </span>
+          )}
+          <span style={{ fontSize: 9, color: T.text3 }}>
+            Volume Profile ({vp.period_days}d)
+          </span>
+        </div>
+      )}
     </div>
   )
 }
