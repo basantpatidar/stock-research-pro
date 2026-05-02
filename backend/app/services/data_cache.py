@@ -45,6 +45,7 @@ def _llm_ttl_hours(tool_name: str) -> float:
         "get_risk_reward": short,
         "get_sentiment": short,
         "get_options_intelligence": short,
+        "get_mtf_confluence": short,
         # 1h — active paper trades need semi-fresh coaching
         "analyze_paper_trade": 1.0,
         # 2h — general tier2 fallback covers news, etc.

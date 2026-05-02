@@ -67,6 +67,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Sprint 5: RVOL signal in price.py (time-normalized, EXTREME/HIGH/NORMAL/LOW badge, day trade only) + MTF Confluence tool (technicals_mtf.py) + MultiTimeframePanel.tsx |
 | 2026-05-02 | PRE-2: Mode-aware ResearchPage — Day Trade hides analyst/earnings/fundamentals/LT-T3, Long Term hides options/short-interest/DT-T3; show() helper filters TIER2_PANELS/TIER3_PANELS arrays; price chart defaults 1d vs 3M |
 | 2026-05-02 | PRE-1: Per-tool TTL caching — fixed TTLs in config.py, updated _llm_ttl_hours() in data_cache.py, dynamic expiry for analyze_earnings_transcript |
 | 2026-05-02 | Document full request lifecycle (SEC:TOKEN_FLOW) + per-tool TTL cache strategy in architecture.md |

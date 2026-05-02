@@ -12,6 +12,7 @@ import { InvestorPersonasPanel } from "../components/research/InvestorPersonasPa
 import { EarningsHistoryPanel } from "../components/research/EarningsHistoryPanel"
 import EarningsQualityPanel from "../components/research/EarningsQualityPanel"
 import OptionsIntelligencePanel from "../components/research/OptionsIntelligencePanel"
+import { MultiTimeframePanel } from "../components/research/MultiTimeframePanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData, TradeMode } from "../types"
@@ -53,6 +54,9 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 
   if (tool === "get_options_intelligence")
     return <OptionsIntelligencePanel data={data} />
+
+  if (tool === "get_mtf_confluence")
+    return <MultiTimeframePanel data={data} />
 
   if (tool === "get_convergence_score" && data.convergence_score != null)
     return <SignalScore data={data} />
@@ -117,6 +121,7 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 // ── Mode-aware panel definitions ──────────────────────────────────────────────
 
 const TIER2_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[] }[] = [
+  { tool: "get_mtf_confluence",       title: "MTF Confluence",        tokens: 0,   modes: ["day_trade"] },
   { tool: "get_options_intelligence", title: "Options Intelligence",  tokens: 0,   modes: ["day_trade"] },
   { tool: "get_sentiment",            title: "Market Sentiment",      tokens: 500, modes: ["day_trade", "long_term"] },
   { tool: "get_risk_reward",          title: "Risk / Reward",         tokens: 500, modes: ["day_trade"] },
@@ -198,7 +203,7 @@ export function ResearchPage() {
     }
   }, [tier1, mode, execMode, addTokens])
 
-  const price        = tier1?.price        && !("error" in tier1.price)        ? tier1.price        as PriceData     : null
+  const price        = tier1?.price        && !("error" in tier1.price)        ? tier1.price        as PriceData & { rvol?: { rvol: number | null; signal: string; time_normalized: boolean } } : null
   const technicals   = tier1?.technicals   && !("error" in tier1.technicals)   ? tier1.technicals   as TechnicalData : null
   const analyst      = tier1?.analyst      && !("error" in tier1.analyst)      ? tier1.analyst      as any           : null
   const earnings     = tier1?.earnings     && !("error" in tier1.earnings)     ? tier1.earnings     as any           : null
@@ -338,13 +343,36 @@ export function ResearchPage() {
             )}
           </div>
 
-          {/* OHLCV */}
+          {/* OHLCV + RVOL */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
             <StatCard label="Open"   value={`$${price.day_open}`} />
             <StatCard label="High"   value={`$${price.day_high}`}  color={T.green} />
             <StatCard label="Low"    value={`$${price.day_low}`}   color={T.red} />
-            <StatCard label="Volume" value={(price.volume / 1_000_000).toFixed(2) + "M"} sub={`Avg ${(price.avg_volume / 1_000_000).toFixed(1)}M`} />
+            <StatCard
+              label="Volume"
+              value={(price.volume / 1_000_000).toFixed(2) + "M"}
+              sub={`Avg ${(price.avg_volume / 1_000_000).toFixed(1)}M`}
+            />
           </div>
+          {/* RVOL badge — day trade view, during regular session */}
+          {show(["day_trade"], mode) && price.rvol?.rvol != null && price.rvol.time_normalized && (() => {
+            const rv = price.rvol!
+            const rvColor = rv.signal === "EXTREME" ? T.red : rv.signal === "HIGH" ? T.amber : rv.signal === "NORMAL" ? T.green : T.text3
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "5px 12px", borderRadius: 20,
+                  background: `${rvColor}18`, border: `1px solid ${rvColor}`,
+                }}>
+                  <span style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>RVOL</span>
+                  <span style={{ fontSize: 14, fontFamily: T.mono, fontWeight: 700, color: rvColor }}>{rv.rvol.toFixed(2)}x</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: rvColor, fontFamily: T.mono, letterSpacing: "0.06em" }}>{rv.signal}</span>
+                </div>
+                <span style={{ fontSize: 11, color: T.text3 }}>relative to avg volume at this time of day</span>
+              </div>
+            )
+          })()}
 
           {/* Technicals pills */}
           {technicals && (

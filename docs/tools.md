@@ -31,11 +31,11 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 ---
 
 <!-- SEC:V1_TOOLS -->
-## V1 Tool Catalog (23 tools, all in `backend/app/tools/`)
+## V1 Tool Catalog (24 tools, all in `backend/app/tools/`)
 
 | Tool function | File | Data source | Key fields returned |
 |---|---|---|---|
-| `get_price` | price.py | yfinance | current_price, change_pct_today, change_pct_7d, OHLCV, volume_ratio, price_history, volume_profile{vpoc,vah,val,hvn_levels} |
+| `get_price` | price.py | yfinance | current_price, change_pct_today, change_pct_7d, OHLCV, volume_ratio, rvol{rvol,signal,time_normalized}, price_history, volume_profile{vpoc,vah,val,hvn_levels} |
 | `get_technicals` | technicals.py | yfinance | rsi_14, rsi_signal, macd (crossover), bollinger_bands, moving_averages, vwap_20d |
 | `get_news_impact` | news.py | NewsAPI | news[] (headline, sentiment, source, url), sentiment_breakdown, articles_found |
 | `get_sentiment` | sentiment.py | StockTwits + Reddit | bullish_pct, bearish_pct, summary |
@@ -58,6 +58,7 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 | `run_screener` | screener.py → remaining_tools | yfinance | matching tickers[] with price/cap/volume/sector |
 | `get_convergence_score` | convergence.py → remaining_tools | all signals | convergence_score (0-100), label, signals[], bullish/bearish count |
 | `get_trends` | google_trends.py → remaining_tools | pytrends | interest spike detection |
+| `get_mtf_confluence` | technicals_mtf.py | yfinance | confluence_score (0-100), label, alignment, timeframes{5m,15m,1h,1d} each with direction/rsi/macd_bullish/price_above_vwap |
 
 **Note:** `get_macro_environment`, `get_sector_heatmap`, and `get_fred_macro` take NO arguments — invoke with `{}`.
 

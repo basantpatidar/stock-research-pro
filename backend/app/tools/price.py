@@ -1,6 +1,40 @@
 from langchain_core.tools import tool
 from app.tools._yf_client import get_ticker
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+
+def _compute_rvol(current_volume: int, avg_volume: int, market_state: str) -> dict:
+    """
+    Time-normalized Relative Volume.
+    RVOL = current_volume / (avg_daily_volume × fraction_of_session_elapsed)
+    Only meaningful during regular market hours; returns raw ratio outside.
+    """
+    if avg_volume <= 0:
+        return {"rvol": None, "signal": "N/A", "time_normalized": False}
+
+    if market_state != "REGULAR":
+        raw = round(current_volume / avg_volume, 2)
+        return {"rvol": raw, "signal": "N/A — extended hours", "time_normalized": False}
+
+    try:
+        now = datetime.now(ZoneInfo("America/New_York"))
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        elapsed_min = max((now - market_open).total_seconds() / 60, 1.0)
+        fraction = min(elapsed_min / 390.0, 1.0)   # 390 min = full 6.5-hr session
+        expected = avg_volume * fraction
+        rvol = round(current_volume / expected, 2) if expected > 0 else 1.0
+    except Exception:
+        rvol = round(current_volume / avg_volume, 2)
+        return {"rvol": rvol, "signal": "N/A", "time_normalized": False}
+
+    signal = (
+        "EXTREME" if rvol > 3.0 else
+        "HIGH"    if rvol > 2.0 else
+        "NORMAL"  if rvol > 0.5 else
+        "LOW"
+    )
+    return {"rvol": rvol, "signal": signal, "time_normalized": True}
 
 
 def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
@@ -150,6 +184,7 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             "volume": int(hist["Volume"].iloc[-1]),
             "avg_volume": int(hist["Volume"].mean()),
             "volume_ratio": round(hist["Volume"].iloc[-1] / hist["Volume"].mean(), 2),
+            "rvol": _compute_rvol(int(hist["Volume"].iloc[-1]), int(hist["Volume"].mean()), market_state),
             "company_name": info.get("longName", ticker),
             "market_cap": info.get("marketCap"),
             "sector": info.get("sector", "Unknown"),
