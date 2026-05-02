@@ -1,13 +1,140 @@
 # Stock Research Pro — Feature Roadmap
 # Navigation: grep -n "SEC:" plan.md → read with offset+limit
+# SEC:DECISIONS      Locked-in architectural decisions (read this first)
+# SEC:CACHING        Per-data TTL strategy (LLM + non-LLM)
+# SEC:UI_PAGES       Page layout and where features live
 # SEC:STATUS         What is already built
-# SEC:PRIORITY       Recommended sprint order (decide here first)
+# SEC:PRIORITY       Recommended sprint order (day trading first)
 # SEC:DAY_TRADING    Day trading feature backlog
 # SEC:LONG_TERM      Long-term investing feature backlog
 # SEC:BOTH           Features serving both audiences
 # SEC:ALGO           Algorithmic / ML approaches
 # SEC:DATA_SOURCES   Free data sources available to tap
+# SEC:PARKED         Features parked (waiting on Reddit API access)
 # SEC:PAID_LATER     Features needing paid APIs — defer
+
+---
+
+<!-- SEC:DECISIONS -->
+## Locked-In Architectural Decisions
+*Agreed 2026-05-02. Do not re-discuss — implement as specified.*
+
+| # | Decision | Detail |
+|---|---|---|
+| 1 | **Day trading prioritized over long-term** | All day-trading features built first. Long-term block starts at sprint 16. |
+| 2 | **New Dashboard page** | Add `/dashboard` as the day trader morning starting point: market pulse, pre-market movers from watchlist, economic calendar. Separate from ResearchPage. |
+| 3 | **Mode-aware ResearchPage** | Switching Day Trade / Long Term / Both changes which panels are shown and their order. Day Trade hides DCF/Dividend/Moat; Long Term hides ORB/MTF/Pre-trade score. Fix this before new features land. |
+| 4 | **Per-data TTL caching** | Every tool gets its own TTL matching how often that data actually changes. See SEC:CACHING. Applies to ALL tool calls, not just LLM. |
+| 5 | **DB-backed cache for slow-changing data** | Quarterly/weekly data stored in StockDataCache DB table (survives restarts). Redis-only for real-time data (price, technicals). |
+| 6 | **Reddit features parked** | Any feature requiring Reddit PRAW is parked until API access is confirmed. See SEC:PARKED. |
+| 7 | **API setup instructions in code** | Every optional API key gets a comment in `.env.example` with the exact URL to get it and step-by-step. Also documented in `docs/dev.md` SEC:ENV_VARS. |
+| 8 | **One branch + PR per sprint** | Branch naming: `feat/sprint-N-short-description`. Always merge before starting next sprint. |
+| 9 | **plan.md auto-updated** | After every sprint completes, update SEC:STATUS (mark built) and SEC:PRIORITY (mark done). Claude does this without being asked. |
+
+---
+
+<!-- SEC:CACHING -->
+## Per-Data TTL Caching Strategy
+
+**Rule:** TTL = how long the data stays meaningfully accurate. Not a fixed global value.
+**Storage:** Redis for real-time (< 1 day). StockDataCache DB table for anything ≥ 1 day (survives restarts).
+
+### Non-LLM Tool Data
+
+| Tool | Data changes | TTL | Storage |
+|---|---|---|---|
+| `get_price` (OHLCV, intraday) | Real-time | 15 min | Redis |
+| `get_technicals` (RSI, MACD, VWAP) | Each candle | 15 min | Redis |
+| `get_analyst_consensus` | Weekly/sporadic | 24 hours | DB |
+| `get_earnings` (history + next date) | Quarterly | Until `next_earnings_date` | DB |
+| `get_fundamentals` (P/E, margins, FCF) | Quarterly | 30 days | DB |
+| `get_short_interest` | Bi-weekly (FINRA) | 7 days | DB |
+| `get_congressional_trades` | As filed (sporadic) | 24 hours | DB |
+| `get_insider_activity` | As filed (sporadic) | 24 hours | DB |
+| `get_institutional_changes` (13F) | Quarterly | 30 days | DB |
+| `get_sector_heatmap` | Daily | 1 hour | Redis |
+| `get_macro_environment` | Daily | 1 hour | Redis |
+| `get_fred_macro` | Weekly/monthly | 24 hours | DB |
+| `get_options_intelligence` | Intraday | 30 min | Redis |
+| `get_earnings_quality` (Piotroski etc.) | Quarterly | 30 days | DB |
+| Volume profile (in `get_price`) | Daily | 6 hours | Redis |
+| `get_news_impact` | Hourly | 30 min | Redis |
+
+### LLM Tool Data
+
+| Tool | TTL | Logic |
+|---|---|---|
+| `get_convergence_score` | 30 min | Changes with price |
+| `get_price_forecast` | 24 hours | Daily reassessment enough |
+| `get_risk_reward` | 30 min | Changes with price |
+| `get_sentiment` | 30 min | Changes with price/news |
+| `investor_personas` | 7 days | Thesis changes slowly |
+| `bull_bear_debate` | 24 hours | Can shift on news |
+| `analyze_earnings_transcript` | Until `next_earnings_date` | Transcript is static per quarter |
+| `run_backtest` | 7 days | Historical data stable |
+| `analyze_paper_trade` | 1 hour | Active trades need fresh data |
+| `get_cascade_impact` | 24 hours | Event chain evolves slowly |
+
+### Implementation
+- `backend/app/services/usage/limits.py` → add `CACHE_TTL_PER_TOOL: dict` mapping tool name → seconds
+- `data_cache.py` → use tool name to look up TTL instead of one global value
+- For `get_earnings`: set `expires_at = next_earnings_date` from T1 response when available
+- For `analyze_earnings_transcript`: same — expires at next earnings date
+
+---
+
+<!-- SEC:UI_PAGES -->
+## Page Layout — Where Features Live
+
+### Current pages
+`/` Research | `/watchlist` Watchlist | `/screener` Screener | `/macro` Macro | `/usage` Usage
+
+### New page: `/dashboard` — Day Trading Dashboard
+The day trader's morning starting point. Opens to this page by default when mode = day_trade.
+
+**Section 1 — Market Pulse (T1, auto-loads)**
+- Fear & Greed gauge (Alternative.me, no key)
+- VIX level + trend
+- S&P 500 trend (above/below 50MA)
+- Market breadth: % of S&P 500 stocks above 50MA / 200MA
+- Sector leaders/laggards (top 3 up, top 3 down from existing heatmap)
+- Macro regime label (from FRED data already fetched)
+
+**Section 2 — Pre-Market Movers (from watchlist)**
+- Tickers from watchlist gapping >2% pre-market
+- Shows: ticker, gap %, gap type, RVOL, float tier, catalyst tag
+- "No movers" state when market not pre-market or nothing gapping
+
+**Section 3 — Economic Calendar (next 7 days)**
+- Fed meetings, CPI, NFP from FRED release calendar
+- Any watchlist ticker's next earnings date
+- High/Medium/Low impact tags
+
+### Updated: ResearchPage — Mode-Aware Panels
+
+**Day Trade mode shows:**
+- T1: Price chart (1d default, ORB lines, RVOL badge), Pre-trade scorecard, MTF confluence, Technicals, Short interest + squeeze score, Options Intelligence
+- T2: Float/Squeeze detail, Volatility Forecast, Risk/Reward, News, Sentiment
+- T3: Backtester, Bull/Bear, Paper Trade
+- Hidden: DCF, Peer comps, Dividend health, Moat, EDGAR fundamentals
+
+**Long Term mode shows:**
+- T1: Price chart (3M default), Analyst consensus, Earnings history, Fundamentals, Earnings Quality, Congressional
+- T2: Valuation (DCF + Graham + Peer comps), EDGAR 8-year trends, Convergence score, News, Sentiment
+- T3: Investor Personas, Earnings Transcript, CANSLIM, Dividend health, Moat
+- Hidden: ORB levels, MTF confluence, Pre-trade scorecard, RVOL, Float/Squeeze
+
+**Both mode:** All panels shown, day trading panels first.
+
+### Updated: WatchlistPage
+- Add heatmap toggle (grid view vs table view)
+- Pre-market movers banner at top (same data as Dashboard, condensed)
+
+### Updated: MacroPage
+- Existing: sector heatmap, geo events, FRED dashboard
+- Add: Fear & Greed gauge, Market breadth section
+
+### No changes: ScreenerPage, UsagePage
 
 ---
 
@@ -45,27 +172,43 @@
 
 <!-- SEC:PRIORITY -->
 ## Recommended Sprint Order
+*Day trading prioritized. ✅ = done. 🔴 = parked (Reddit). Last updated: 2026-05-02.*
 
-Criteria: impact for user decision-making, zero cost, no new paid APIs, builds on existing data.
+### Pre-requisite (do first, unlocks everything)
+| Sprint | Feature | Audience | Notes |
+|---|---|---|---|
+| **PRE-1** | Per-tool TTL caching (non-LLM + LLM) | Infra | See SEC:CACHING. Do before new data tools. |
+| **PRE-2** | Mode-aware ResearchPage (show/hide panels by mode) | Infra | Fix before new panels land. |
 
+### Day Trading Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **5** | Multi-timeframe confluence score + RVOL signal | Day trader | Low | 0 |
-| **6** | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
-| **7** | Support/Resistance + Pivot Points + ORB levels | Day trader | Medium | 0 |
-| **8** | Position sizing calculator + Pre-trade scorecard | Both | Low | 0 |
-| **9** | Seasonality analysis + IBD RS Rating | Both | Low | 0 |
-| **10** | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
-| **11** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
-| **12** | Economic calendar (FRED + earnings) + Fear/Greed | Both | Low | 0 |
-| **13** | Smart money composite score | Both | Low | 0 |
-| **14** | Market breadth dashboard | Both | Medium | 0 |
-| **15** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
-| **16** | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
-| **17** | Dividend health score + Moat score | Long-term | Low | 0 |
-| **18** | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
-| **19** | Watchlist heatmap + Price target trend | Both | Low | 0 |
-| **20** | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
+| **5** | MTF confluence score + RVOL signal | Day trader | Low | 0 |
+| **6** | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
+| **7** | Pre-trade checklist scorecard | Both | Low | 0 |
+| **8** | Position sizing calculator | Both | Low | 0 |
+| **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
+| **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
+| **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
+
+### Both Audiences Block
+| Sprint | Feature(s) | Audience | Complexity | Tokens |
+|---|---|---|---|---|
+| **12** | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
+| **13** | IBD RS Rating + Seasonality analysis | Both | Low | 0 |
+| **14** | Smart money composite score | Both | Low | 0 |
+| **15** | Market breadth dashboard | Both | Medium | 0 |
+| **16** | Watchlist heatmap + Price target trend | Both | Low | 0 |
+
+### Long-Term Block
+| Sprint | Feature(s) | Audience | Complexity | Tokens |
+|---|---|---|---|---|
+| **17** | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
+| **18** | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
+| **19** | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
+| **20** | Dividend health score + Moat score | Long-term | Low | 0 |
+| **21** | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
+| **22** | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
 
 ---
 
@@ -271,6 +414,22 @@ When price makes new highs but Reddit/StockTwits sentiment is falling (or vice v
 
 ---
 
+<!-- SEC:PARKED -->
+## Parked Features — Waiting on Reddit API Access
+
+These features are designed and ready but require Reddit PRAW credentials.
+Resume once `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are confirmed working.
+
+| Feature | What it needs | Where it goes |
+|---|---|---|
+| Sentiment divergence signal | Reddit PRAW sentiment feed | `sentiment.py` + `convergence.py` |
+| Pre-market gap catalyst tagger | Reddit WSB scan for ticker mentions | `gap_scanner.py` |
+| Reddit sentiment trend chart | PRAW historical mention volume | T2 Sentiment panel |
+
+Current workaround: sentiment tool falls back to StockTwits only when Reddit creds are missing.
+
+---
+
 <!-- SEC:PAID_LATER -->
 ## Paid API Features — Defer
 
@@ -284,9 +443,8 @@ These require paid subscriptions. Noted here so we don't accidentally implement 
 | Earnings call transcripts (full text) | Paywalled | $50+/mo | Seeking Alpha, Motley Fool |
 | Social media sentiment at scale | Rate-limited | $50+/mo | Twitter/X API v2 |
 | Analyst report full text | Paywalled | $200+/mo | Refinitiv, Bloomberg |
-| Patent filings analysis | Manual | — | Google Patents free but no structured API |
 | Alternative data (credit card spend, web traffic) | Expensive | $500+/mo | Second Measure, SimilarWeb |
 
 ---
 
-*Last updated: 2026-05-02. Use SEC: anchors to navigate — never read the full file.*
+*Last updated: 2026-05-02. Decisions locked. Next: PRE-1 (per-tool caching) → PRE-2 (mode-aware UI) → Sprint 5. Use SEC: anchors to navigate — never read the full file.*
