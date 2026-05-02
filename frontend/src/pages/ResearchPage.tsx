@@ -11,6 +11,7 @@ import { StreamPanel } from "../components/research/StreamPanel"
 import { InvestorPersonasPanel } from "../components/research/InvestorPersonasPanel"
 import { EarningsHistoryPanel } from "../components/research/EarningsHistoryPanel"
 import EarningsQualityPanel from "../components/research/EarningsQualityPanel"
+import OptionsIntelligencePanel from "../components/research/OptionsIntelligencePanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData } from "../types"
@@ -43,6 +44,9 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 
   if (tool === "get_earnings_quality")
     return <EarningsQualityPanel data={data} />
+
+  if (tool === "get_options_intelligence")
+    return <OptionsIntelligencePanel data={data} />
 
   if (tool === "get_convergence_score" && data.convergence_score != null)
     return <SignalScore data={data} />
@@ -378,8 +382,9 @@ export function ResearchPage() {
           {/* ── Tier 2 panels ────────────────────────────────────────────── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
             {[
-              { tool: "get_earnings_quality",  title: "Earnings Quality",   tokens: 0 },
-              { tool: "get_sentiment",         title: "Market Sentiment",   tokens: 500 },
+              { tool: "get_earnings_quality",      title: "Earnings Quality",       tokens: 0 },
+              { tool: "get_options_intelligence", title: "Options Intelligence",    tokens: 0 },
+              { tool: "get_sentiment",            title: "Market Sentiment",        tokens: 500 },
               { tool: "get_convergence_score", title: "Signal Convergence", tokens: 700 },
               { tool: "get_price_forecast",    title: "Price Forecast",     tokens: 800 },
               { tool: "get_risk_reward",       title: "Risk / Reward",      tokens: 500 },
