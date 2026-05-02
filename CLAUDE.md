@@ -67,6 +67,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | PRE-1: Per-tool TTL caching — fixed TTLs in config.py, updated _llm_ttl_hours() in data_cache.py, dynamic expiry for analyze_earnings_transcript |
 | 2026-05-02 | Document full request lifecycle (SEC:TOKEN_FLOW) + per-tool TTL cache strategy in architecture.md |
 | 2026-05-02 | Lock architectural decisions in plan.md — day trading priority, Dashboard page, caching rules |
 | 2026-05-02 | Show expected EPS estimate in earnings card collapsed header (EarningsHistoryPanel) |

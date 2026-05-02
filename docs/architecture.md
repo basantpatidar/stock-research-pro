@@ -195,54 +195,47 @@ User searches ticker
 **Design principle:** TTL = how long that data stays meaningfully accurate, not a fixed global value.
 Mismatching TTL to data freshness wastes API calls (too short) or serves stale data (too long).
 
-**Storage decision:**
-- **Redis** — real-time and intraday data (< 1 day TTL). Fast, evictable, survives process restart.
-- **PostgreSQL (StockDataCache / ResearchCache)** — anything ≥ 1 day. Survives server restarts and Redis flushes. Quarterly data must outlive container restarts.
+**Storage decision (current implementation):**
+- **PostgreSQL (StockDataCache / ResearchCache)** — all caching uses DB for durability. Survives server restarts.
+- **Redis (future)** — planned for real-time/intraday data (< 1 day TTL) to reduce DB load. Not yet wired up.
+
+Per-tool TTLs are configured in `backend/app/config.py` as individual `CACHE_TTL_*` env vars.
+Per-tool routing is in `backend/app/services/data_cache.py` — `_stock_data_ttl_days()` and `_llm_ttl_hours()`.
 
 ### Non-LLM Tool Data (StockDataCache)
 
-| Tool | Changes how often | TTL | Storage | Env var |
+| Tool | Changes how often | TTL | Storage | Config field |
 |---|---|---|---|---|
-| `get_price` (OHLCV, intraday) | Real-time | 15 min | Redis | `CACHE_TTL_PRICE` |
-| `get_technicals` (RSI, MACD, VWAP) | Each candle | 15 min | Redis | `CACHE_TTL_TECHNICALS` |
-| `get_options_intelligence` | Intraday | 30 min | Redis | `CACHE_TTL_OPTIONS` |
-| `get_news_impact` | Hourly | 30 min | Redis | `CACHE_TTL_NEWS` |
-| `get_sector_heatmap` | Daily close | 1 hour | Redis | `CACHE_TTL_SECTORS` |
-| `get_macro_environment` | Daily | 1 hour | Redis | `CACHE_TTL_MACRO` |
-| `get_congressional_trades` | As filed (sporadic) | 24 hours | DB | `CACHE_TTL_CONGRESSIONAL` |
-| `get_insider_activity` | As filed (sporadic) | 24 hours | DB | `CACHE_TTL_INSIDER` |
-| `get_analyst_consensus` | Weekly/sporadic | 24 hours | DB | `CACHE_TTL_ANALYST` |
-| `get_fred_macro` | Weekly/monthly | 24 hours | DB | `CACHE_TTL_FRED` |
-| `get_short_interest` | Bi-weekly (FINRA) | 7 days | DB | `CACHE_TTL_SHORT_INTEREST` |
-| `get_earnings_quality` (Piotroski etc.) | Quarterly | 30 days | DB | `CACHE_TTL_EARNINGS_QUALITY` |
-| `get_fundamentals` (P/E, margins, FCF) | Quarterly | 30 days | DB | `CACHE_TTL_FUNDAMENTALS` |
-| `get_institutional_changes` (13F) | Quarterly | 30 days | DB | `CACHE_TTL_INSTITUTIONAL` |
+| `get_news_impact` | Hourly | 30 min | DB | `CACHE_TTL_NEWS_HOURS=0.5` |
+| `get_congressional_trades` | As filed (sporadic) | 24 hours | DB | `CACHE_TTL_CONGRESSIONAL_HOURS=24` |
+| `get_analyst_consensus` | Weekly/sporadic | 1 day | DB | `CACHE_TTL_ANALYST_DAYS=1` |
+| `get_short_interest` | Bi-weekly (FINRA) | 7 days | DB | `CACHE_TTL_SHORT_INTEREST_DAYS=7` |
+| `get_fundamentals` (P/E, margins, FCF) | Quarterly | 30 days | DB | `CACHE_TTL_FUNDAMENTALS_DAYS=30` |
 | `get_earnings` history + EPS | Quarterly | Until `next_earnings_date` | DB | — (dynamic) |
+| `get_price`, `get_technicals`, `get_macro_environment`, `get_sector_heatmap` | Intraday | Not cached — always fresh | — | — |
 
 ### LLM Tool Data (ResearchCache)
 
-| Tool | TTL | Storage | Logic |
+| Tool | TTL | Storage | Config field |
 |---|---|---|---|
-| `get_convergence_score` | 30 min | Redis | Changes with price |
-| `get_risk_reward` | 30 min | Redis | Changes with price |
-| `get_sentiment` | 30 min | Redis | Changes with news/price |
-| `get_price_forecast` | 24 hours | DB | Daily reassessment enough |
-| `get_cascade_impact` | 24 hours | DB | Event chain evolves slowly |
-| `bull_bear_debate` | 24 hours | DB | Can shift on major news |
-| `analyze_paper_trade` | 1 hour | Redis | Active trades need fresh analysis |
-| `investor_personas` | 7 days | DB | Investment thesis changes slowly |
-| `run_backtest` | 7 days | DB | Historical data is stable |
-| `analyze_earnings_transcript` | Until `next_earnings_date` | DB | Transcript is static per quarter |
+| `get_convergence_score` | 30 min | DB | `CACHE_TTL_LLM_SHORT_HOURS=0.5` |
+| `get_risk_reward` | 30 min | DB | `CACHE_TTL_LLM_SHORT_HOURS=0.5` |
+| `get_sentiment` | 30 min | DB | `CACHE_TTL_LLM_SHORT_HOURS=0.5` |
+| `get_options_intelligence` | 30 min | DB | `CACHE_TTL_LLM_SHORT_HOURS=0.5` |
+| `analyze_paper_trade` | 1 hour | DB | hardcoded 1.0h |
+| `get_news_impact` | 2 hours | DB | `CACHE_TTL_LLM_TIER2_HOURS=2.0` |
+| `get_price_forecast` | 24 hours | DB | `CACHE_TTL_LLM_TIER3_HOURS=24` |
+| `get_cascade_impact` | 24 hours | DB | `CACHE_TTL_LLM_TIER3_HOURS=24` |
+| `bull_bear_debate` | 24 hours | DB | `CACHE_TTL_LLM_TIER3_HOURS=24` |
+| `get_earnings_quality` | 30 days | DB | `CACHE_TTL_EARNINGS_QUALITY_DAYS=30` |
+| `investor_personas` | 7 days | DB | `CACHE_TTL_LLM_PERSONAS_HOURS=168` |
+| `run_backtest` | 7 days | DB | `CACHE_TTL_LLM_BACKTEST_HOURS=168` |
+| `analyze_earnings_transcript` | Until `next_earnings_date` | DB | dynamic via `earnings_expiry()` |
 
 ### Implementation Files
-- `backend/app/services/usage/limits.py` — add `CACHE_TTL_PER_TOOL: dict[str, int]` mapping tool name → seconds
-- `backend/app/services/data_cache.py` — `get_cached(tool, ticker)` looks up per-tool TTL, checks Redis first then DB
-- `backend/app/api/research_v2.py` — pass tool name into cache lookup instead of using tier-level global
-- Dynamic TTL for earnings: read `next_earnings_date` from T1 response, compute seconds until that date, cap at 30 days
-
-### Cache hit tracking
-Every hit logged to `usage.json` with `cache_hit: true` and `tokens_saved: <estimate>`.
-Response header `X-Cache-Hit: true` set on all cached responses.
+- `backend/app/config.py` — all `CACHE_TTL_*` fields; overridable via `.env`
+- `backend/app/services/data_cache.py` — `_llm_ttl_hours()` and `_stock_data_ttl_days()` routing; `set_llm_cache(expires_at=)` for dynamic TTL
+- `backend/app/api/research_v2.py` — tier3 endpoint uses `earnings_expiry(result)` for `analyze_earnings_transcript`
 
 ---
 
