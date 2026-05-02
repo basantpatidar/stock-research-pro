@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { useStore } from "../store"
 import { useSSE } from "../hooks/useSSE"
 import { researchV2 } from "../services/researchV2"
@@ -14,9 +14,15 @@ import EarningsQualityPanel from "../components/research/EarningsQualityPanel"
 import OptionsIntelligencePanel from "../components/research/OptionsIntelligencePanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
-import type { Tier1Response, PriceData, TechnicalData } from "../types"
+import type { Tier1Response, PriceData, TechnicalData, TradeMode } from "../types"
 
 type PanelEntry = { loading: boolean; data: any; error: string | null }
+
+// Determines whether a panel should render for the current mode.
+// A panel tagged with ["day_trade"] hides in long_term mode (and vice versa).
+// "both" mode always shows everything.
+const show = (panelModes: TradeMode[], current: TradeMode): boolean =>
+  current === "both" || panelModes.includes(current)
 
 const Label = ({ children }: { children: React.ReactNode }) => (
   <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3, fontWeight: 500 }}>
@@ -108,6 +114,25 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
   )
 }
 
+// ── Mode-aware panel definitions ──────────────────────────────────────────────
+
+const TIER2_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[] }[] = [
+  { tool: "get_options_intelligence", title: "Options Intelligence",  tokens: 0,   modes: ["day_trade"] },
+  { tool: "get_sentiment",            title: "Market Sentiment",      tokens: 500, modes: ["day_trade", "long_term"] },
+  { tool: "get_risk_reward",          title: "Risk / Reward",         tokens: 500, modes: ["day_trade"] },
+  { tool: "get_convergence_score",    title: "Signal Convergence",    tokens: 700, modes: ["day_trade", "long_term"] },
+  { tool: "get_price_forecast",       title: "Price Forecast",        tokens: 800, modes: ["day_trade", "long_term"] },
+  { tool: "get_earnings_quality",     title: "Earnings Quality",      tokens: 0,   modes: ["long_term"] },
+]
+
+const TIER3_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[]; Component: any }[] = [
+  { tool: "run_backtest",                title: "Strategy Backtester", tokens: 0,    modes: ["day_trade"],               Component: BacktesterPanel },
+  { tool: "bull_bear_debate",            title: "Bull vs Bear Debate", tokens: 6000, modes: ["day_trade", "long_term"],  Component: BullBearPanel },
+  { tool: "analyze_paper_trade",         title: "Paper Trade Coach",   tokens: 800,  modes: ["day_trade"],               Component: PaperTradePanel },
+  { tool: "investor_personas",           title: "Investor Personas",   tokens: 5000, modes: ["long_term"],               Component: InvestorPersonasPanel },
+  { tool: "analyze_earnings_transcript", title: "Earnings Transcript", tokens: 4000, modes: ["long_term"],               Component: EarningsTranscriptPanel },
+]
+
 export function ResearchPage() {
   const [ticker, setTicker] = useState("")
   const [tier1, setTier1] = useState<Tier1Response | null>(null)
@@ -173,11 +198,21 @@ export function ResearchPage() {
     }
   }, [tier1, mode, execMode, addTokens])
 
-  const price      = tier1?.price      && !("error" in tier1.price)      ? tier1.price      as PriceData     : null
-  const technicals = tier1?.technicals && !("error" in tier1.technicals) ? tier1.technicals as TechnicalData : null
-  const analyst    = tier1?.analyst    && !("error" in tier1.analyst)    ? tier1.analyst    as any            : null
-  const earnings   = tier1?.earnings   && !("error" in tier1.earnings)   ? tier1.earnings   as any            : null
-  const newsData   = tier1?.news       && !("error" in tier1.news)       ? (tier1.news as any).news as any[]  : null
+  const price        = tier1?.price        && !("error" in tier1.price)        ? tier1.price        as PriceData     : null
+  const technicals   = tier1?.technicals   && !("error" in tier1.technicals)   ? tier1.technicals   as TechnicalData : null
+  const analyst      = tier1?.analyst      && !("error" in tier1.analyst)      ? tier1.analyst      as any           : null
+  const earnings     = tier1?.earnings     && !("error" in tier1.earnings)     ? tier1.earnings     as any           : null
+  const fundamentals = tier1?.fundamentals && !("error" in tier1.fundamentals) ? tier1.fundamentals as any           : null
+  const shortInt     = tier1?.short_interest && !("error" in tier1.short_interest) ? tier1.short_interest as any     : null
+  const newsData     = tier1?.news         && !("error" in tier1.news)         ? (tier1.news as any).news as any[]   : null
+
+  // Chart default period — 1d for day trading, 3M for long-term research
+  const chartDefault = useMemo(() => {
+    if (mode === "long_term") return "3M" as const
+    return "1d" as const
+  }, [mode])
+
+  const modeLabel = mode === "day_trade" ? "Day Trade" : mode === "long_term" ? "Long Term" : null
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
@@ -247,12 +282,34 @@ export function ResearchPage() {
       {/* Main data view */}
       {price && (
         <div className="animate-in">
+
+          {/* Mode filter indicator — only when a filter is active */}
+          {modeLabel && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
+              padding: "6px 12px", borderRadius: 8,
+              background: T.surface, border: `1px solid ${T.border}`,
+              fontSize: 11, color: T.text2,
+            }}>
+              <span style={{
+                padding: "2px 8px", borderRadius: 4, fontWeight: 600,
+                background: mode === "day_trade" ? T.blueDim : T.surface2,
+                color: mode === "day_trade" ? T.blue : T.amber,
+                border: `1px solid ${mode === "day_trade" ? T.blue : T.amber}`,
+                fontFamily: T.mono, fontSize: 10, letterSpacing: "0.06em",
+              }}>
+                {modeLabel.toUpperCase()} VIEW
+              </span>
+              <span>Some panels are filtered for this mode.</span>
+              <span style={{ color: T.text3 }}>Switch to <strong style={{ color: T.text2 }}>Both</strong> to see all panels.</span>
+            </div>
+          )}
+
           {/* Ticker header */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 24, fontWeight: 600, fontFamily: T.mono, color: T.text }}>{price.ticker}</span>
             <span style={{ fontSize: 14, color: T.text2 }}>{price.company_name}</span>
             <span style={{ fontSize: 22, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${price.current_price.toLocaleString()}</span>
-            {/* Session badge — only shown outside regular hours */}
             {price.market_state && !["REGULAR", "CLOSED"].includes(price.market_state) && (
               <span style={{
                 fontSize: 10, fontWeight: 600, fontFamily: T.mono, letterSpacing: "0.06em",
@@ -262,12 +319,8 @@ export function ResearchPage() {
                 {["PRE", "PREPRE"].includes(price.market_state) ? "PRE-MKT" : "AFTER-HRS"}
               </span>
             )}
-            {/* Extended-hours change vs regular close */}
             {price.extended_change_pct != null && (
-              <span style={{
-                fontSize: 12, fontWeight: 500, fontFamily: T.mono,
-                color: chgColor(price.extended_change_pct),
-              }}>
+              <span style={{ fontSize: 12, fontWeight: 500, fontFamily: T.mono, color: chgColor(price.extended_change_pct) }}>
                 {price.extended_change_pct >= 0 ? "▲" : "▼"} {Math.abs(price.extended_change_pct).toFixed(2)}% from close
               </span>
             )}
@@ -314,10 +367,51 @@ export function ResearchPage() {
             </div>
           )}
 
-          {/* Price chart */}
-          <div style={{ marginBottom: 12 }}><PriceChart data={price} /></div>
+          {/* Price chart — default period changes by mode */}
+          <div style={{ marginBottom: 12 }}>
+            <PriceChart data={price} defaultPeriod={chartDefault} />
+          </div>
 
-          {/* News (Tier 1 — fetched with price, always visible) */}
+          {/* Short Interest — Day Trade only */}
+          {show(["day_trade"], mode) && shortInt && (
+            <div style={{ marginBottom: 12 }}>
+              <ExpandablePanel title="Short Interest" tier={1} autoExpand>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                  {shortInt.short_pct_of_float != null && (
+                    <StatCard
+                      label="Short Float %"
+                      value={`${shortInt.short_pct_of_float.toFixed(1)}%`}
+                      color={shortInt.short_pct_of_float > 20 ? T.red : shortInt.short_pct_of_float > 10 ? T.amber : T.green}
+                    />
+                  )}
+                  {shortInt.days_to_cover != null && (
+                    <StatCard label="Days to Cover" value={shortInt.days_to_cover.toFixed(1) + "d"} />
+                  )}
+                  {shortInt.change_vs_prior_month_pct != null && (
+                    <StatCard
+                      label="vs Prior Month"
+                      value={`${shortInt.change_vs_prior_month_pct >= 0 ? "+" : ""}${shortInt.change_vs_prior_month_pct.toFixed(1)}%`}
+                      color={shortInt.change_vs_prior_month_pct > 0 ? T.red : T.green}
+                    />
+                  )}
+                  {shortInt.squeeze_potential != null && (
+                    <StatCard
+                      label="Squeeze Potential"
+                      value={shortInt.squeeze_potential ? "YES" : "LOW"}
+                      color={shortInt.squeeze_potential ? T.amber : T.text2}
+                    />
+                  )}
+                </div>
+                {shortInt.signal && (
+                  <div style={{ fontSize: 11, color: T.text3, marginTop: 8, fontFamily: T.mono }}>
+                    Signal: {shortInt.signal}
+                  </div>
+                )}
+              </ExpandablePanel>
+            </div>
+          )}
+
+          {/* News (T1 — always visible) */}
           <div style={{ marginBottom: 12 }}>
             {newsData && newsData.length > 0 && (
               <ExpandablePanel title="News" tier={1} autoExpand>
@@ -331,64 +425,90 @@ export function ResearchPage() {
             )}
           </div>
 
-          {/* Analyst + Earnings (Tier 1 — always visible) */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-            {analyst && (
-              <ExpandablePanel title="Analyst Consensus" tier={1} autoExpand>
-                <div style={{ fontSize: 12, color: T.text2, marginBottom: 10 }}>
-                  {analyst.consensus} · <span style={{ fontFamily: T.mono }}>{analyst.num_analysts} analysts</span>
-                </div>
-                {analyst.total_ratings > 0 && (() => {
-                  const rc = analyst.rating_counts
-                  const tot = analyst.total_ratings
-                  return [
-                    { label: "Buy",  count: rc.strong_buy + rc.buy, color: T.green },
-                    { label: "Hold", count: rc.hold,                color: T.amber },
-                    { label: "Sell", count: rc.sell + rc.strong_sell, color: T.red },
-                  ].map(({ label, count, color }) => {
-                    const pct = Math.round((count / tot) * 100)
-                    return (
-                      <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-                        <span style={{ fontSize: 11, color: T.text2, width: 28 }}>{label}</span>
-                        <div style={{ flex: 1, height: 6, background: T.border, borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} />
-                        </div>
-                        <span style={{ fontSize: 11, fontFamily: T.mono, width: 36, textAlign: "right", color }}>{count}</span>
-                      </div>
-                    )
-                  })
-                })()}
-                {analyst.price_target && (
-                  <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 8, paddingTop: 8 }}>
-                    <Label>Price Target</Label>
-                    <span style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${analyst.price_target.toFixed(2)}</span>
-                    {analyst.upside_pct != null && (
-                      <span style={{ marginLeft: 8, fontSize: 12, fontFamily: T.mono, color: analyst.upside_pct >= 0 ? T.green : T.red }}>
-                        {analyst.upside_pct >= 0 ? "+" : ""}{analyst.upside_pct.toFixed(1)}%
-                      </span>
-                    )}
+          {/* Analyst + Earnings — Long Term only */}
+          {show(["long_term"], mode) && (analyst || earnings) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              {analyst && (
+                <ExpandablePanel title="Analyst Consensus" tier={1} autoExpand>
+                  <div style={{ fontSize: 12, color: T.text2, marginBottom: 10 }}>
+                    {analyst.consensus} · <span style={{ fontFamily: T.mono }}>{analyst.num_analysts} analysts</span>
                   </div>
-                )}
-              </ExpandablePanel>
-            )}
+                  {analyst.total_ratings > 0 && (() => {
+                    const rc = analyst.rating_counts
+                    const tot = analyst.total_ratings
+                    return [
+                      { label: "Buy",  count: rc.strong_buy + rc.buy, color: T.green },
+                      { label: "Hold", count: rc.hold,                color: T.amber },
+                      { label: "Sell", count: rc.sell + rc.strong_sell, color: T.red },
+                    ].map(({ label, count, color }) => {
+                      const pct = Math.round((count / tot) * 100)
+                      return (
+                        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                          <span style={{ fontSize: 11, color: T.text2, width: 28 }}>{label}</span>
+                          <div style={{ flex: 1, height: 6, background: T.border, borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 11, fontFamily: T.mono, width: 36, textAlign: "right", color }}>{count}</span>
+                        </div>
+                      )
+                    })
+                  })()}
+                  {analyst.price_target && (
+                    <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 8, paddingTop: 8 }}>
+                      <Label>Price Target</Label>
+                      <span style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${analyst.price_target.toFixed(2)}</span>
+                      {analyst.upside_pct != null && (
+                        <span style={{ marginLeft: 8, fontSize: 12, fontFamily: T.mono, color: analyst.upside_pct >= 0 ? T.green : T.red }}>
+                          {analyst.upside_pct >= 0 ? "+" : ""}{analyst.upside_pct.toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </ExpandablePanel>
+              )}
 
-            {earnings && (
-              <ExpandablePanel title="Earnings History" tier={1} autoExpand>
-                <EarningsHistoryPanel earnings={earnings} />
-              </ExpandablePanel>
-            )}
-          </div>
+              {earnings && (
+                <ExpandablePanel title="Earnings History" tier={1} autoExpand>
+                  <EarningsHistoryPanel earnings={earnings} />
+                </ExpandablePanel>
+              )}
+            </div>
+          )}
 
-          {/* ── Tier 2 panels ────────────────────────────────────────────── */}
+          {/* Fundamentals — Long Term only */}
+          {show(["long_term"], mode) && fundamentals && (
+            <div style={{ marginBottom: 12 }}>
+              <ExpandablePanel title="Fundamentals" tier={1} autoExpand>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                  {fundamentals.pe_ratio != null && <StatCard label="P/E (TTM)"   value={fundamentals.pe_ratio.toFixed(1)} />}
+                  {fundamentals.forward_pe != null && <StatCard label="Forward P/E" value={fundamentals.forward_pe.toFixed(1)} />}
+                  {fundamentals.profit_margin != null && (
+                    <StatCard label="Net Margin" value={`${(fundamentals.profit_margin * 100).toFixed(1)}%`}
+                      color={fundamentals.profit_margin > 0.15 ? T.green : fundamentals.profit_margin > 0 ? T.amber : T.red} />
+                  )}
+                  {fundamentals.debt_to_equity != null && (
+                    <StatCard label="Debt/Equity" value={fundamentals.debt_to_equity.toFixed(2)}
+                      color={fundamentals.debt_to_equity > 2 ? T.red : fundamentals.debt_to_equity > 1 ? T.amber : T.green} />
+                  )}
+                  {fundamentals.return_on_equity != null && (
+                    <StatCard label="ROE" value={`${(fundamentals.return_on_equity * 100).toFixed(1)}%`}
+                      color={fundamentals.return_on_equity > 0.15 ? T.green : fundamentals.return_on_equity > 0 ? T.amber : T.red} />
+                  )}
+                  {fundamentals.free_cash_flow != null && (
+                    <StatCard label="Free Cash Flow"
+                      value={Math.abs(fundamentals.free_cash_flow) > 1e9
+                        ? `${(fundamentals.free_cash_flow / 1e9).toFixed(1)}B`
+                        : `${(fundamentals.free_cash_flow / 1e6).toFixed(0)}M`}
+                      color={fundamentals.free_cash_flow > 0 ? T.green : T.red} />
+                  )}
+                </div>
+              </ExpandablePanel>
+            </div>
+          )}
+
+          {/* ── Tier 2 panels (mode-filtered) ───────────────────────────── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-            {[
-              { tool: "get_earnings_quality",      title: "Earnings Quality",       tokens: 0 },
-              { tool: "get_options_intelligence", title: "Options Intelligence",    tokens: 0 },
-              { tool: "get_sentiment",            title: "Market Sentiment",        tokens: 500 },
-              { tool: "get_convergence_score", title: "Signal Convergence", tokens: 700 },
-              { tool: "get_price_forecast",    title: "Price Forecast",     tokens: 800 },
-              { tool: "get_risk_reward",       title: "Risk / Reward",      tokens: 500 },
-            ].map(({ tool, title, tokens }) => {
+            {TIER2_PANELS.filter(p => show(p.modes, mode)).map(({ tool, title, tokens }) => {
               const p = panels[tool]
               return (
                 <ExpandablePanel
@@ -405,19 +525,13 @@ export function ResearchPage() {
             })}
           </div>
 
-          {/* ── Tier 3 panels ────────────────────────────────────────────── */}
+          {/* ── Tier 3 panels (mode-filtered) ───────────────────────────── */}
           <div style={{ marginBottom: 4 }}>
             <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginBottom: 8, letterSpacing: "0.05em" }}>
               DEEP ANALYSIS — click to run (uses 800–6K tokens each)
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[
-                { tool: "investor_personas",           title: "Investor Personas",   tokens: 5000, Component: InvestorPersonasPanel },
-                { tool: "bull_bear_debate",            title: "Bull vs Bear Debate", tokens: 6000, Component: BullBearPanel },
-                { tool: "run_backtest",                title: "Strategy Backtester", tokens: 0,    Component: BacktesterPanel },
-                { tool: "analyze_earnings_transcript", title: "Earnings Transcript", tokens: 4000, Component: EarningsTranscriptPanel },
-                { tool: "analyze_paper_trade",         title: "Paper Trade Coach",   tokens: 800,  Component: PaperTradePanel },
-              ].map(({ tool, title, tokens, Component }) => {
+              {TIER3_PANELS.filter(p => show(p.modes, mode)).map(({ tool, title, tokens, Component }) => {
                 const p = panels[tool]
                 return (
                   <ExpandablePanel
@@ -432,20 +546,22 @@ export function ResearchPage() {
                 )
               })}
 
-              {/* Congressional uses tier1 data if available, tier3 otherwise */}
-              {tier1?.congressional && !("error" in tier1.congressional) ? (
-                <ExpandablePanel title="Congressional Trades" tier={1} autoExpand={false}>
-                  <CongressionalPanel data={tier1.congressional} />
-                </ExpandablePanel>
-              ) : (
-                <ExpandablePanel
-                  title="Congressional Trades" tier={3}
-                  loading={panels["get_congressional_trades"]?.loading ?? false}
-                  error={panels["get_congressional_trades"]?.error ?? null}
-                  onExpand={() => loadPanel("get_congressional_trades", 3)}
-                >
-                  <CongressionalPanel data={panels["get_congressional_trades"]?.data} />
-                </ExpandablePanel>
+              {/* Congressional — Long Term only */}
+              {show(["long_term"], mode) && (
+                tier1?.congressional && !("error" in tier1.congressional) ? (
+                  <ExpandablePanel title="Congressional Trades" tier={1} autoExpand={false}>
+                    <CongressionalPanel data={tier1.congressional} />
+                  </ExpandablePanel>
+                ) : (
+                  <ExpandablePanel
+                    title="Congressional Trades" tier={3}
+                    loading={panels["get_congressional_trades"]?.loading ?? false}
+                    error={panels["get_congressional_trades"]?.error ?? null}
+                    onExpand={() => loadPanel("get_congressional_trades", 3)}
+                  >
+                    <CongressionalPanel data={panels["get_congressional_trades"]?.data} />
+                  </ExpandablePanel>
+                )
               )}
             </div>
           </div>

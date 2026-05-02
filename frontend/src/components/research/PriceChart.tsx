@@ -17,6 +17,7 @@ const PERIOD_DAYS: Record<Exclude<Period, "1d">, number> = {
 
 interface Props {
   data: PriceData
+  defaultPeriod?: Period
 }
 
 const CustomTooltip = ({ active, payload, label, intraday }: any) => {
@@ -38,8 +39,8 @@ const CustomTooltip = ({ active, payload, label, intraday }: any) => {
   )
 }
 
-export function PriceChart({ data }: Props) {
-  const [activePeriod, setActivePeriod] = useState<Period>("1d")
+export function PriceChart({ data, defaultPeriod = "1d" }: Props) {
+  const [activePeriod, setActivePeriod] = useState<Period>(defaultPeriod)
   const isPositive = data.change_pct_7d >= 0
   const lineColor = isPositive ? T.green : T.red
   const gradId = `pg-${isPositive ? "g" : "r"}`
