@@ -55,6 +55,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 4. **Saver mode bypasses all token limits** — by design, do not add guards for it
 5. **Every change** → update the relevant `docs/` file + add a line to Recent Changes below
 6. **Guard rail limits** live only in `backend/app/services/usage/limits.py` — edit nowhere else
+7. **Reading docs** → NEVER read a full `docs/*.md` file. Use the nav map above to find the right file, `grep -n "SEC:ANCHOR" docs/file.md` to get the line, then `Read` with `offset`+`limit` for that section only. Full reads waste ~2k tokens per file.
 
 ---
 
