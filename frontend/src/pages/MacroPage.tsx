@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
 import { T, chgColor, chgDim } from "../theme"
-import type { MacroEnvironment, SectorData, GeoEvent } from "../types"
+import type { MacroEnvironment, SectorData, GeoEvent, FREDMacroData, FREDIndicator, FREDCrossAsset } from "../types"
 
 interface MacroState {
   environment: MacroEnvironment | null
   sectors: SectorData[]
   geoEvents: GeoEvent[]
+  fred: FREDMacroData | null
   loading: boolean
 }
 
@@ -25,8 +26,191 @@ const sevStyle = (s: string) => {
   return                       { dot: T.text3, badge: T.surface2 }
 }
 
+// ── FRED sub-components ───────────────────────────────────────────────────────
+
+function FREDRow({ ind }: { ind: FREDIndicator }) {
+  if (!ind || ind.error === "unavailable") return null
+  const chgSign = (ind.change_7d ?? 0) >= 0 ? "+" : ""
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "9px 0",
+      borderBottom: `1px solid ${T.border}`,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: T.text2, marginBottom: 2 }}>{ind.label}</div>
+        <div style={{ fontSize: 10, color: T.text3, lineHeight: 1.3 }}>{ind.signal}</div>
+      </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: 14, fontFamily: T.mono, fontWeight: 600, color: ind.color }}>
+          {ind.current != null ? `${ind.current}${ind.unit}` : "—"}
+        </div>
+        {ind.change_7d != null && (
+          <div style={{ fontSize: 10, fontFamily: T.mono, color: (ind.change_7d ?? 0) >= 0 ? T.green : T.red }}>
+            {chgSign}{ind.change_7d.toFixed(3)}
+          </div>
+        )}
+      </div>
+      <span style={{
+        fontSize: 9, fontWeight: 700, fontFamily: T.mono,
+        padding: "2px 7px", borderRadius: 3,
+        background: ind.color + "20",
+        color: ind.color,
+        border: `1px solid ${ind.color}40`,
+        letterSpacing: "0.05em",
+        flexShrink: 0,
+        minWidth: 48,
+        textAlign: "center",
+      }}>
+        {ind.verdict}
+      </span>
+    </div>
+  )
+}
+
+function FREDCrossRow({ ca }: { ca: FREDCrossAsset }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "9px 0",
+      borderBottom: `1px solid ${T.border}`,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: T.text2, marginBottom: 2 }}>{ca.label}</div>
+        <div style={{ fontSize: 10, color: T.text3, lineHeight: 1.3 }}>{ca.signal}</div>
+      </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: 14, fontFamily: T.mono, fontWeight: 600, color: ca.color }}>
+          {ca.current}
+        </div>
+        {ca.change_7d != null && (
+          <div style={{ fontSize: 10, fontFamily: T.mono, color: ca.change_7d >= 0 ? T.green : T.red }}>
+            {ca.change_7d >= 0 ? "+" : ""}{ca.change_7d.toFixed(3)} 7d
+          </div>
+        )}
+      </div>
+      <span style={{
+        fontSize: 9, fontWeight: 700, fontFamily: T.mono,
+        padding: "2px 7px", borderRadius: 3,
+        background: ca.color + "20", color: ca.color,
+        border: `1px solid ${ca.color}40`,
+        letterSpacing: "0.05em", flexShrink: 0,
+        minWidth: 48, textAlign: "center",
+      }}>
+        {ca.verdict}
+      </span>
+    </div>
+  )
+}
+
+function FREDSection({ fred }: { fred: FREDMacroData }) {
+  if (fred.error) {
+    if (fred.setup_url) {
+      return (
+        <div style={{
+          background: T.surface, border: `1px solid ${T.border}`,
+          borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+            Credit &amp; Rates Dashboard (FRED)
+          </div>
+          <div style={{ fontSize: 13, color: T.amber, marginBottom: 6 }}>
+            FRED_API_KEY not configured — credit spread and rates data unavailable.
+          </div>
+          <div style={{ fontSize: 12, color: T.text3 }}>
+            Get a free key at{" "}
+            <span style={{ color: T.blue, fontFamily: T.mono }}>
+              fred.stlouisfed.org/docs/api/api_key.html
+            </span>
+            {" "}then set <code style={{ fontFamily: T.mono, background: T.surface2, padding: "1px 5px", borderRadius: 3 }}>FRED_API_KEY</code> in your .env
+          </div>
+        </div>
+      )
+    }
+    return null
+  }
+
+  const compositeColor =
+    fred.composite_verdict === "BUY"  ? T.green :
+    fred.composite_verdict === "SELL" ? T.red :
+    fred.composite_verdict === "AVOID"? "#ff2222" : T.amber
+
+  return (
+    <div style={{
+      background: T.surface, border: `1px solid ${T.border}`,
+      borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          Credit &amp; Rates Dashboard (FRED)
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, color: T.text3 }}>{fred.composite_summary}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, fontFamily: T.mono,
+            padding: "2px 9px", borderRadius: 3,
+            background: compositeColor + "20", color: compositeColor,
+            border: `1px solid ${compositeColor}40`,
+          }}>
+            {fred.composite_verdict}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
+
+        {/* Credit Spreads */}
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, paddingBottom: 4, borderBottom: `1px solid ${T.border}` }}>
+            Credit Spreads
+          </div>
+          <FREDRow ind={fred.credit_spreads.hy_spread} />
+          <FREDRow ind={fred.credit_spreads.ig_spread} />
+        </div>
+
+        {/* Yield Curves */}
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, paddingBottom: 4, borderBottom: `1px solid ${T.border}` }}>
+            Yield Curves
+          </div>
+          <FREDRow ind={fred.rates.yield_curve_2s10s} />
+          <FREDRow ind={fred.rates.yield_curve_3m10y} />
+        </div>
+
+        {/* Interest Rates */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, paddingBottom: 4, borderBottom: `1px solid ${T.border}` }}>
+            Interest Rates
+          </div>
+          <FREDRow ind={fred.rates.real_yield_10y} />
+          <FREDRow ind={fred.rates.breakeven_10y} />
+          <FREDRow ind={fred.rates.sofr} />
+        </div>
+
+        {/* Liquidity & Cross-Asset */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, paddingBottom: 4, borderBottom: `1px solid ${T.border}` }}>
+            Liquidity &amp; Cross-Asset
+          </div>
+          <FREDRow ind={fred.liquidity.m2} />
+          {fred.cross_asset.dxy && <FREDCrossRow ca={fred.cross_asset.dxy} />}
+          {fred.cross_asset.copper_gold_ratio && <FREDCrossRow ca={fred.cross_asset.copper_gold_ratio} />}
+        </div>
+
+      </div>
+
+      <div style={{ fontSize: 9, color: T.text3, marginTop: 12 }}>
+        Source: St. Louis Fed FRED API · Updated daily · HY/IG spread = OAS in % (×100 = bps)
+      </div>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export function MacroPage() {
-  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], loading: false })
+  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], fred: null, loading: false })
 
   const fetchMacro = async () => {
     setState(s => ({ ...s, loading: true }))
@@ -36,6 +220,7 @@ export function MacroPage() {
         environment: res.data.environment,
         sectors: res.data.sectors?.sectors || [],
         geoEvents: res.data.geopolitical?.all_events || [],
+        fred: res.data.fred ?? null,
         loading: false,
       })
     } catch {
@@ -45,7 +230,7 @@ export function MacroPage() {
 
   useEffect(() => { fetchMacro() }, [])
 
-  const { environment: env, sectors, geoEvents, loading } = state
+  const { environment: env, sectors, geoEvents, fred, loading } = state
 
   const isRiskOff = env?.environment?.includes("RISK-OFF")
   const isRiskOn  = env?.environment?.includes("RISK-ON")
@@ -162,6 +347,9 @@ export function MacroPage() {
           </div>
         </div>
       )}
+
+      {/* FRED Credit & Rates Dashboard */}
+      {fred && <FREDSection fred={fred} />}
 
       {/* Geopolitical events */}
       {geoEvents.length > 0 && (
