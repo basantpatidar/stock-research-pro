@@ -20,9 +20,13 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Tech stack + LLM providers | docs/architecture.md | `SEC:STACK` |
 | LLM factory / provider swap | docs/architecture.md | `SEC:LLM_FACTORY` |
 | Key architectural decisions | docs/architecture.md | `SEC:DECISIONS` |
-| Cache strategy (Redis TTLs) | docs/architecture.md | `SEC:CACHE` |
+| Full request lifecycle + token saving gates | docs/architecture.md | `SEC:TOKEN_FLOW` |
+| Per-tool cache TTLs (Redis vs DB) | docs/architecture.md | `SEC:CACHE` |
 | Database models | docs/architecture.md | `SEC:DB_MODELS` |
 | Project directory map | docs/architecture.md | `SEC:DIR_MAP` |
+| Feature roadmap + sprint order | plan.md | `SEC:PRIORITY` |
+| Locked architectural decisions | plan.md | `SEC:DECISIONS` |
+| UI page layout | plan.md | `SEC:UI_PAGES` |
 | V1 API routes | docs/api.md | `SEC:V1_ROUTES` |
 | V2 tiered routes | docs/api.md | `SEC:V2_ROUTES` |
 | Usage / guard-rail routes | docs/api.md | `SEC:USAGE_ROUTES` |
@@ -63,6 +67,8 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Document full request lifecycle (SEC:TOKEN_FLOW) + per-tool TTL cache strategy in architecture.md |
+| 2026-05-02 | Lock architectural decisions in plan.md — day trading priority, Dashboard page, caching rules |
 | 2026-05-02 | Show expected EPS estimate in earnings card collapsed header (EarningsHistoryPanel) |
 | 2026-05-02 | Add volume profile overlay to PriceChart — VPOC (amber), VAH (green), VAL (red) on multi-day charts |
 | 2026-05-02 | Add FRED Macro Dashboard — credit spreads, yield curves, real yields, M2, cross-asset via `fred_macro.py` + `GET /macro/fred` |
