@@ -605,3 +605,26 @@ export interface GeoEvent {
   impacted_sectors: string[]
   url: string
 }
+
+export interface FearGreedData {
+  value: number
+  classification: string
+  color: "red" | "amber" | "neutral" | "green"
+  signal: string
+  history: Array<{ value: number; classification: string; timestamp: string }>
+  error?: string
+}
+
+export interface CalendarEvent {
+  date: string
+  name: string
+  impact: "high" | "medium"
+  days_until: number
+}
+
+export interface EconomicCalendar {
+  events: CalendarEvent[]
+  days_ahead: number
+  as_of: string
+  error?: string
+}
