@@ -185,7 +185,7 @@ The day trader's morning starting point. Opens to this page by default when mode
 |---|---|---|---|---|
 | **5** ✅ | MTF confluence score + RVOL signal | Day trader | Low | 0 |
 | **6 (Sprint 7)** ✅ | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
-| **7** | Pre-trade checklist scorecard | Both | Low | 0 |
+| **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
 | **8** | Position sizing calculator | Both | Low | 0 |
 | **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
 | **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
@@ -246,7 +246,7 @@ Combine float size (yfinance `floatShares`), short float %, days-to-cover, recen
 - Backend: add to `short_interest.py` or new `squeeze.py`
 - Frontend: add to existing Short Interest panel or new card
 
-**Sprint 6 — Pre-Trade Checklist Scorecard** (0 tokens)
+**Sprint 6 — Pre-Trade Checklist Scorecard** ✅ (0 tokens)
 Automate the day trader's pre-trade checklist: trend direction (daily), catalyst present, RVOL >1.5, float tier, sector momentum, above/below VWAP, RSI not extreme. Output: score X/10 with PROCEED/CAUTION/AVOID verdict. Makes the app the decision gate before order entry.
 - Backend: new `pretrade_score.py` — aggregates existing T1 data, no new API calls
 - Frontend: prominent card in ResearchPage T1 section

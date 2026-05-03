@@ -13,9 +13,10 @@ import { EarningsHistoryPanel } from "../components/research/EarningsHistoryPane
 import EarningsQualityPanel from "../components/research/EarningsQualityPanel"
 import OptionsIntelligencePanel from "../components/research/OptionsIntelligencePanel"
 import { MultiTimeframePanel } from "../components/research/MultiTimeframePanel"
+import { PreTradeScorecard } from "../components/research/PreTradeScorecard"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
-import type { Tier1Response, PriceData, TechnicalData, TradeMode } from "../types"
+import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore } from "../types"
 
 type PanelEntry = { loading: boolean; data: any; error: string | null }
 
@@ -373,6 +374,13 @@ export function ResearchPage() {
               </div>
             )
           })()}
+
+          {/* Pre-Trade Scorecard — Day Trade only */}
+          {show(["day_trade"], mode) && tier1?.pretrade_score && (
+            <div style={{ marginBottom: 12 }}>
+              <PreTradeScorecard data={tier1.pretrade_score as PreTradeScore} />
+            </div>
+          )}
 
           {/* Technicals pills */}
           {technicals && (
