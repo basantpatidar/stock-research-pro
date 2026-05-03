@@ -486,7 +486,10 @@ export interface ScreenerResult {
   ticker: string
   company: string
   price: number
+  change_1d_pct: number
   change_7d_pct: number
+  change_1m_pct: number
+  change_3m_pct: number
   market_cap_b: number
   avg_volume: number
   sector: string
@@ -579,7 +582,10 @@ export interface FREDMacroData {
 export interface MacroIndicator {
   current: number
   change_today_pct: number
+  change_1d_pct: number
   change_7d_pct: number
+  change_1m_pct: number
+  change_3m_pct: number
 }
 
 export interface MacroEnvironment {
@@ -596,7 +602,11 @@ export interface MacroEnvironment {
 export interface SectorData {
   sector: string
   etf: string
+  change_1d_pct: number
   change_5d_pct: number
+  change_7d_pct: number
+  change_1m_pct: number
+  change_3m_pct: number
   trend: "up" | "down" | "flat"
 }
 

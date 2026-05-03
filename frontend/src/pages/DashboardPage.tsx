@@ -1,12 +1,31 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
-import { T, chgColor } from "../theme"
+import { T } from "../theme"
+
+type Period = "1D" | "1W" | "1M" | "3M"
+
+const PERIOD_FIELD: Record<Period, string> = {
+  "1D": "change_1d_pct",
+  "1W": "change_7d_pct",
+  "1M": "change_1m_pct",
+  "3M": "change_3m_pct",
+}
+
+const PERIOD_LABEL: Record<Period, string> = {
+  "1D": "1 Day",
+  "1W": "1 Week",
+  "1M": "1 Month",
+  "3M": "3 Months",
+}
 
 interface Mover {
   ticker: string
   company: string
   price: number
+  change_1d_pct: number
   change_7d_pct: number
+  change_1m_pct: number
+  change_3m_pct: number
   market_cap_b: number
   sector: string
 }
@@ -31,8 +50,32 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
   )
 }
 
-function MoverRow({ m }: { m: Mover }) {
-  const c = m.change_7d_pct >= 0 ? T.green : T.red
+function PeriodToggle({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 2, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 7, padding: 3 }}>
+      {(["1D", "1W", "1M", "3M"] as Period[]).map(p => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          style={{
+            fontSize: 12, fontWeight: period === p ? 600 : 400,
+            color: period === p ? T.text : T.text2,
+            background: period === p ? T.surface : "transparent",
+            border: period === p ? `1px solid ${T.borderBright}` : "1px solid transparent",
+            borderRadius: 5, padding: "4px 12px", cursor: "pointer",
+            transition: "all 0.12s ease",
+          }}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MoverRow({ m, field, periodLabel }: { m: Mover; field: string; periodLabel: string }) {
+  const val: number = (m as any)[field] ?? 0
+  const c = val >= 0 ? T.green : T.red
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
       <div style={{ width: 54, fontFamily: T.mono, fontWeight: 600, fontSize: 13, color: T.blue, flexShrink: 0 }}>{m.ticker}</div>
@@ -43,7 +86,7 @@ function MoverRow({ m }: { m: Mover }) {
       <div style={{ textAlign: "right", flexShrink: 0 }}>
         <div style={{ fontSize: 13, fontFamily: T.mono, fontWeight: 500, color: T.text }}>${m.price.toFixed(2)}</div>
         <div style={{ fontSize: 11, fontFamily: T.mono, color: c, fontWeight: 600 }}>
-          {m.change_7d_pct >= 0 ? "+" : ""}{m.change_7d_pct.toFixed(1)}%
+          {val >= 0 ? "+" : ""}{val.toFixed(1)}% <span style={{ color: T.text3, fontWeight: 400 }}>({periodLabel})</span>
         </div>
       </div>
     </div>
@@ -51,10 +94,14 @@ function MoverRow({ m }: { m: Mover }) {
 }
 
 export function DashboardPage() {
+  const [period, setPeriod] = useState<Period>("1W")
   const [state, setState] = useState<DashboardState>({
     environment: null, sectors: [], fearGreed: null,
     calendar: null, breadth: null, movers: [], loading: false,
   })
+
+  const field = PERIOD_FIELD[period]
+  const periodLabel = PERIOD_LABEL[period]
 
   const fetchAll = async () => {
     setState(s => ({ ...s, loading: true }))
@@ -69,16 +116,13 @@ export function DashboardPage() {
           max_pe: 1000,
         }),
       ])
-      const movers: Mover[] = (screenerRes.data.results || [])
-        .sort((a: Mover, b: Mover) => Math.abs(b.change_7d_pct) - Math.abs(a.change_7d_pct))
-        .slice(0, 15)
       setState({
         environment: macroRes.data.environment,
         sectors: macroRes.data.sectors?.sectors || [],
         fearGreed: macroRes.data.fear_greed ?? null,
         calendar: macroRes.data.calendar ?? null,
         breadth: macroRes.data.breadth ?? null,
-        movers,
+        movers: screenerRes.data.results || [],
         loading: false,
       })
     } catch {
@@ -90,8 +134,9 @@ export function DashboardPage() {
 
   const { environment: env, sectors, fearGreed, calendar, breadth, movers, loading } = state
 
-  const gainers = movers.filter(m => m.change_7d_pct > 0).slice(0, 7)
-  const losers  = movers.filter(m => m.change_7d_pct < 0).slice(0, 7)
+  const sorted = [...movers].sort((a, b) => Math.abs((b as any)[field] ?? 0) - Math.abs((a as any)[field] ?? 0))
+  const gainers = sorted.filter(m => ((m as any)[field] ?? 0) > 0).slice(0, 7)
+  const losers  = sorted.filter(m => ((m as any)[field] ?? 0) < 0).slice(0, 7)
 
   const fgColor = fearGreed
     ? fearGreed.color === "green" ? T.green
@@ -101,40 +146,46 @@ export function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>Market Dashboard</div>
           <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>Market pulse · Top movers · Upcoming catalysts</div>
         </div>
-        <button
-          onClick={fetchAll} disabled={loading}
-          style={{ fontSize: 12, color: T.text2, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 7, padding: "6px 14px", cursor: loading ? "not-allowed" : "pointer" }}
-        >
-          {loading ? "Loading…" : "↻ Refresh"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <PeriodToggle period={period} onChange={setPeriod} />
+          <button
+            onClick={fetchAll} disabled={loading}
+            style={{ fontSize: 12, color: T.text2, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 7, padding: "6px 14px", cursor: loading ? "not-allowed" : "pointer" }}
+          >
+            {loading ? "Loading…" : "↻ Refresh"}
+          </button>
+        </div>
       </div>
 
-      {/* Market pulse row */}
+      {/* Market pulse */}
       {env && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>Market Pulse</div>
+          <div style={{ fontSize: 11, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+            Market Pulse <span style={{ color: T.text3, fontWeight: 400 }}>· {periodLabel}</span>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8 }}>
             {[
-              { label: "S&P 500",     data: env.sp500,       key: "sp500" },
-              { label: "Nasdaq",      data: env.nasdaq,      key: "nasdaq" },
-              { label: "VIX",         data: env.vix,         key: "vix" },
-              { label: "Gold",        data: env.gold,        key: "gold" },
-              { label: "Oil (WTI)",   data: env.oil_wti,     key: "oil_wti" },
-              { label: "10Y Yield",   data: env.treasury_10y,key: "treasury_10y" },
+              { label: "S&P 500",   data: env.sp500 },
+              { label: "Nasdaq",    data: env.nasdaq },
+              { label: "VIX",       data: env.vix },
+              { label: "Gold",      data: env.gold },
+              { label: "Oil (WTI)", data: env.oil_wti },
+              { label: "10Y Yield", data: env.treasury_10y },
             ].filter(x => x.data && !(x.data as any).error).map(({ label, data }) => {
               const d = data as any
-              const chg = d.change_7d_pct ?? 0
+              const chg: number = d[field] ?? d.change_7d_pct ?? 0
               return (
                 <StatCard
                   key={label}
                   label={label}
                   value={String(d.current)}
-                  sub={`${chg >= 0 ? "+" : ""}${chg.toFixed(2)}% (7d)`}
+                  sub={`${chg >= 0 ? "+" : ""}${chg.toFixed(2)}% (${period})`}
                   color={chg >= 0 ? T.green : T.red}
                 />
               )
@@ -154,41 +205,36 @@ export function DashboardPage() {
         </div>
       )}
 
+      {/* Top Gainers / Losers */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-        {/* Top Gainers */}
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem" }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: T.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-            ▲ Top Gainers (7d)
+            ▲ Top Gainers <span style={{ color: T.text3, fontWeight: 400, textTransform: "none" }}>({periodLabel})</span>
           </div>
-          {gainers.length === 0 ? (
-            <div style={{ fontSize: 12, color: T.text3 }}>No data</div>
-          ) : (
-            gainers.map(m => <MoverRow key={m.ticker} m={m} />)
-          )}
+          {gainers.length === 0
+            ? <div style={{ fontSize: 12, color: T.text3 }}>{loading ? "Loading…" : "No data"}</div>
+            : gainers.map(m => <MoverRow key={m.ticker} m={m} field={field} periodLabel={period} />)}
         </div>
 
-        {/* Top Losers */}
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem" }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: T.red, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-            ▼ Top Losers (7d)
+            ▼ Top Losers <span style={{ color: T.text3, fontWeight: 400, textTransform: "none" }}>({periodLabel})</span>
           </div>
-          {losers.length === 0 ? (
-            <div style={{ fontSize: 12, color: T.text3 }}>No data</div>
-          ) : (
-            losers.map(m => <MoverRow key={m.ticker} m={m} />)
-          )}
+          {losers.length === 0
+            ? <div style={{ fontSize: 12, color: T.text3 }}>{loading ? "Loading…" : "No data"}</div>
+            : losers.map(m => <MoverRow key={m.ticker} m={m} field={field} periodLabel={period} />)}
         </div>
       </div>
 
-      {/* Sector heatmap */}
+      {/* Sector Rotation */}
       {sectors.length > 0 && (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-            Sector Rotation — 5d
+            Sector Rotation <span style={{ color: T.text3, fontWeight: 400, textTransform: "none" }}>· {periodLabel}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-            {sectors.map((s: any) => {
-              const pct = s.change_5d_pct ?? 0
+            {[...sectors].sort((a, b) => ((b as any)[field] ?? 0) - ((a as any)[field] ?? 0)).map((s: any) => {
+              const pct: number = (s as any)[field] ?? s.change_5d_pct ?? 0
               const col = pct >= 2 ? T.green : pct >= 0 ? "#4ade80" : pct >= -2 ? T.amber : T.red
               return (
                 <div key={s.sector} style={{ background: `${col}14`, border: `1px solid ${col}40`, borderRadius: 7, padding: "8px 10px", textAlign: "center" }}>
