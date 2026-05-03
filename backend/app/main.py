@@ -12,6 +12,7 @@ from app.db.database import create_tables
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.api import research, watchlist, screener, alerts, macro
 from app.api import research_v2, usage
+from app.api import gap_scanner
 
 settings = get_settings()
 
@@ -104,6 +105,7 @@ app.include_router(watchlist.router)
 app.include_router(screener.router)
 app.include_router(alerts.router)
 app.include_router(macro.router)
+app.include_router(gap_scanner.router)
 
 
 @app.get("/health")

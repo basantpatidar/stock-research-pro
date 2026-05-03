@@ -67,6 +67,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Sprint 10: Pre-Market Gap Scanner — gap_scanner.py scan_gaps() + POST /gap-scanner/ endpoint; GapScannerCard.tsx on WatchlistPage; float_class/_squeeze_score() helpers in core_tools.py; get_short_interest() returns float_class, vol_ratio, squeeze_score, squeeze_tier; Short Interest panel shows all 4 new fields |
 | 2026-05-02 | Sprint 9: Seasonality — seasonality.py (10y monthly returns, win rate, best/worst month); SeasonalityPanel.tsx (4×3 heatmap grid, heat colors, NOW badge on current month); IBD RS Rating added to technicals.py (SPY-relative weighted 52-wk perf → 1–99, TechPill in ResearchPage) |
 | 2026-05-02 | Sprint 8: Position Sizer — PositionSizer.tsx (account+risk% persisted to localStorage, entry pre-fills from current price, stop defaults -3%, computes shares/risk$/position%/R:R); ExpandablePanel in day_trade T1 section |
 | 2026-05-02 | Sprint 6: Pre-Trade Checklist Scorecard — pretrade_score.py (10 criteria, 0 tokens, pure T1 aggregation); wired into tier1 API response; PreTradeScorecard.tsx shows PROCEED/CAUTION/AVOID verdict + score/10 + checklist grid in day_trade mode |

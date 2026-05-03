@@ -86,9 +86,37 @@ export interface FundamentalsData {
 
 export interface ShortInterestData {
   ticker: string
-  short_float_pct: number | null
+  short_pct_of_float: number | null
   days_to_cover: number | null
-  short_squeeze_potential: string
+  squeeze_potential: boolean
+  float_shares: number | null
+  float_class: string | null
+  vol_ratio: number | null
+  squeeze_score: number | null
+  squeeze_tier: string | null
+  change_vs_prior_month_pct: number | null
+  signal: string | null
+}
+
+export interface GapItem {
+  ticker: string
+  company_name: string
+  gap_pct: number
+  direction: "up" | "down"
+  prev_close: number
+  ext_price: number
+  session: string
+  gap_type: string
+  float_class: string
+  vol_ratio: number | null
+  market_cap: number | null
+}
+
+export interface GapScanResult {
+  gaps: GapItem[]
+  scanned: number
+  threshold_pct: number
+  timestamp: string
 }
 
 export interface CongressionalTrade {

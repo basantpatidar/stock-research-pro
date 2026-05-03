@@ -236,16 +236,11 @@ Pull first 15-min and 30-min candle from 5-min intraday data. Output ORB high/lo
 - Backend: add to `price.py` intraday processing, returns `orb_15` and `orb_30` dicts
 - Frontend: ORB levels as reference lines on 1d chart only
 
-**Sprint 11 — Pre-Market Gap Scanner** (0 tokens)
+**Sprint 10 — Pre-Market Gap Scanner + Float/Squeeze Score** ✅ (0 tokens)
 For the user's watchlist, surface all tickers gapping >2% pre-market with: gap %, gap type (earnings/news/sector/no-catalyst), RVOL, float classification. Day traders call this the "morning watchlist" — their #1 daily workflow.
-- Backend: new `gap_scanner.py` tool, runs against watchlist tickers
-- Frontend: new card on WatchlistPage showing pre-market movers
-- Sources: warriortrading.com, centerpointsecurities.com
-
-**Sprint 11 — Float + Short Squeeze Score** (0 tokens)
-Combine float size (yfinance `floatShares`), short float %, days-to-cover, recent volume surge, and catalyst present → Squeeze Probability Score (0–100) with tier label: Low Float Momentum / Short Squeeze Setup / Overextended / No Setup.
-- Backend: add to `short_interest.py` or new `squeeze.py`
-- Frontend: add to existing Short Interest panel or new card
+- Backend: `gap_scanner.py` scan_gaps(), `/gap-scanner/` POST endpoint registered in main.py
+- Backend: `core_tools.py` — added `_float_class()`, `_squeeze_score()`, updated `get_short_interest()` with squeeze_score, squeeze_tier, float_class, vol_ratio
+- Frontend: `GapScannerCard.tsx` on WatchlistPage; Short Interest panel shows float_class, vol_ratio, squeeze_score/100, squeeze_tier label
 
 **Sprint 6 — Pre-Trade Checklist Scorecard** ✅ (0 tokens)
 Automate the day trader's pre-trade checklist: trend direction (daily), catalyst present, RVOL >1.5, float tier, sector momentum, above/below VWAP, RSI not extreme. Output: score X/10 with PROCEED/CAUTION/AVOID verdict. Makes the app the decision gate before order entry.

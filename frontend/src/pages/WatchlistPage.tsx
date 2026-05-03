@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useWatchlist } from "../hooks/useWatchlist"
 import { useStore } from "../store"
 import { SignalTag } from "../components/shared/SignalTag"
+import { GapScannerCard } from "../components/research/GapScannerCard"
 import { T, scoreStyle } from "../theme"
 
 type Filter = "all" | "buy" | "sell"
@@ -30,8 +31,12 @@ export function WatchlistPage() {
     return true
   })
 
+  const tickers = watchlist.map(item => item.ticker)
+
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
+
+      <GapScannerCard tickers={tickers} />
 
       {/* Live alerts */}
       {alerts.length > 0 && (

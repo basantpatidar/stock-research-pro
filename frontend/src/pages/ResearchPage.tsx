@@ -452,16 +452,35 @@ export function ResearchPage() {
                       color={shortInt.change_vs_prior_month_pct > 0 ? T.red : T.green}
                     />
                   )}
-                  {shortInt.squeeze_potential != null && (
+                  {shortInt.float_class && (
                     <StatCard
-                      label="Squeeze Potential"
-                      value={shortInt.squeeze_potential ? "YES" : "LOW"}
-                      color={shortInt.squeeze_potential ? T.amber : T.text2}
+                      label="Float Class"
+                      value={shortInt.float_class.toUpperCase()}
+                      color={shortInt.float_class === "nano" ? T.red : shortInt.float_class === "micro" ? T.amber : T.text2}
+                    />
+                  )}
+                  {shortInt.vol_ratio != null && (
+                    <StatCard
+                      label="Vol Ratio"
+                      value={`${shortInt.vol_ratio.toFixed(1)}×`}
+                      color={shortInt.vol_ratio > 2 ? T.green : T.text2}
+                    />
+                  )}
+                  {shortInt.squeeze_score != null && (
+                    <StatCard
+                      label="Squeeze Score"
+                      value={`${shortInt.squeeze_score}/100`}
+                      color={shortInt.squeeze_score >= 65 ? T.red : shortInt.squeeze_score >= 45 ? T.amber : T.text2}
                     />
                   )}
                 </div>
+                {shortInt.squeeze_tier && (
+                  <div style={{ fontSize: 11, color: T.amber, marginTop: 6, fontFamily: T.mono, fontWeight: 600 }}>
+                    {shortInt.squeeze_tier}
+                  </div>
+                )}
                 {shortInt.signal && (
-                  <div style={{ fontSize: 11, color: T.text3, marginTop: 8, fontFamily: T.mono }}>
+                  <div style={{ fontSize: 11, color: T.text3, marginTop: 4, fontFamily: T.mono }}>
                     Signal: {shortInt.signal}
                   </div>
                 )}
