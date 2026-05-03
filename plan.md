@@ -195,9 +195,9 @@ The day trader's morning starting point. Opens to this page by default when mode
 ### Both Audiences Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **12** | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
-| **13** | IBD RS Rating + Seasonality analysis | Both | Low | 0 |
-| **14** | Smart money composite score | Both | Low | 0 |
+| **12** ✅ | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
+| **13** ✅ | Smart money composite score | Both | Low | 0 |
+| **14** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
 | **15** | Market breadth dashboard | Both | Medium | 0 |
 | **16** | Watchlist heatmap + Price target trend | Both | Low | 0 |
 

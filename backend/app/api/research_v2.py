@@ -43,6 +43,7 @@ from app.tools.options_intelligence import get_options_intelligence
 from app.tools.technicals_mtf import get_mtf_confluence
 
 from app.tools.pretrade_score import compute_pretrade_score
+from app.tools.smart_money import compute_smart_money_score
 from app.tools.seasonality import get_seasonality
 from app.tools.new.investor_personas import investor_personas
 from app.tools.new.bull_bear import bull_bear_debate
@@ -252,6 +253,12 @@ async def tier1(
         sectors=sectors if isinstance(sectors, dict) else {},
     )
 
+    smart_money = compute_smart_money_score(
+        congressional=congressional if isinstance(congressional, dict) else {},
+        analyst=analyst if isinstance(analyst, dict) else {},
+        short_interest=short_interest if isinstance(short_interest, dict) else {},
+    )
+
     return _sanitize({
         "ticker": sym,
         "price": price,
@@ -265,6 +272,7 @@ async def tier1(
         "macro": macro,
         "sectors": sectors,
         "pretrade_score": pretrade_score,
+        "smart_money": smart_money,
         "cached": cache_hits > 0,
         "cache_hits": cache_hits,
         "exec_mode": request.exec_mode,

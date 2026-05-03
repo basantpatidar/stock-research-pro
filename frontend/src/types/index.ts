@@ -45,6 +45,7 @@ export interface Tier1Response {
   macro: any
   sectors: any
   pretrade_score: PreTradeScore | null
+  smart_money: SmartMoneyScore | null
   cached: boolean
   exec_mode: ExecMode
 }
@@ -604,6 +605,20 @@ export interface GeoEvent {
   severity: "critical" | "high" | "medium"
   impacted_sectors: string[]
   url: string
+}
+
+export interface SmartMoneySignal {
+  label: string
+  direction: "bullish" | "bearish"
+  detail: string
+}
+
+export interface SmartMoneyScore {
+  verdict: "ACCUMULATING" | "DISTRIBUTING" | "NEUTRAL"
+  color: "green" | "red" | "neutral"
+  bullish_count: number
+  bearish_count: number
+  signals: SmartMoneySignal[]
 }
 
 export interface FearGreedData {

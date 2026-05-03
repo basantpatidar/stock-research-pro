@@ -18,7 +18,7 @@ import { PositionSizer } from "../components/research/PositionSizer"
 import { SeasonalityPanel } from "../components/research/SeasonalityPanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
-import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore } from "../types"
+import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore, SmartMoneyScore } from "../types"
 
 type PanelEntry = { loading: boolean; data: any; error: string | null }
 
@@ -387,6 +387,44 @@ export function ResearchPage() {
               <PreTradeScorecard data={tier1.pretrade_score as PreTradeScore} />
             </div>
           )}
+
+          {/* Smart Money Score — both modes */}
+          {tier1?.smart_money && (tier1.smart_money as SmartMoneyScore).signals.length > 0 && (() => {
+            const sm = tier1.smart_money as SmartMoneyScore
+            const vColor = sm.color === "green" ? T.green : sm.color === "red" ? T.red : T.text2
+            return (
+              <div style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+                display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em" }}>Smart Money</span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, fontFamily: T.mono,
+                    padding: "2px 10px", borderRadius: 4,
+                    background: vColor + "20", color: vColor,
+                    border: `1px solid ${vColor}40`,
+                  }}>
+                    {sm.verdict}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {sm.signals.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                        background: s.direction === "bullish" ? T.green : T.red,
+                        display: "inline-block",
+                      }} />
+                      <span style={{ fontSize: 11, color: T.text2 }}>{s.label}</span>
+                      <span style={{ fontSize: 10, color: T.text3 }}>— {s.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Position Sizer — Day Trade + Both */}
           {show(["day_trade"], mode) && price && (
