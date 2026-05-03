@@ -184,10 +184,31 @@ export interface PriceData {
   orb: ORBData | null
 }
 
+export interface MonthData {
+  month: string
+  month_num: number
+  avg_return: number | null
+  positive_years: number
+  total_years: number
+  best_return: number | null
+  worst_return: number | null
+}
+
+export interface SeasonalityData {
+  ticker: string
+  months: MonthData[]
+  current_month: number
+  years_of_data: number
+  best_month: MonthData | null
+  worst_month: MonthData | null
+}
+
 export interface TechnicalData {
   ticker: string
   rsi_14: number
   rsi_signal: string
+  rs_rating: number | null
+  rs_signal: string | null
   macd: {
     macd: number
     signal: number

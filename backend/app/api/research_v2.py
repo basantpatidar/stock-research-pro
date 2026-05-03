@@ -43,6 +43,7 @@ from app.tools.options_intelligence import get_options_intelligence
 from app.tools.technicals_mtf import get_mtf_confluence
 
 from app.tools.pretrade_score import compute_pretrade_score
+from app.tools.seasonality import get_seasonality
 from app.tools.new.investor_personas import investor_personas
 from app.tools.new.bull_bear import bull_bear_debate
 from app.tools.new.backtester import run_backtest
@@ -62,6 +63,7 @@ _TOKEN_ESTIMATES: dict[str, int] = {
     "get_earnings_quality": 0,       # pure math — no LLM tokens
     "get_options_intelligence": 0,   # pure math — no LLM tokens
     "get_mtf_confluence": 0,         # pure math — no LLM tokens
+    "get_seasonality": 0,            # pure math — no LLM tokens
     "investor_personas": 5000,
     "bull_bear_debate": 6000,
     "run_backtest": 0,
@@ -79,6 +81,7 @@ _TIER2_TOOLS = {
     "get_earnings_quality": get_earnings_quality,
     "get_options_intelligence": get_options_intelligence,
     "get_mtf_confluence": get_mtf_confluence,
+    "get_seasonality": get_seasonality,
 }
 
 _TIER3_TOOLS = {

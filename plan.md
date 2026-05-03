@@ -187,7 +187,8 @@ The day trader's morning starting point. Opens to this page by default when mode
 | **6 (Sprint 7)** ✅ | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
 | **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
 | **8** ✅ | Position sizing calculator | Both | Low | 0 |
-| **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
+| **9** ✅ | Seasonality analysis + IBD RS Rating | Both | Low | 0 |
+| **10** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
 | **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
 | **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
 
@@ -324,12 +325,12 @@ User inputs account size once (saved to localStorage). Given entry + stop loss, 
 - Frontend only: new `PositionSizer.tsx` component in ResearchPage sidebar
 - No backend needed — pure client-side math
 
-**Sprint 9 — Seasonality Analysis** (0 tokens)
+**Sprint 9 — Seasonality Analysis** ✅ (0 tokens)
 Pull 10 years of monthly returns from yfinance. Show: "January: avg +3.2%, positive 7/10 years." Monthly heatmap grid. Both traders (timing entries) and investors (timing additions) use this.
 - Backend: new `seasonality.py` tool
 - Frontend: new Tier 2 `SeasonalityPanel.tsx` with monthly grid
 
-**Sprint 9 — IBD RS Rating** (0 tokens)
+**Sprint 9 — IBD RS Rating** ✅ (0 tokens)
 0–99 percentile relative strength vs S&P 500: 52-week price performance with most-recent-quarter weighted 2x. IBD charges subscription for this. Open-source formula implemented by github.com/skyte/relative-strength.
 - Backend: add to `technicals.py` — needs SPY history for comparison
 - Frontend: add RS badge to price header alongside RSI

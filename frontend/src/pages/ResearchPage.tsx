@@ -15,6 +15,7 @@ import OptionsIntelligencePanel from "../components/research/OptionsIntelligence
 import { MultiTimeframePanel } from "../components/research/MultiTimeframePanel"
 import { PreTradeScorecard } from "../components/research/PreTradeScorecard"
 import { PositionSizer } from "../components/research/PositionSizer"
+import { SeasonalityPanel } from "../components/research/SeasonalityPanel"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore } from "../types"
@@ -59,6 +60,9 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 
   if (tool === "get_mtf_confluence")
     return <MultiTimeframePanel data={data} />
+
+  if (tool === "get_seasonality" && data.months)
+    return <SeasonalityPanel data={data} />
 
   if (tool === "get_convergence_score" && data.convergence_score != null)
     return <SignalScore data={data} />
@@ -130,6 +134,7 @@ const TIER2_PANELS: { tool: string; title: string; tokens: number; modes: TradeM
   { tool: "get_convergence_score",    title: "Signal Convergence",    tokens: 700, modes: ["day_trade", "long_term"] },
   { tool: "get_price_forecast",       title: "Price Forecast",        tokens: 800, modes: ["day_trade", "long_term"] },
   { tool: "get_earnings_quality",     title: "Earnings Quality",      tokens: 0,   modes: ["long_term"] },
+  { tool: "get_seasonality",          title: "Seasonality",           tokens: 0,   modes: ["day_trade", "long_term"] },
 ]
 
 const TIER3_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[]; Component: any }[] = [
@@ -409,6 +414,13 @@ export function ResearchPage() {
               )}
               {technicals.vwap_20d != null && (
                 <TechPill label="VWAP 20d" value={`$${technicals.vwap_20d.toFixed(2)}`} color={price.current_price > technicals.vwap_20d ? T.green : T.red} />
+              )}
+              {technicals.rs_rating != null && (
+                <TechPill
+                  label="RS Rating"
+                  value={`${technicals.rs_rating}`}
+                  color={technicals.rs_rating >= 80 ? T.green : technicals.rs_rating >= 60 ? T.amber : technicals.rs_rating >= 40 ? T.text2 : T.red}
+                />
               )}
             </div>
           )}
