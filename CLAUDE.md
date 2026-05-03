@@ -67,6 +67,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Sprint 8: Position Sizer — PositionSizer.tsx (account+risk% persisted to localStorage, entry pre-fills from current price, stop defaults -3%, computes shares/risk$/position%/R:R); ExpandablePanel in day_trade T1 section |
 | 2026-05-02 | Sprint 6: Pre-Trade Checklist Scorecard — pretrade_score.py (10 criteria, 0 tokens, pure T1 aggregation); wired into tier1 API response; PreTradeScorecard.tsx shows PROCEED/CAUTION/AVOID verdict + score/10 + checklist grid in day_trade mode |
 | 2026-05-02 | Sprint 7: Classic pivot points (P/R1/R2/S1/S2) + swing S/R levels in price.py; ORB-15/ORB-30 with breakout confirmation in price.py; PriceChart shows pivots on 1d, S/R on multi-day, ORB on 1d only |
 | 2026-05-02 | Sprint 5: RVOL signal in price.py (time-normalized, EXTREME/HIGH/NORMAL/LOW badge, day trade only) + MTF Confluence tool (technicals_mtf.py) + MultiTimeframePanel.tsx |

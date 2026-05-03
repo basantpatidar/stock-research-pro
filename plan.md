@@ -186,7 +186,7 @@ The day trader's morning starting point. Opens to this page by default when mode
 | **5** ✅ | MTF confluence score + RVOL signal | Day trader | Low | 0 |
 | **6 (Sprint 7)** ✅ | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
 | **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
-| **8** | Position sizing calculator | Both | Low | 0 |
+| **8** ✅ | Position sizing calculator | Both | Low | 0 |
 | **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
 | **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
 | **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
@@ -319,7 +319,7 @@ Which "guru" investors (Buffett/Berkshire, Ackman, Einhorn etc.) hold the stock 
 <!-- SEC:BOTH -->
 ## Features Serving Both Audiences
 
-**Sprint 8 — Position Sizing Calculator** (0 tokens, frontend only)
+**Sprint 8 — Position Sizing Calculator** ✅ (0 tokens, frontend only)
 User inputs account size once (saved to localStorage). Given entry + stop loss, calculate: max shares, dollar risk, % of portfolio, position value. Output: "Risk $487 (0.97% of $50k) → 127 shares max." Makes the app the final step before order entry.
 - Frontend only: new `PositionSizer.tsx` component in ResearchPage sidebar
 - No backend needed — pure client-side math

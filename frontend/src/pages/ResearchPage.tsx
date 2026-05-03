@@ -14,6 +14,7 @@ import EarningsQualityPanel from "../components/research/EarningsQualityPanel"
 import OptionsIntelligencePanel from "../components/research/OptionsIntelligencePanel"
 import { MultiTimeframePanel } from "../components/research/MultiTimeframePanel"
 import { PreTradeScorecard } from "../components/research/PreTradeScorecard"
+import { PositionSizer } from "../components/research/PositionSizer"
 import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
 import { T, chgColor, chgDim } from "../theme"
 import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore } from "../types"
@@ -379,6 +380,15 @@ export function ResearchPage() {
           {show(["day_trade"], mode) && tier1?.pretrade_score && (
             <div style={{ marginBottom: 12 }}>
               <PreTradeScorecard data={tier1.pretrade_score as PreTradeScore} />
+            </div>
+          )}
+
+          {/* Position Sizer — Day Trade + Both */}
+          {show(["day_trade"], mode) && price && (
+            <div style={{ marginBottom: 12 }}>
+              <ExpandablePanel title="Position Sizer" tier={1} autoExpand>
+                <PositionSizer currentPrice={price.current_price} />
+              </ExpandablePanel>
             </div>
           )}
 
