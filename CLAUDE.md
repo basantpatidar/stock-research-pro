@@ -67,6 +67,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-02 | Sprint 7: Classic pivot points (P/R1/R2/S1/S2) + swing S/R levels in price.py; ORB-15/ORB-30 with breakout confirmation in price.py; PriceChart shows pivots on 1d, S/R on multi-day, ORB on 1d only |
 | 2026-05-02 | Sprint 5: RVOL signal in price.py (time-normalized, EXTREME/HIGH/NORMAL/LOW badge, day trade only) + MTF Confluence tool (technicals_mtf.py) + MultiTimeframePanel.tsx |
 | 2026-05-02 | PRE-2: Mode-aware ResearchPage — Day Trade hides analyst/earnings/fundamentals/LT-T3, Long Term hides options/short-interest/DT-T3; show() helper filters TIER2_PANELS/TIER3_PANELS arrays; price chart defaults 1d vs 3M |
 | 2026-05-02 | PRE-1: Per-tool TTL caching — fixed TTLs in config.py, updated _llm_ttl_hours() in data_cache.py, dynamic expiry for analyze_earnings_transcript |

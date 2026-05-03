@@ -37,6 +37,108 @@ def _compute_rvol(current_volume: int, avg_volume: int, market_state: str) -> di
     return {"rvol": rvol, "signal": signal, "time_normalized": True}
 
 
+def _compute_pivots(hist) -> dict | None:
+    """Classic pivot points (P, R1, R2, S1, S2) from the previous session's H/L/C."""
+    if len(hist) < 2:
+        return None
+    prev = hist.iloc[-2]
+    H = float(prev["High"])
+    L = float(prev["Low"])
+    C = float(prev["Close"])
+    P  = (H + L + C) / 3
+    R1 = 2 * P - L
+    R2 = P + (H - L)
+    S1 = 2 * P - H
+    S2 = P - (H - L)
+    return {
+        "P":  round(P,  2),
+        "R1": round(R1, 2),
+        "R2": round(R2, 2),
+        "S1": round(S1, 2),
+        "S2": round(S2, 2),
+    }
+
+
+def _compute_support_resistance(hist, lookback: int = 30) -> dict:
+    """Key S/R levels from swing highs/lows over the recent lookback period."""
+    if len(hist) < 5:
+        return {"resistance": [], "support": []}
+
+    recent = hist.tail(lookback)
+    highs  = recent["High"].values.astype(float)
+    lows   = recent["Low"].values.astype(float)
+
+    swing_highs, swing_lows = [], []
+    for i in range(2, len(highs) - 2):
+        if highs[i] >= highs[i-1] and highs[i] >= highs[i+1] and highs[i] >= highs[i-2] and highs[i] >= highs[i+2]:
+            swing_highs.append(round(highs[i], 2))
+    for i in range(2, len(lows) - 2):
+        if lows[i] <= lows[i-1] and lows[i] <= lows[i+1] and lows[i] <= lows[i-2] and lows[i] <= lows[i+2]:
+            swing_lows.append(round(lows[i], 2))
+
+    def _dedup(levels: list[float], tol: float = 0.005) -> list[float]:
+        if not levels:
+            return []
+        merged = [sorted(levels)[0]]
+        for lvl in sorted(levels)[1:]:
+            if (lvl - merged[-1]) / merged[-1] > tol:
+                merged.append(lvl)
+        return merged
+
+    resistance = sorted(_dedup(swing_highs), reverse=True)[:3]
+    support    = sorted(_dedup(swing_lows))[:3]
+    return {"resistance": resistance, "support": support}
+
+
+def _compute_orb(intraday_df) -> dict | None:
+    """Opening Range Breakout — 15-min (3 × 5m) and 30-min (6 × 5m) levels."""
+    try:
+        if intraday_df is None or intraday_df.empty:
+            return None
+
+        et = ZoneInfo("America/New_York")
+        df = intraday_df.copy()
+        if df.index.tz is None:
+            df.index = df.index.tz_localize("UTC").tz_convert(et)
+        else:
+            df.index = df.index.tz_convert(et)
+
+        # Regular session only: 9:30 AM – 4:00 PM ET
+        regular = df[
+            ((df.index.hour == 9) & (df.index.minute >= 30)) |
+            ((df.index.hour >= 10) & (df.index.hour < 16))
+        ]
+
+        if len(regular) < 3:
+            return None
+
+        current_price = float(df["Close"].iloc[-1])
+        avg_vol = float(regular["Volume"].mean()) if len(regular) > 0 else 1.0
+
+        def _orb_stats(bars, post_bars):
+            high = round(float(bars["High"].max()), 2)
+            low  = round(float(bars["Low"].min()), 2)
+            position = (
+                "above" if current_price > high else
+                "below" if current_price < low  else
+                "inside"
+            )
+            breakout = "none"
+            if len(post_bars) > 0:
+                if ((post_bars["Close"] > high) & (post_bars["Volume"] > avg_vol)).any():
+                    breakout = "above"
+                elif ((post_bars["Close"] < low) & (post_bars["Volume"] > avg_vol)).any():
+                    breakout = "below"
+            return {"high": high, "low": low, "position": position, "breakout": breakout}
+
+        return {
+            "orb_15": _orb_stats(regular.head(3), regular.iloc[3:]),
+            "orb_30": _orb_stats(regular.head(6), regular.iloc[6:]),
+        }
+    except Exception:
+        return None
+
+
 def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
     """
     Compute VPOC, VAH, VAL from daily OHLCV data.
@@ -136,11 +238,13 @@ def get_price(ticker: str, period: str = "1y") -> dict:
 
         # Intraday 5-min candles (prepost=True covers pre-market + after-hours)
         # Fetch first so we can use its last price as current when in extended session
+        intraday_df = None
         intraday_history = []
         intraday_last = None
         try:
             intraday = stock.history(period="1d", interval="5m", prepost=True)
             if not intraday.empty:
+                intraday_df = intraday
                 intraday_last = round(float(intraday["Close"].iloc[-1]), 2)
                 intraday_history = [
                     {
@@ -167,7 +271,10 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             if in_extended and regular_close > 0 else None
         )
 
-        volume_profile = _compute_volume_profile(hist)
+        volume_profile     = _compute_volume_profile(hist)
+        pivots             = _compute_pivots(hist)
+        support_resistance = _compute_support_resistance(hist)
+        orb                = _compute_orb(intraday_df)
 
         return {
             "ticker": ticker.upper(),
@@ -190,6 +297,9 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             "sector": info.get("sector", "Unknown"),
             "industry": info.get("industry", "Unknown"),
             "volume_profile": volume_profile,
+            "pivots": pivots,
+            "support_resistance": support_resistance,
+            "orb": orb,
             "history_period": period,
             "history_points": len(hist),
             "intraday_history": intraday_history,

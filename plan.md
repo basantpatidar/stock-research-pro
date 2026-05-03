@@ -177,14 +177,14 @@ The day trader's morning starting point. Opens to this page by default when mode
 ### Pre-requisite (do first, unlocks everything)
 | Sprint | Feature | Audience | Notes |
 |---|---|---|---|
-| **PRE-1** | Per-tool TTL caching (non-LLM + LLM) | Infra | See SEC:CACHING. Do before new data tools. |
-| **PRE-2** | Mode-aware ResearchPage (show/hide panels by mode) | Infra | Fix before new panels land. |
+| **PRE-1** ✅ | Per-tool TTL caching (non-LLM + LLM) | Infra | See SEC:CACHING. Do before new data tools. |
+| **PRE-2** ✅ | Mode-aware ResearchPage (show/hide panels by mode) | Infra | Fix before new panels land. |
 
 ### Day Trading Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **5** | MTF confluence score + RVOL signal | Day trader | Low | 0 |
-| **6** | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
+| **5** ✅ | MTF confluence score + RVOL signal | Day trader | Low | 0 |
+| **6 (Sprint 7)** ✅ | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
 | **7** | Pre-trade checklist scorecard | Both | Low | 0 |
 | **8** | Position sizing calculator | Both | Low | 0 |
 | **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
@@ -225,12 +225,12 @@ RVOL = current volume / average volume for same time-of-day. RVOL > 2 by 10am is
 - Backend: add to `price.py` or `technicals.py`, needs intraday + 10-day average
 - Sources: bullishbears.com, Finviz, r/Daytrading discussions
 
-**Sprint 7 — Support/Resistance + Pivot Points** (0 tokens)
+**Sprint 7 — Support/Resistance + Pivot Points** ✅ (0 tokens)
 Auto-calculate daily/weekly/monthly pivot points (Classic: P=(H+L+C)/3, R1/R2/S1/S2) and key historical S/R levels from price swing highs/lows. Plot as horizontal reference lines on the price chart alongside existing VPOC/VAH/VAL.
 - Backend: add to `price.py` response — `pivots` dict, `support_resistance` list
 - Frontend: additional `ReferenceLine` entries in `PriceChart.tsx`
 
-**Sprint 7 — Opening Range Breakout (ORB) Levels** (0 tokens)
+**Sprint 7 — Opening Range Breakout (ORB) Levels** ✅ (0 tokens)
 Pull first 15-min and 30-min candle from 5-min intraday data. Output ORB high/low, whether current price is above/below, and breakout confirmation (volume + close). Highest win-rate day trading setup — Warrior Trading, Humbled Trader standard.
 - Backend: add to `price.py` intraday processing, returns `orb_15` and `orb_30` dicts
 - Frontend: ORB levels as reference lines on 1d chart only

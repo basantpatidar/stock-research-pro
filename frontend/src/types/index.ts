@@ -117,6 +117,31 @@ export interface VolumeProfile {
   period_days: number
 }
 
+export interface Pivots {
+  P: number
+  R1: number
+  R2: number
+  S1: number
+  S2: number
+}
+
+export interface SupportResistance {
+  resistance: number[]
+  support: number[]
+}
+
+export interface ORBLevel {
+  high: number
+  low: number
+  position: "above" | "below" | "inside"
+  breakout: "above" | "below" | "none"
+}
+
+export interface ORBData {
+  orb_15: ORBLevel
+  orb_30: ORBLevel
+}
+
 export interface PriceData {
   ticker: string
   current_price: number
@@ -138,6 +163,9 @@ export interface PriceData {
   price_history: PricePoint[]
   intraday_history: PricePoint[]
   volume_profile: VolumeProfile | null
+  pivots: Pivots | null
+  support_resistance: SupportResistance | null
+  orb: ORBData | null
 }
 
 export interface TechnicalData {
