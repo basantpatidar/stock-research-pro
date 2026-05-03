@@ -50,6 +50,16 @@ from app.tools.new.bull_bear import bull_bear_debate
 from app.tools.new.backtester import run_backtest
 from app.tools.new.earnings_transcript import analyze_earnings_transcript
 from app.tools.new.paper_trade import analyze_paper_trade
+from app.tools.volatility_forecast import get_volatility_forecast
+from app.tools.regime import get_regime
+from app.tools.valuation import get_valuation
+from app.tools.edgar_fundamentals import get_edgar_fundamentals
+from app.tools.canslim import get_canslim_score
+from app.tools.patterns import get_vcp_pattern
+from app.tools.dividend import get_dividend_health
+from app.tools.moat import get_moat_score
+from app.tools.edgar_risk_factors import get_risk_factor_changes
+from app.tools.guru_tracker import get_guru_holdings
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +71,20 @@ _TOKEN_ESTIMATES: dict[str, int] = {
     "get_convergence_score": 700,
     "get_price_forecast": 800,
     "get_risk_reward": 500,
-    "get_earnings_quality": 0,       # pure math — no LLM tokens
-    "get_options_intelligence": 0,   # pure math — no LLM tokens
-    "get_mtf_confluence": 0,         # pure math — no LLM tokens
-    "get_seasonality": 0,            # pure math — no LLM tokens
+    "get_earnings_quality": 0,
+    "get_options_intelligence": 0,
+    "get_mtf_confluence": 0,
+    "get_seasonality": 0,
+    "get_volatility_forecast": 0,
+    "get_regime": 0,
+    "get_valuation": 0,
+    "get_edgar_fundamentals": 0,
+    "get_canslim_score": 0,
+    "get_vcp_pattern": 0,
+    "get_dividend_health": 0,
+    "get_moat_score": 0,
+    "get_guru_holdings": 0,
+    "get_risk_factor_changes": 2000,
     "investor_personas": 5000,
     "bull_bear_debate": 6000,
     "run_backtest": 0,
@@ -83,6 +103,21 @@ _TIER2_TOOLS = {
     "get_options_intelligence": get_options_intelligence,
     "get_mtf_confluence": get_mtf_confluence,
     "get_seasonality": get_seasonality,
+    # Sprint 10/14
+    "get_volatility_forecast": get_volatility_forecast,
+    "get_regime": get_regime,
+    # Sprint 17
+    "get_valuation": get_valuation,
+    # Sprint 18
+    "get_edgar_fundamentals": get_edgar_fundamentals,
+    # Sprint 19
+    "get_canslim_score": get_canslim_score,
+    "get_vcp_pattern": get_vcp_pattern,
+    # Sprint 20
+    "get_dividend_health": get_dividend_health,
+    "get_moat_score": get_moat_score,
+    # Sprint 22
+    "get_guru_holdings": get_guru_holdings,
 }
 
 _TIER3_TOOLS = {
@@ -92,6 +127,8 @@ _TIER3_TOOLS = {
     "analyze_earnings_transcript": analyze_earnings_transcript,
     "analyze_paper_trade": analyze_paper_trade,
     "get_congressional_trades": get_congressional_trades,
+    # Sprint 21
+    "get_risk_factor_changes": get_risk_factor_changes,
 }
 
 

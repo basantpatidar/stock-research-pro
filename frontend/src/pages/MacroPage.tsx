@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
 import { T, chgColor, chgDim } from "../theme"
-import type { MacroEnvironment, SectorData, GeoEvent, FREDMacroData, FREDIndicator, FREDCrossAsset, FearGreedData, EconomicCalendar } from "../types"
+import type { MacroEnvironment, SectorData, GeoEvent, FREDMacroData, FREDIndicator, FREDCrossAsset, FearGreedData, EconomicCalendar, MarketBreadth } from "../types"
 
 interface MacroState {
   environment: MacroEnvironment | null
@@ -10,6 +10,7 @@ interface MacroState {
   fred: FREDMacroData | null
   fearGreed: FearGreedData | null
   calendar: EconomicCalendar | null
+  breadth: MarketBreadth | null
   loading: boolean
 }
 
@@ -390,7 +391,7 @@ function EconomicCalendarSection({ cal }: { cal: EconomicCalendar }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function MacroPage() {
-  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], fred: null, fearGreed: null, calendar: null, loading: false })
+  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], fred: null, fearGreed: null, calendar: null, breadth: null, loading: false })
 
   const fetchMacro = async () => {
     setState(s => ({ ...s, loading: true }))
@@ -403,6 +404,7 @@ export function MacroPage() {
         fred: res.data.fred ?? null,
         fearGreed: res.data.fear_greed ?? null,
         calendar: res.data.calendar ?? null,
+        breadth: res.data.breadth ?? null,
         loading: false,
       })
     } catch {
@@ -412,7 +414,7 @@ export function MacroPage() {
 
   useEffect(() => { fetchMacro() }, [])
 
-  const { environment: env, sectors, geoEvents, fred, fearGreed, calendar, loading } = state
+  const { environment: env, sectors, geoEvents, fred, fearGreed, calendar, breadth, loading } = state
 
   const isRiskOff = env?.environment?.includes("RISK-OFF")
   const isRiskOn  = env?.environment?.includes("RISK-ON")
@@ -501,6 +503,44 @@ export function MacroPage() {
 
       {/* Economic Calendar */}
       {calendar && <EconomicCalendarSection cal={calendar} />}
+
+      {/* Market Breadth Dashboard */}
+      {breadth && !breadth.error && (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Market Breadth — S&P 500 Proxy
+            </div>
+            {(() => {
+              const vc = breadth.verdict_color === "green" ? T.green : breadth.verdict_color === "amber" ? T.amber : breadth.verdict_color === "red" ? T.red : T.text2
+              return (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 20, background: `${vc}18`, color: vc, border: `1px solid ${vc}`, fontFamily: T.mono }}>
+                  {breadth.verdict}
+                </span>
+              )
+            })()}
+          </div>
+          <div style={{ fontSize: 12, color: T.text2, marginBottom: 12 }}>{breadth.signal}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8 }}>
+            {[
+              { label: "% Above 50d MA", value: `${breadth.pct_above_50d}%`, color: breadth.pct_above_50d >= 60 ? T.green : breadth.pct_above_50d >= 40 ? T.amber : T.red },
+              { label: "% Above 200d MA", value: breadth.pct_above_200d != null ? `${breadth.pct_above_200d}%` : "—", color: T.text },
+              { label: "Adv / Dec", value: `${breadth.advancing} / ${breadth.declining}`, color: breadth.advancing > breadth.declining ? T.green : T.red },
+              { label: "A/D Ratio", value: `${breadth.ad_ratio}x`, color: breadth.ad_ratio >= 1.5 ? T.green : breadth.ad_ratio >= 1 ? T.amber : T.red },
+              { label: "Near 52w High", value: `${breadth.new_highs_proxy}`, color: T.green },
+              { label: "Near 52w Low", value: `${breadth.new_lows_proxy}`, color: T.red },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ background: T.surface2, borderRadius: 8, padding: "10px 12px", border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: T.text3, marginTop: 8 }}>
+            Based on {breadth.stocks_measured} representative S&P 500 stocks across 11 sectors
+          </div>
+        </div>
+      )}
 
       {/* Sector heatmap */}
       {sectors.length > 0 && (

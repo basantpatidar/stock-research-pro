@@ -273,6 +273,8 @@ export interface NewsItem {
   published: string
   sentiment: "positive" | "negative" | "neutral"
   url: string
+  catalyst_type?: string
+  catalyst_strength?: "HIGH" | "MEDIUM" | "LOW"
 }
 
 export interface AnalystData {
@@ -641,5 +643,237 @@ export interface EconomicCalendar {
   events: CalendarEvent[]
   days_ahead: number
   as_of: string
+  error?: string
+}
+
+// ── Market Breadth ────────────────────────────────────────────────────────────
+
+export interface MarketBreadth {
+  pct_above_50d: number
+  pct_above_200d: number | null
+  advancing: number
+  declining: number
+  ad_ratio: number
+  new_highs_proxy: number
+  new_lows_proxy: number
+  stocks_measured: number
+  verdict: string
+  verdict_color: "green" | "amber" | "red" | "neutral"
+  signal: string
+  error?: string
+}
+
+// ── Volatility Forecast ───────────────────────────────────────────────────────
+
+export interface VolForecastDay {
+  day: number
+  expected_range_low: number
+  expected_range_high: number
+  daily_vol_pct: number
+}
+
+export interface VolatilityForecast {
+  ticker: string
+  current_price: number
+  forecasts: VolForecastDay[]
+  annualized_vol_pct: number
+  realized_vol_20d_pct: number
+  realized_vol_60d_pct: number
+  vol_regime: "LOW" | "NORMAL" | "HIGH" | "EXTREME"
+  vol_regime_color: "green" | "neutral" | "amber" | "red"
+  vol_regime_tip: string
+  model: string
+  error?: string
+}
+
+// ── Regime Classifier ────────────────────────────────────────────────────────
+
+export interface RegimeResult {
+  ticker: string
+  regime: "TRENDING" | "MEAN-REVERTING"
+  regime_color: "blue" | "purple"
+  description: string
+  recommended_strategy: string
+  confidence_pct: number
+  adx_proxy: number
+  return_20d_pct: number
+  return_60d_pct: number
+  model: string
+  error?: string
+}
+
+// ── Valuation ─────────────────────────────────────────────────────────────────
+
+export interface PeerData {
+  ticker: string
+  pe_ratio: number | null
+  ps_ratio: number | null
+  ev_ebitda: number | null
+  peg_ratio: number | null
+  market_cap_b: number | null
+}
+
+export interface ValuationResult {
+  ticker: string
+  current_price: number | null
+  sector: string
+  dcf_per_share: { bear: number; base: number; bull: number }
+  dcf_growth_assumed_pct: number
+  dcf_wacc_pct: number
+  graham_number: number | null
+  peg_fair_value: number | null
+  peg_ratio: number | null
+  eps_trailing: number | null
+  book_value_per_share: number | null
+  revenue_cagr_pct: number | null
+  peers: PeerData[]
+  peer_median_pe: number | null
+  peer_verdict: string | null
+  peer_verdict_color: string
+  error?: string
+}
+
+// ── EDGAR Fundamentals ────────────────────────────────────────────────────────
+
+export interface YearValue {
+  year: number
+  value: number
+}
+
+export interface EDGARFundamentals {
+  ticker: string
+  entity_name: string
+  cik: string
+  revenue_b: YearValue[]
+  net_income_b: YearValue[]
+  operating_income_b: YearValue[]
+  fcf_b: YearValue[]
+  total_debt_b: YearValue[]
+  years_available: number
+  source: string
+  error?: string
+}
+
+// ── CANSLIM ───────────────────────────────────────────────────────────────────
+
+export interface CanslimCriterion {
+  pass: boolean | null
+  label: string
+  detail: string
+}
+
+export interface CanslimResult {
+  ticker: string
+  score: number
+  total: number
+  verdict: string
+  verdict_color: "green" | "amber" | "red"
+  criteria: Record<string, CanslimCriterion>
+  error?: string
+}
+
+// ── VCP Pattern ───────────────────────────────────────────────────────────────
+
+export interface VCPCriterion {
+  pass: boolean | null
+  label: string
+  detail: string
+  contractions?: number
+}
+
+export interface VCPResult {
+  ticker: string
+  verdict: string
+  verdict_color: "green" | "amber" | "red"
+  setup_quality: string
+  criteria_passed: number
+  criteria_total: number
+  criteria: Record<string, VCPCriterion>
+  current_price: number
+  ma50: number
+  ma150: number | null
+  ma200: number | null
+  high_52w: number
+  low_52w: number
+  error?: string
+}
+
+// ── Dividend Health ───────────────────────────────────────────────────────────
+
+export interface DividendHealth {
+  ticker: string
+  pays_dividend: boolean
+  dividend_yield_pct: number | null
+  dividend_rate: number | null
+  payout_ratio_pct: number | null
+  fcf_coverage: number | null
+  div_cagr_3y_pct: number | null
+  div_cagr_5y_pct: number | null
+  consecutive_growth_years: number
+  verdict: "SAFE" | "WATCH" | "DANGER" | "NO DIVIDEND"
+  verdict_color: "green" | "amber" | "red" | "neutral"
+  checks: Record<string, boolean>
+  error?: string
+}
+
+// ── Economic Moat ─────────────────────────────────────────────────────────────
+
+export interface MoatComponent {
+  label: string
+  value: string
+  pass: boolean | null
+  note: string
+}
+
+export interface MoatResult {
+  ticker: string
+  moat_width: "WIDE" | "NARROW" | "NONE"
+  moat_color: "green" | "amber" | "red"
+  score: number
+  total: number
+  summary: string
+  components: Record<string, MoatComponent>
+  error?: string
+}
+
+// ── 10-K Risk Factors ─────────────────────────────────────────────────────────
+
+export interface ChangedRisk {
+  topic: string
+  change: string
+}
+
+export interface RiskFactorChanges {
+  ticker: string
+  current_filing_date: string
+  prior_filing_date: string
+  new_risks: string[]
+  removed_risks: string[]
+  changed_risks: ChangedRisk[]
+  trajectory: "INCREASING" | "STABLE" | "DECREASING" | "UNKNOWN"
+  trajectory_color: "red" | "neutral" | "green"
+  summary: string
+  source: string
+  error?: string
+}
+
+// ── Guru Holdings ─────────────────────────────────────────────────────────────
+
+export interface GuruHolding {
+  guru: string
+  filing_date: string
+  shares: number
+  market_value_m: number
+  issuer_name: string
+}
+
+export interface GuruHoldings {
+  ticker: string
+  gurus_holding: GuruHolding[]
+  holding_count: number
+  verdict: string
+  verdict_color: "green" | "neutral"
+  data_source: string
+  note: string
   error?: string
 }

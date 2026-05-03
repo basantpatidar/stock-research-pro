@@ -188,28 +188,28 @@ The day trader's morning starting point. Opens to this page by default when mode
 | **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
 | **8** ✅ | Position sizing calculator | Both | Low | 0 |
 | **9** ✅ | Seasonality analysis + IBD RS Rating | Both | Low | 0 |
-| **10** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
-| **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
-| **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
+| **10** ✅ | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
+| **10** ✅ | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
+| **11** ✅ | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
 
 ### Both Audiences Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
 | **12** ✅ | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
 | **13** ✅ | Smart money composite score | Both | Low | 0 |
-| **14** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
-| **15** | Market breadth dashboard | Both | Medium | 0 |
-| **16** | Watchlist heatmap + Price target trend | Both | Low | 0 |
+| **14** ✅ | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
+| **15** ✅ | Market breadth dashboard | Both | Medium | 0 |
+| **16** ✅ | Watchlist heatmap + Price target trend | Both | Low | 0 |
 
 ### Long-Term Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **17** | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
-| **18** | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
-| **19** | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
-| **20** | Dividend health score + Moat score | Long-term | Low | 0 |
-| **21** | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
-| **22** | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
+| **17** ✅ | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
+| **18** ✅ | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
+| **19** ✅ | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
+| **20** ✅ | Dividend health score + Moat score | Long-term | Low | 0 |
+| **21** ✅ | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
+| **22** ✅ | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
 
 ---
 
@@ -443,4 +443,4 @@ These require paid subscriptions. Noted here so we don't accidentally implement 
 
 ---
 
-*Last updated: 2026-05-02. Decisions locked. Next: PRE-1 (per-tool caching) → PRE-2 (mode-aware UI) → Sprint 5. Use SEC: anchors to navigate — never read the full file.*
+*Last updated: 2026-05-03. Sprints 10–22 complete. All free-data features implemented. Remaining: paid API features only (SEC:PAID_LATER) + parked Reddit features (SEC:PARKED). Use SEC: anchors to navigate — never read the full file.*

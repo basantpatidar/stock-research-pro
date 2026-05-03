@@ -59,17 +59,65 @@ def get_analyst_consensus(ticker: str) -> dict:
             else:
                 consensus_label = "Sell"
 
+        # Price target range from analyst_price_targets if available
+        target_low = info.get("targetLowPrice")
+        target_high = info.get("targetHighPrice")
+        target_median = info.get("targetMedianPrice")
+
+        # Rating momentum: split recent_changes into last 90d vs prior 90d
+        momentum_recent = {"upgrades": 0, "downgrades": 0}
+        momentum_prior = {"upgrades": 0, "downgrades": 0}
+        try:
+            from datetime import datetime, timedelta, timezone
+            cutoff_recent = datetime.now(timezone.utc) - timedelta(days=90)
+            cutoff_prior = datetime.now(timezone.utc) - timedelta(days=180)
+            if recs is not None and not recs.empty:
+                for ts, row in recs.iterrows():
+                    action = str(row.get("Action", "")).lower()
+                    is_up = action in ("upgrade", "init", "initiated", "reiterated")
+                    is_down = action == "downgrade"
+                    ts_aware = ts.to_pydatetime()
+                    if ts_aware.tzinfo is None:
+                        ts_aware = ts_aware.replace(tzinfo=timezone.utc)
+                    if ts_aware >= cutoff_recent:
+                        if is_up: momentum_recent["upgrades"] += 1
+                        if is_down: momentum_recent["downgrades"] += 1
+                    elif ts_aware >= cutoff_prior:
+                        if is_up: momentum_prior["upgrades"] += 1
+                        if is_down: momentum_prior["downgrades"] += 1
+        except Exception:
+            pass
+
+        recent_net = momentum_recent["upgrades"] - momentum_recent["downgrades"]
+        prior_net = momentum_prior["upgrades"] - momentum_prior["downgrades"]
+        if recent_net > prior_net:
+            target_trend = "RISING"
+            target_trend_color = "green"
+        elif recent_net < prior_net:
+            target_trend = "FALLING"
+            target_trend_color = "red"
+        else:
+            target_trend = "STABLE"
+            target_trend_color = "neutral"
+
         return {
             "ticker": ticker.upper(),
             "consensus": consensus_label,
             "mean_rating": buy,
             "price_target": target,
+            "target_low": target_low,
+            "target_high": target_high,
+            "target_median": target_median,
             "current_price": current,
             "upside_pct": upside,
             "num_analysts": info.get("numberOfAnalystOpinions"),
             "rating_counts": rating_counts,
             "total_ratings": total_ratings,
             "recent_rating_changes": recent_changes,
+            "target_trend": target_trend,
+            "target_trend_color": target_trend_color,
+            "momentum_recent_90d": momentum_recent,
+            "momentum_prior_90d": momentum_prior,
         }
     except Exception as e:
         return {"error": f"Failed to fetch analyst data for {ticker}: {str(e)}"}

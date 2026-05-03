@@ -8,14 +8,16 @@ import { WatchlistPage } from "./pages/WatchlistPage"
 import { ScreenerPage } from "./pages/ScreenerPage"
 import { MacroPage } from "./pages/MacroPage"
 import { UsagePage } from "./pages/UsagePage"
+import { DashboardPage } from "./pages/DashboardPage"
 import { T } from "./theme"
 
 const NAV_ITEMS = [
-  { to: "/",          label: "Research" },
-  { to: "/watchlist", label: "Watchlist" },
-  { to: "/screener",  label: "Screener" },
-  { to: "/macro",     label: "Macro" },
-  { to: "/usage",     label: "Usage" },
+  { to: "/",           label: "Research" },
+  { to: "/dashboard",  label: "Dashboard" },
+  { to: "/watchlist",  label: "Watchlist" },
+  { to: "/screener",   label: "Screener" },
+  { to: "/macro",      label: "Macro" },
+  { to: "/usage",      label: "Usage" },
 ]
 
 const TOKEN_DAILY_LIMIT = 50_000
@@ -116,11 +118,12 @@ function AppShell() {
 
       <main>
         <Routes>
-          <Route path="/"          element={<ResearchPage />} />
-          <Route path="/watchlist" element={<WatchlistPage />} />
-          <Route path="/screener"  element={<ScreenerPage />} />
-          <Route path="/macro"     element={<MacroPage />} />
-          <Route path="/usage"     element={<UsagePage />} />
+          <Route path="/"           element={<ResearchPage />} />
+          <Route path="/dashboard"  element={<DashboardPage />} />
+          <Route path="/watchlist"  element={<WatchlistPage />} />
+          <Route path="/screener"   element={<ScreenerPage />} />
+          <Route path="/macro"      element={<MacroPage />} />
+          <Route path="/usage"      element={<UsagePage />} />
         </Routes>
       </main>
 

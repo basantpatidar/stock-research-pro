@@ -67,6 +67,17 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-03 | Sprint 25: News Catalyst Quality Scorer — _classify_catalyst()/_catalyst_strength() in news.py (12 categories, HIGH/MEDIUM/LOW strength); catalyst_type+catalyst_strength fields on NewsItem; NewsPanel.tsx shows catalyst badge + strength pill |
+| 2026-05-03 | Sprint 22: Institutional Guru Portfolio Tracker — guru_tracker.py (13F-HR via EDGAR for 8 gurus: Berkshire/Pershing/Appaloosa/etc.); GuruHoldingsPanel in Tier3Panels.tsx (verdict badge + holding cards) |
+| 2026-05-03 | Sprint 21: 10-K Risk Factor Change Tracker — edgar_risk_factors.py (EDGAR 10-K Item 1A diff, ~2000 LLM tokens); RiskFactorPanel in Tier3Panels.tsx (trajectory badge + new/removed/changed risks); Tier 3, long_term mode |
+| 2026-05-03 | Sprint 20: Dividend Health + Economic Moat Score — dividend.py (payout/FCF/growth/streak checks → SAFE/WATCH/DANGER); moat.py (ROE/margin/ROIC/growth/net-margin → WIDE/NARROW/NONE); FundamentalsQualityPanels.tsx |
+| 2026-05-03 | Sprint 19: CANSLIM Score + Minervini VCP — canslim.py (7 O'Neil criteria → STRONG SETUP/MODERATE/DOES NOT QUALIFY); patterns.py (5 Stage 2 VCP criteria → A+/B/C/F grade); CanslimPanel.tsx + VCPPanel.tsx |
+| 2026-05-03 | Sprint 18: SEC EDGAR 8-Year Fundamentals — edgar_fundamentals.py (CIK lookup + XBRL companyfacts: revenue/NI/OI/FCF/debt 8yr); EDGARFundamentalsPanel.tsx (inline SVG sparklines per metric) |
+| 2026-05-03 | Sprint 17: DCF + Graham Number + Peer Comps — valuation.py (DCF bear/base/bull, Graham sqrt(22.5*EPS*BVPS), peer P/E/PS/EV/EBITDA via _SECTOR_PEERS); ValuationPanel.tsx |
+| 2026-05-03 | Sprint 16: Watchlist Heatmap + Analyst Price Target Trend — HeatmapView in WatchlistPage.tsx (▦ toggle, score-colored grid); core_tools.py get_analyst_consensus() adds target_low/high/trend + upgrade/downgrade momentum 90d windows |
+| 2026-05-03 | Sprint 15: Market Breadth Dashboard — market_breadth.py (66-stock S&P proxy, % above 50d/200d, A/D ratio, 52w H/L); GET /macro/breadth + included in /macro/all; breadth section in MacroPage.tsx |
+| 2026-05-03 | Sprint 14: GARCH Volatility Forecast + HMM Regime Classifier — volatility_forecast.py (GARCH(1,1) via arch lib, 5-day range forecast, fallback rolling std); regime.py (2-state HMM via hmmlearn, fallback heuristic); VolatilityPanel.tsx + RegimePanel.tsx; arch+hmmlearn+scikit-learn added to requirements.txt |
+| 2026-05-03 | Sprint 11: Market Dashboard page — DashboardPage.tsx (market pulse cards, top gainers/losers, sector rotation grid, upcoming catalysts); /dashboard route added to App.tsx + nav |
 | 2026-05-02 | Sprint 13: Smart Money Composite Score — smart_money.py (congressional + analyst momentum + squeeze positioning → ACCUMULATING/NEUTRAL/DISTRIBUTING); wired into tier1 response; verdict badge with signal breakdown in ResearchPage (both modes) |
 | 2026-05-02 | Sprint 12: Fear & Greed Index — fear_greed.py (Alternative.me free API, 7-day history, arc gauge); Economic Calendar — economic_calendar.py (FRED releases for CPI/NFP/FOMC/GDP/PCE, 14-day ahead); /macro/all now includes both; MacroPage shows gauge + calendar above sector heatmap |
 | 2026-05-02 | Sprint 10: Pre-Market Gap Scanner — gap_scanner.py scan_gaps() + POST /gap-scanner/ endpoint; GapScannerCard.tsx on WatchlistPage; float_class/_squeeze_score() helpers in core_tools.py; get_short_interest() returns float_class, vol_ratio, squeeze_score, squeeze_tier; Short Interest panel shows all 4 new fields |

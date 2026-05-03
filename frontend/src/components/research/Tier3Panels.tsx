@@ -262,6 +262,133 @@ export function EarningsTranscriptPanel({ data }: EarningsTranscriptProps) {
   )
 }
 
+// ── 10-K Risk Factor Changes ──────────────────────────────────────────────────
+
+interface RiskFactorProps { data: any }
+
+export function RiskFactorPanel({ data }: RiskFactorProps) {
+  if (!data) return null
+  if (data.error) return <div style={{ color: T.red, fontSize: 12 }}>{data.error}</div>
+
+  const tc = data.trajectory_color === "red" ? T.red : data.trajectory_color === "green" ? T.green : T.text2
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{
+          fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 8,
+          background: `${tc}18`, border: `1px solid ${tc}`, color: tc,
+        }}>{data.trajectory} RISK TREND</span>
+        <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+          {data.current_filing_date} vs {data.prior_filing_date}
+        </span>
+      </div>
+
+      {data.summary && (
+        <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, padding: "10px 12px", background: T.surface2, borderRadius: 8, border: `1px solid ${T.border}` }}>
+          {data.summary}
+        </div>
+      )}
+
+      {data.new_risks?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: T.red, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>
+            NEW RISKS ({data.new_risks.length})
+          </div>
+          {data.new_risks.map((r: string, i: number) => (
+            <div key={i} style={{ display: "flex", gap: 6, fontSize: 12, color: T.text2, marginTop: 4, lineHeight: 1.4, padding: "6px 10px", background: T.redDim, borderRadius: 6, marginBottom: 3 }}>
+              <span style={{ color: T.red, flexShrink: 0 }}>+</span>
+              <span>{r}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.removed_risks?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: T.green, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>
+            REMOVED RISKS ({data.removed_risks.length})
+          </div>
+          {data.removed_risks.map((r: string, i: number) => (
+            <div key={i} style={{ display: "flex", gap: 6, fontSize: 12, color: T.text2, marginTop: 4, lineHeight: 1.4, padding: "6px 10px", background: T.greenDim, borderRadius: 6, marginBottom: 3 }}>
+              <span style={{ color: T.green, flexShrink: 0 }}>−</span>
+              <span>{r}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.changed_risks?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: T.amber, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>
+            CHANGED RISKS ({data.changed_risks.length})
+          </div>
+          {data.changed_risks.map((c: any, i: number) => (
+            <div key={i} style={{ padding: "7px 10px", background: T.amberDim, borderRadius: 6, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: T.amber, fontWeight: 500 }}>{c.topic}</div>
+              <div style={{ fontSize: 11, color: T.text2, marginTop: 2 }}>{c.change}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Guru Holdings ─────────────────────────────────────────────────────────────
+
+interface GuruProps { data: any }
+
+export function GuruHoldingsPanel({ data }: GuruProps) {
+  if (!data) return null
+  if (data.error) return <div style={{ color: T.red, fontSize: 12 }}>{data.error}</div>
+
+  const vc = data.verdict_color === "green" ? T.green : T.text2
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{
+          fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8,
+          background: `${vc}18`, border: `1px solid ${vc}`, color: vc,
+        }}>{data.verdict}</span>
+        <span style={{ fontSize: 11, color: T.text3 }}>{data.note}</span>
+      </div>
+
+      {data.gurus_holding?.length === 0 ? (
+        <div style={{ fontSize: 12, color: T.text3, padding: "8px 0" }}>
+          None of the tracked gurus hold this stock in their latest 13F filing.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {data.gurus_holding.map((g: any, i: number) => (
+            <div key={i} style={{
+              padding: "10px 13px", borderRadius: 8,
+              background: T.surface2, border: `1px solid ${T.border}`,
+              display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
+            }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{g.guru}</div>
+                <div style={{ fontSize: 11, color: T.text3 }}>As of {g.filing_date}</div>
+              </div>
+              <div style={{ display: "flex", gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: T.text3, marginBottom: 1 }}>SHARES</div>
+                  <div style={{ fontSize: 13, fontFamily: T.mono, color: T.text }}>{g.shares.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: T.text3, marginBottom: 1 }}>VALUE</div>
+                  <div style={{ fontSize: 13, fontFamily: T.mono, color: T.green }}>${g.market_value_m}M</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Paper Trade Coach ─────────────────────────────────────────────────────────
 
 interface PaperTradeProps { data: any }
