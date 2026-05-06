@@ -70,6 +70,7 @@ OPENAI_API_KEY=
 
 # Data sources
 NEWSAPI_KEY=                             # newsapi.org — free 100 req/day dev tier
+FRED_API_KEY=                            # fred.stlouisfed.org — free; enables /macro/fred credit/rates dashboard
 REDDIT_CLIENT_ID=
 REDDIT_CLIENT_SECRET=
 REDDIT_USER_AGENT=StockResearchPro/1.0
@@ -86,6 +87,13 @@ YF_REQUESTS_PER_SECOND=2
 # Background jobs
 SCREENER_INTERVAL_MINUTES=15
 WATCHLIST_ALERT_INTERVAL_MINUTES=5
+
+# Cache TTL overrides (seconds; defaults shown)
+CACHE_TTL_TIER1=900          # 15 min — price, technicals, tier1 data
+CACHE_TTL_TIER2=1800         # 30 min — LLM analysis panels
+CACHE_TTL_TIER3=14400        # 4 hr   — deep tools
+CACHE_TTL_BACKTEST=86400     # 24 hr  — backtester results
+CACHE_TTL_CONGRESSIONAL=7200 # 2 hr   — congressional trades
 
 # Usage guard rails
 USAGE_FILE=./data/usage.json

@@ -42,7 +42,8 @@ get_price, get_technicals, get_analyst_consensus, get_earnings, get_fundamentals
 get_short_interest, get_congressional_trades, get_macro_environment, get_sector_heatmap
 
 **Tier 2 tools** (one per panel click):
-get_news_impact, get_sentiment, get_convergence_score, get_price_forecast, get_risk_reward
+get_news_impact, get_sentiment, get_convergence_score, get_price_forecast, get_risk_reward,
+get_earnings_quality (0 tokens — pure math), get_options_intelligence (0 tokens — pure math)
 
 **Tier 3 tools** (deep, expensive):
 investor_personas, bull_bear_debate, run_backtest, analyze_earnings_transcript,
@@ -60,6 +61,8 @@ analyze_paper_trade, get_congressional_trades (deep variant)
 | get_convergence_score | 700 |
 | get_price_forecast | 800 |
 | get_risk_reward | 500 |
+| get_earnings_quality | 0 (pure math) |
+| get_options_intelligence | 0 (pure math) |
 | investor_personas | 5,000 |
 | bull_bear_debate | 6,000 |
 | run_backtest | 0 (pure pandas) |

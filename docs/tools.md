@@ -31,16 +31,16 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 ---
 
 <!-- SEC:V1_TOOLS -->
-## V1 Tool Catalog (20 tools, all in `backend/app/tools/`)
+## V1 Tool Catalog (23 tools, all in `backend/app/tools/`)
 
 | Tool function | File | Data source | Key fields returned |
 |---|---|---|---|
-| `get_price` | price.py | yfinance | current_price, change_pct_today, change_pct_7d, OHLCV, volume_ratio, price_history |
+| `get_price` | price.py | yfinance | current_price, change_pct_today, change_pct_7d, OHLCV, volume_ratio, price_history, volume_profile{vpoc,vah,val,hvn_levels} |
 | `get_technicals` | technicals.py | yfinance | rsi_14, rsi_signal, macd (crossover), bollinger_bands, moving_averages, vwap_20d |
 | `get_news_impact` | news.py | NewsAPI | news[] (headline, sentiment, source, url), sentiment_breakdown, articles_found |
 | `get_sentiment` | sentiment.py | StockTwits + Reddit | bullish_pct, bearish_pct, summary |
 | `get_analyst_consensus` | analyst.py → core_tools | yfinance | consensus, price_target, upside_pct, rating_counts, recent_rating_changes |
-| `get_earnings` | earnings.py → core_tools | yfinance | next_earnings_date, earnings_history[], beat_rate_pct |
+| `get_earnings` | earnings.py → core_tools | yfinance | next_earnings_date, earnings_history[] (with eps_estimate, eps_actual, surprise_pct, revenue_actual), beat_rate_pct |
 | `get_fundamentals` | fundamentals.py → core_tools | yfinance | pe_ratio, peg_ratio, profit_margin, debt_to_equity, free_cash_flow |
 | `get_options_signals` | options.py → core_tools | yfinance | put_call_ratio, iv, unusual_activity |
 | `get_insider_activity` | insider.py → core_tools | yfinance (Form 4) | insider_signal, recent_trades[] |
@@ -49,6 +49,9 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 | `get_geopolitical_events` | geopolitical.py | NewsAPI | events[] (title, severity, impacted_sectors) |
 | `get_macro_environment` | macro.py → remaining_tools | yfinance | vix, sp500, oil_wti, yields, gold — NO ticker arg |
 | `get_sector_heatmap` | sector.py → remaining_tools | yfinance | 11 sector ETFs 5d perf — NO ticker arg |
+| `get_fred_macro` | fred_macro.py | FRED API + yfinance | credit_spreads{hy,ig}, rates{real_yield,breakeven,yield_curves,sofr}, liquidity{m2}, cross_asset{dxy,copper_gold}, composite_verdict — NO ticker arg |
+| `get_earnings_quality` | earnings_quality.py | yfinance | overall (composite_verdict), piotroski, beneish, altman, accruals — each with verdict + signal |
+| `get_options_intelligence` | options_intelligence.py | yfinance | gex, max_pain, iv_analysis, skew, term_structure — each with verdict + signal, composite |
 | `get_cascade_impact` | cascade.py → remaining_tools | LLM | causal chain: event → stock impact |
 | `get_price_forecast` | forecast.py → remaining_tools | yfinance + LLM | forecast text, targets {days, weeks, quarter} |
 | `get_risk_reward` | risk_reward.py → remaining_tools | yfinance | entry_price, stop_loss, target_price, risk_reward_ratio |
@@ -56,7 +59,9 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 | `get_convergence_score` | convergence.py → remaining_tools | all signals | convergence_score (0-100), label, signals[], bullish/bearish count |
 | `get_trends` | google_trends.py → remaining_tools | pytrends | interest spike detection |
 
-**Note:** `get_macro_environment` and `get_sector_heatmap` take NO arguments — invoke with `{}`.
+**Note:** `get_macro_environment`, `get_sector_heatmap`, and `get_fred_macro` take NO arguments — invoke with `{}`.
+
+**Shared signal types** (`signal.py`): Every metric in `earnings_quality` and `options_intelligence` returns a `SignalResult` with `verdict` (STRONG_BUY/BUY/HOLD/SELL/AVOID/RISK_FLAG), `conviction`, `direction`, and `score_contribution`. `composite_verdict()` aggregates multiple signals into one verdict.
 
 ---
 

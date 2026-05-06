@@ -17,7 +17,7 @@
 | `ResearchPage.tsx` | `/` | Ticker search → tier1 data + expandable T2/T3 panels |
 | `WatchlistPage.tsx` | `/watchlist` | Live signals table + alert feed |
 | `ScreenerPage.tsx` | `/screener` | Filter builder + results + preset management |
-| `MacroPage.tsx` | `/macro` | Sector heatmap + geopolitical events + macro indicators |
+| `MacroPage.tsx` | `/macro` | Sector heatmap + geopolitical events + macro indicators + FRED Credit & Rates Dashboard |
 | `UsagePage.tsx` | `/usage` | Token usage chart (30d) + guard-rail limits table |
 
 **ResearchPage flow:**
@@ -51,11 +51,14 @@ Props: `title`, `tier: 1|2|3`, `estimatedTokens?`, `loading`, `error`, `onExpand
 
 ### Research (`frontend/src/components/research/`)
 
-**`PriceChart.tsx`** — Recharts area chart from `tier1.price.price_history`
+**`PriceChart.tsx`** — Recharts area chart from `tier1.price.price_history`. On multi-day periods, overlays volume profile reference lines: VPOC (amber dashed), VAH (green dashed), VAL (red dashed) from `tier1.price.volume_profile`. Intraday (1d) uses 5-min candles with pre/after-market data; VP overlay hidden for intraday.
 **`SignalScore.tsx`** — Convergence score 0-100 with label and signal breakdown
 **`NewsPanel.tsx`** — News items with sentiment badges (POSITIVE/NEGATIVE/NEUTRAL)
 **`StreamPanel.tsx`** — SSE event stream renderer (tool_call → tool_result → reasoning)
 **`InvestorPersonasPanel.tsx`** — 5 investor persona verdict cards
+**`EarningsHistoryPanel.tsx`** — Quarter-by-quarter earnings cards. Collapsed header shows Est (eps_estimate, muted) + EPS (eps_actual) side-by-side, beat/miss pill, surprise %. Expanded detail shows full EPS card + revenue card.
+**`EarningsQualityPanel.tsx`** — 4-model institutional earnings quality analysis: Piotroski F-Score, Beneish M-Score, Altman Z-Score, Accruals Ratio. Each metric shows a direct verdict badge + score + plain-English explanation.
+**`OptionsIntelligencePanel.tsx`** — Institutional-grade options signals: GEX, max pain, IV analysis, put/call skew, vol term structure. All computed from free yfinance data. Each metric shows verdict + signal.
 **`Tier3Panels.tsx`** — BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel
 
 ---
@@ -66,6 +69,7 @@ Props: `title`, `tier: 1|2|3`, `estimatedTokens?`, `loading`, `error`, `onExpand
 ```typescript
 mode: "day_trade" | "long_term" | "both"    // trade mode — changes agent prompt
 execMode: "saver" | "normal" | "deep"        // execution mode — controls token usage
+lastTicker: string                           // last searched ticker
 tokenCount: number                           // session token accumulator
 watchlist: WatchlistItem[]
 alerts: Alert[]
@@ -74,11 +78,13 @@ isStreaming: boolean
 wsConnected: boolean
 
 // Actions
-setMode(m)  setExecMode(m)  addTokens(n)
+setMode(m)  setExecMode(m)  setLastTicker(t)  addTokens(n)
 setWatchlist(items)  addAlert(a)
 addStreamEvent(e)  clearStreamEvents()
 setStreaming(b)  setWsConnected(b)
 ```
+
+**Persistence:** `mode`, `execMode`, and `lastTicker` are persisted to `localStorage` via `zustand/middleware persist`. They survive page reloads and browser restarts.
 
 ---
 
