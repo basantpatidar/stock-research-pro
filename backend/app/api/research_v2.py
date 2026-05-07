@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Any
 import asyncio
+import concurrent.futures
 import logging
 import time
 
@@ -200,26 +201,46 @@ async def tier1(
 
     # 2. Fetch fresh data in a thread — only call yfinance for cache misses.
     #    Price, technicals, macro, sectors are always fresh (intraday data).
-    def _run_fresh():
-        price = get_price.invoke({"ticker": sym})
-        company_name = price.get("company_name", "") if isinstance(price, dict) else ""
-        technicals = get_technicals.invoke({"ticker": sym})
-        macro = get_macro_environment.invoke({})
-        sectors = get_sector_heatmap.invoke({})
+    class _InvalidTicker(Exception):
+        pass
 
-        fresh: dict[str, Any] = {}
+    def _run_fresh():
+        # Price runs first — needed for ticker validation and company_name for news
+        price = get_price.invoke({"ticker": sym})
+        if isinstance(price, dict) and "error" in price:
+            err = price["error"]
+            if "not found" in err or "No price data" in err:
+                raise _InvalidTicker(err)
+        company_name = price.get("company_name", "") if isinstance(price, dict) else ""
+
+        # All remaining fetches are independent — run them in parallel
+        fetch_map: dict[str, Any] = {
+            "technicals": lambda: get_technicals.invoke({"ticker": sym}),
+            "macro":      lambda: get_macro_environment.invoke({}),
+            "sectors":    lambda: get_sector_heatmap.invoke({}),
+        }
         if needs["earnings"]:
-            fresh["earnings"] = get_earnings.invoke({"ticker": sym})
+            fetch_map["earnings"] = lambda: get_earnings.invoke({"ticker": sym})
         if needs["fundamentals"]:
-            fresh["fundamentals"] = get_fundamentals.invoke({"ticker": sym})
+            fetch_map["fundamentals"] = lambda: get_fundamentals.invoke({"ticker": sym})
         if needs["analyst"]:
-            fresh["analyst"] = get_analyst_consensus.invoke({"ticker": sym})
+            fetch_map["analyst"] = lambda: get_analyst_consensus.invoke({"ticker": sym})
         if needs["short_interest"]:
-            fresh["short_interest"] = get_short_interest.invoke({"ticker": sym})
+            fetch_map["short_interest"] = lambda: get_short_interest.invoke({"ticker": sym})
         if needs["congressional"]:
-            fresh["congressional"] = get_congressional_trades.invoke({"ticker": sym})
+            fetch_map["congressional"] = lambda: get_congressional_trades.invoke({"ticker": sym})
         if needs["news"]:
-            fresh["news"] = get_news_impact.invoke({"ticker": sym, "company_name": company_name})
+            _cn = company_name
+            fetch_map["news"] = lambda: get_news_impact.invoke({"ticker": sym, "company_name": _cn})
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(fetch_map)) as pool:
+            fut_map = {key: pool.submit(fn) for key, fn in fetch_map.items()}
+            results = {key: fut.result() for key, fut in fut_map.items()}
+
+        technicals = results["technicals"]
+        macro      = results["macro"]
+        sectors    = results["sectors"]
+        fresh      = {k: v for k, v in results.items() if k not in ("technicals", "macro", "sectors")}
 
         return price, technicals, macro, sectors, fresh
 
@@ -230,6 +251,9 @@ async def tier1(
 
     try:
         price, technicals, macro, sectors, fresh = await asyncio.to_thread(_run_fresh)
+    except _InvalidTicker as e:
+        logger.warning("tier1 %s — invalid ticker: %s", sym, e)
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("tier1 failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Tier1 fetch failed: {str(e)}")
