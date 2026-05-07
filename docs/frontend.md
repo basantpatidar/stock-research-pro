@@ -24,10 +24,17 @@
 1. User enters ticker → `runSearch()` fires simultaneously:
    - `startResearch(sym, mode)` → starts V1 SSE stream for agent reasoning
    - `researchV2.tier1(sym, mode, execMode)` → fetches structured data
-2. T1 data renders immediately (Analyst Consensus, Earnings History, Price Chart, etc.)
-3. T2 panels (News, Sentiment, Convergence, Forecast, Risk/Reward) are collapsed; user clicks to load
-4. T3 panels (Investor Personas, Bull/Bear, Backtester, etc.) require explicit click
+2. T1 data renders immediately (Price Chart, OHLCV, Technicals, News, + mode-specific panels)
+3. T2 panels are collapsed; user clicks to load (filtered by mode)
+4. T3 panels require explicit click (filtered by mode)
 5. In `deep` exec mode: T2 panels auto-expand AND auto-load on mount via `ExpandablePanel` `useEffect`
+
+**Mode-aware panel filtering** (`show(modes, currentMode)` helper):
+- `day_trade`: Options Intelligence, Risk/Reward, Short Interest, Sentiment, Convergence, Forecast, Backtester, Bull/Bear, Paper Trade
+- `long_term`: Analyst Consensus, Earnings History, Fundamentals, Earnings Quality, Congressional, Sentiment, Convergence, Forecast, Investor Personas, Earnings Transcript, Bull/Bear
+- `both`: all panels shown; day trade panels first
+- A "MODE VIEW" badge appears when a filter is active, with a link to switch to Both mode
+- Price chart default period: `1d` for day_trade, `3M` for long_term
 
 ---
 
@@ -51,7 +58,7 @@ Props: `title`, `tier: 1|2|3`, `estimatedTokens?`, `loading`, `error`, `onExpand
 
 ### Research (`frontend/src/components/research/`)
 
-**`PriceChart.tsx`** — Recharts area chart from `tier1.price.price_history`. On multi-day periods, overlays volume profile reference lines: VPOC (amber dashed), VAH (green dashed), VAL (red dashed) from `tier1.price.volume_profile`. Intraday (1d) uses 5-min candles with pre/after-market data; VP overlay hidden for intraday.
+**`PriceChart.tsx`** — Recharts area chart from `tier1.price.price_history`. Props: `data: PriceData`, `defaultPeriod?: Period` (default `"1d"`). On multi-day periods, overlays volume profile reference lines: VPOC (amber dashed), VAH (green dashed), VAL (red dashed) from `tier1.price.volume_profile`. Intraday (1d) uses 5-min candles with pre/after-market data; VP overlay hidden for intraday.
 **`SignalScore.tsx`** — Convergence score 0-100 with label and signal breakdown
 **`NewsPanel.tsx`** — News items with sentiment badges (POSITIVE/NEGATIVE/NEUTRAL)
 **`StreamPanel.tsx`** — SSE event stream renderer (tool_call → tool_result → reasoning)

@@ -36,19 +36,31 @@ def _stock_data_ttl_days(data_type: str) -> float:
 
 def _llm_ttl_hours(tool_name: str) -> float:
     s = get_settings()
-    tier2 = s.cache_ttl_llm_tier2_hours
-    tier3 = s.cache_ttl_llm_tier3_hours
+    short = s.cache_ttl_llm_short_hours   # 0.5h — intraday signals that move with price
+    tier2 = s.cache_ttl_llm_tier2_hours   # 2h  — general tier2 fallback
+    tier3 = s.cache_ttl_llm_tier3_hours   # 24h — daily analysis
     return {
+        # 30-min window — recalculate as price/news changes throughout the day
+        "get_convergence_score": short,
+        "get_risk_reward": short,
+        "get_sentiment": short,
+        "get_options_intelligence": short,
+        # 1h — active paper trades need semi-fresh coaching
+        "analyze_paper_trade": 1.0,
+        # 2h — general tier2 fallback covers news, etc.
         "get_news_impact": tier2,
-        "get_sentiment": tier2,
-        "get_convergence_score": tier2,
-        "get_price_forecast": tier2,
-        "get_risk_reward": tier2,
-        "get_congressional_trades": tier2,
-        "investor_personas": tier3,
+        # 24h — one reassessment per trading day is sufficient
+        "get_price_forecast": tier3,
+        "get_cascade_impact": tier3,
         "bull_bear_debate": tier3,
+        "get_congressional_trades": tier3,
+        # Quarterly — pure math on quarterly financials; expires with earnings cycle
+        "get_earnings_quality": float(s.cache_ttl_earnings_quality_days * 24),
+        # 7 days — expensive T3; thesis/backtest results change slowly
+        "investor_personas": float(s.cache_ttl_llm_personas_hours),
+        "run_backtest": float(s.cache_ttl_llm_backtest_hours),
+        # Dynamic TTL — tier3 endpoint overrides expires_at to next_earnings_date
         "analyze_earnings_transcript": tier3,
-        "run_backtest": s.cache_ttl_llm_backtest_hours,
     }.get(tool_name, tier2)
 
 
@@ -166,12 +178,13 @@ async def set_llm_cache(
     ticker: str,
     tool_name: str,
     data: dict,
+    expires_at: datetime | None = None,
 ) -> None:
     if db is None:
         return
-    ttl_hours = _llm_ttl_hours(tool_name)
     now = _now()
-    expires_at = now + timedelta(hours=ttl_hours)
+    if expires_at is None:
+        expires_at = now + timedelta(hours=_llm_ttl_hours(tool_name))
     stmt = (
         pg_insert(ResearchCache)
         .values(

@@ -67,13 +67,13 @@ class ResearchCache(Base):
 class StockDataCache(Base):
     """Caches slow-changing yfinance data keyed by (ticker, data_type).
 
-    data_type values and their TTLs:
-      earnings        — until next_earnings_date + 2 days (quarterly)
-      fundamentals    — 7 days
-      analyst         — 7 days
-      short_interest  — 14 days
-      news            — 2 hours
-      congressional   — 2 hours
+    data_type values and their TTLs (override via .env CACHE_TTL_* vars):
+      earnings        — until next_earnings_date + 2 days (quarterly; dynamic)
+      fundamentals    — 30 days  (quarterly: P/E, margins, FCF)
+      analyst         — 1 day    (price targets shift weekly)
+      short_interest  — 7 days   (FINRA bi-weekly)
+      news            — 30 min   (stale news causes bad signals)
+      congressional   — 24 hours (sporadic STOCK Act filings)
     """
 
     __tablename__ = "stock_data_cache"

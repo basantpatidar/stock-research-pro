@@ -53,17 +53,20 @@ class Settings(BaseSettings):
     log_dir: str = Field(default="./local_debugging")
 
     # Cache TTLs — stock data (days)
-    cache_ttl_earnings_fallback_days: int = Field(default=7)   # used when next_earnings_date is unknown
-    cache_ttl_fundamentals_days: int = Field(default=7)
-    cache_ttl_analyst_days: int = Field(default=7)
-    cache_ttl_short_interest_days: int = Field(default=14)
+    cache_ttl_earnings_fallback_days: int = Field(default=30)  # fallback when next_earnings_date unknown
+    cache_ttl_fundamentals_days: int = Field(default=30)       # quarterly — P/E, margins, FCF
+    cache_ttl_analyst_days: int = Field(default=1)             # price targets update weekly/sporadic
+    cache_ttl_short_interest_days: int = Field(default=7)      # FINRA bi-weekly; 7d is safe
+    cache_ttl_earnings_quality_days: int = Field(default=30)   # Piotroski/Beneish/Altman — quarterly
     # Cache TTLs — stock data (hours)
-    cache_ttl_news_hours: int = Field(default=2)
-    cache_ttl_congressional_hours: int = Field(default=2)
+    cache_ttl_news_hours: float = Field(default=0.5)           # 30 min — stale news is misleading
+    cache_ttl_congressional_hours: int = Field(default=24)     # sporadic STOCK Act filings
     # Cache TTLs — LLM results (hours)
-    cache_ttl_llm_tier2_hours: int = Field(default=2)    # convergence, forecast, risk/reward, sentiment
-    cache_ttl_llm_tier3_hours: int = Field(default=4)    # personas, bull/bear, earnings transcript
-    cache_ttl_llm_backtest_hours: int = Field(default=24)  # pure pandas — results are stable
+    cache_ttl_llm_short_hours: float = Field(default=0.5)      # intraday: convergence, sentiment, risk/reward
+    cache_ttl_llm_tier2_hours: float = Field(default=2.0)      # general tier2 fallback
+    cache_ttl_llm_tier3_hours: int = Field(default=24)         # daily: price_forecast, bull/bear, cascade
+    cache_ttl_llm_backtest_hours: int = Field(default=168)     # 7 days — historical data is stable
+    cache_ttl_llm_personas_hours: int = Field(default=168)     # 7 days — investment thesis changes slowly
 
     class Config:
         env_file = ".env"

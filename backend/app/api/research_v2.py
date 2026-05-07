@@ -351,7 +351,11 @@ async def tier3(
                 request.tool, sym, (time.perf_counter() - t0) * 1000,
                 _TOKEN_ESTIMATES.get(request.tool, 1000))
 
-    await set_llm_cache(db, sym, request.tool, result)
+    # analyze_earnings_transcript is stable for the whole quarter — cache until next earnings date
+    if request.tool == "analyze_earnings_transcript":
+        await set_llm_cache(db, sym, request.tool, result, expires_at=earnings_expiry(result))
+    else:
+        await set_llm_cache(db, sym, request.tool, result)
 
     return _sanitize({
         "ticker": sym,
