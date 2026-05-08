@@ -5,6 +5,7 @@ import { T } from "../../theme"
 const typeStyle = (type: string) => {
   if (type === "watchlist_alert") return { border: T.green, accent: T.greenDim, icon: "▲" }
   if (type === "screener_alert")  return { border: T.blue,  accent: T.blueDim,  icon: "◈" }
+  if (type === "dip_buy_alert")   return { border: T.amber, accent: T.amberDim, icon: "◎" }
   return                                 { border: T.amber, accent: T.amberDim, icon: "⚡" }
 }
 

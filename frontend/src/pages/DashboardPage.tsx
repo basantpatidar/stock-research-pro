@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
 import { T } from "../theme"
+import { DipScannerCard } from "../components/DipScannerCard"
+import { ScannerPerformanceCard } from "../components/ScannerPerformanceCard"
 
 type Period = "1D" | "1W" | "1M" | "3M"
 
@@ -204,6 +206,12 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Daily Target Trade Scanner */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+        <DipScannerCard />
+        <ScannerPerformanceCard />
+      </div>
 
       {/* Top Gainers / Losers */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
