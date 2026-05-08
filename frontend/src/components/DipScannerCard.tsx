@@ -1,13 +1,27 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { api } from "../services/api"
 import { T } from "../theme"
 import { useStore } from "../store"
+import { SituationSummary } from "./SituationSummary"
 
 const STORAGE_KEY = "dts_capital"
 const DEFAULT_CAPITAL = 1000
 
+const SIGNAL_TYPE_LABEL: Record<string, string> = {
+  dip_buy:      "Dip Buy",
+  orb_breakout: "ORB Breakout",
+  vwap_reclaim: "VWAP Reclaim",
+}
+
+const SIGNAL_TYPE_COLOR: Record<string, string> = {
+  dip_buy:      T.amber,
+  orb_breakout: T.blue,
+  vwap_reclaim: T.green,
+}
+
 interface Opportunity {
   ticker: string
+  signal_type: string
   score: number
   entry_price: number
   target_price: number
@@ -28,9 +42,20 @@ interface Opportunity {
   capital_used: number
 }
 
+interface VixSpikePrep {
+  type: string
+  vix_current: number
+  vix_spike_pct: number
+  spy_change_pct: number
+}
+
 interface ScanResult {
   opportunities: Opportunity[]
+  orb_opportunities: Opportunity[]
+  vwap_opportunities: Opportunity[]
   best: Opportunity | null
+  vix_spike_prep: VixSpikePrep | null
+  scenario_key: string
   tickers_scanned: number
   session_window: string
   vix: number
@@ -204,21 +229,48 @@ RSI: ${opp.rsi_5m}, RVOL: ${opp.rvol}x, VIX: ${opp.vix}, Dip: -${opp.dip_pct}%`
         )}
       </div>
 
+      {/* Situation summary — always shown after first scan or as idle state */}
+      {!loading && (
+        <SituationSummary
+          scenarioKey={result ? result.scenario_key : null}
+          compact={!!result}
+        />
+      )}
+
+      {/* VIX spike prep alert */}
+      {result?.vix_spike_prep && (
+        <div style={{
+          background: "rgba(245,158,11,0.08)",
+          border: `1px solid ${T.amber}44`,
+          borderLeft: `3px solid ${T.amber}`,
+          borderRadius: 8, padding: "10px 14px", marginBottom: 10,
+          display: "flex", alignItems: "flex-start", gap: 10,
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚡</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.amber, marginBottom: 2 }}>
+              VIX Spike Prep — Fear surge in progress
+            </div>
+            <div style={{ fontSize: 11, color: T.text2 }}>
+              VIX +{result.vix_spike_prep.vix_spike_pct.toFixed(1)}% intraday
+              · SPY {result.vix_spike_prep.spy_change_pct.toFixed(2)}%
+              · Stand by for dip-buy entry
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* No result states */}
       {!loading && !result && (
-        <div style={{ textAlign: "center", padding: "20px 0", color: T.text3, fontSize: 12 }}>
-          Click Scan Now to check for entry opportunities, or alerts fire automatically every 5 min during market hours.
+        <div style={{ textAlign: "center", padding: "12px 0 4px", color: T.text3, fontSize: 11 }}>
+          Alerts fire automatically every 5 min during market hours.
         </div>
       )}
 
       {!loading && result && !best && (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div style={{ fontSize: 13, color: T.text2, marginBottom: 6 }}>No opportunities meeting criteria right now</div>
+        <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
           <div style={{ fontSize: 11, color: T.text3 }}>
-            Session: {result.session_window.replace(/_/g, " ")} · VIX {result.vix}
-          </div>
-          <div style={{ fontSize: 11, color: T.text3, marginTop: 4 }}>
-            Score threshold: 65/100 · Try again closer to Power Hour (2–3:15 PM ET)
+            Session: {result.session_window.replace(/_/g, " ")} · VIX {result.vix} · threshold 65/100
           </div>
         </div>
       )}
@@ -228,14 +280,25 @@ RSI: ${opp.rsi_5m}, RVOL: ${opp.rvol}x, VIX: ${opp.vix}, Dip: -${opp.dip_pct}%`
         <div style={{
           background: T.surface2,
           border: `1px solid ${T.borderBright}`,
-          borderLeft: `3px solid ${SCORE_COLOR(best.score)}`,
+          borderLeft: `3px solid ${SIGNAL_TYPE_COLOR[best.signal_type] || SCORE_COLOR(best.score)}`,
           borderRadius: 10, padding: "14px 16px",
         }}>
           {/* Top row */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 18, fontWeight: 700, fontFamily: T.mono, color: T.blue }}>{best.ticker}</span>
+                {best.signal_type && best.signal_type !== "dip_buy" && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: "2px 7px",
+                    background: `${SIGNAL_TYPE_COLOR[best.signal_type]}22`,
+                    color: SIGNAL_TYPE_COLOR[best.signal_type],
+                    border: `1px solid ${SIGNAL_TYPE_COLOR[best.signal_type]}44`,
+                    borderRadius: 4,
+                  }}>
+                    {SIGNAL_TYPE_LABEL[best.signal_type] || best.signal_type}
+                  </span>
+                )}
                 <span style={{
                   fontSize: 12, fontWeight: 600, padding: "2px 8px",
                   background: `${SCORE_COLOR(best.score)}22`,
@@ -347,18 +410,40 @@ RSI: ${opp.rsi_5m}, RVOL: ${opp.rvol}x, VIX: ${opp.vix}, Dip: -${opp.dip_pct}%`
         </div>
       )}
 
-      {/* Other opportunities (if multiple) */}
-      {result && result.opportunities.length > 1 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: T.text3, marginBottom: 6 }}>
-            Other setups: {result.opportunities.slice(1).map(o => (
-              <span key={o.ticker} style={{ marginRight: 8, color: T.text2 }}>
-                {o.ticker} <span style={{ color: SCORE_COLOR(o.score) }}>{o.score}</span>
-              </span>
-            ))}
+      {/* Other opportunities (dip_buy + orb + vwap) */}
+      {result && (() => {
+        const others = [
+          ...result.opportunities.slice(1),
+          ...result.orb_opportunities.filter(o => o.ticker !== best?.ticker),
+          ...result.vwap_opportunities.filter(o => o.ticker !== best?.ticker),
+        ]
+        if (others.length === 0) return null
+        return (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Other setups:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {others.map((o, i) => {
+                const typeColor = SIGNAL_TYPE_COLOR[o.signal_type] || T.text2
+                const typeLabel = SIGNAL_TYPE_LABEL[o.signal_type] || ""
+                return (
+                  <span key={`${o.ticker}-${i}`} style={{
+                    fontSize: 11, padding: "3px 8px",
+                    background: T.surface2, border: `1px solid ${T.border}`,
+                    borderRadius: 5, color: T.text2,
+                    display: "flex", alignItems: "center", gap: 5,
+                  }}>
+                    <span style={{ fontFamily: T.mono, fontWeight: 600 }}>{o.ticker}</span>
+                    {typeLabel && (
+                      <span style={{ color: typeColor, fontSize: 10 }}>{typeLabel}</span>
+                    )}
+                    <span style={{ color: SCORE_COLOR(o.score) }}>{o.score}</span>
+                  </span>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
