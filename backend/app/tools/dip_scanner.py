@@ -32,12 +32,13 @@ ETF_TIERS: dict[int, list[str]] = {
 }
 
 SESSION_WINDOWS = {
-    "power_hour":    {"label": "Power Hour (2–3:15 PM)",    "score_delta": 10},
+    "power_hour":    {"label": "Power Hour (2–4 PM)",           "score_delta": 10},
     "morning_flush": {"label": "Morning Flush (9:40–10:30 AM)", "score_delta": 5},
-    "morning_trend": {"label": "Morning Trend (10:30 AM–12 PM)", "score_delta": 0},
-    "lunch_drift":   {"label": "Lunch Drift (12–2 PM)",     "score_delta": -5},
-    "pre_market":    {"label": "Pre-Market",                 "score_delta": None},
-    "closed":        {"label": "Market Closed",              "score_delta": None},
+    "morning_trend": {"label": "Morning Trend (10:30 AM–12 PM)","score_delta": 0},
+    "lunch_drift":   {"label": "Lunch Drift (12–2 PM)",         "score_delta": -5},
+    "pre_market":    {"label": "Pre-Market (4–9:30 AM)",        "score_delta": -10},
+    "after_hours":   {"label": "After-Hours (4–8 PM)",          "score_delta": -10},
+    "closed":        {"label": "Market Closed",                 "score_delta": None},
 }
 
 SIGNAL_HINTS: dict[str, str] = {
@@ -92,7 +93,9 @@ def _detect_hammer(candle: dict) -> bool:
 
 def _get_session_window(now_et: datetime) -> str:
     hm = now_et.hour * 60 + now_et.minute
-    if hm < 9 * 60 + 40:
+    if hm < 4 * 60:
+        return "closed"
+    elif hm < 9 * 60 + 30:
         return "pre_market"
     elif hm < 10 * 60 + 30:
         return "morning_flush"
@@ -100,8 +103,10 @@ def _get_session_window(now_et: datetime) -> str:
         return "morning_trend"
     elif hm < 14 * 60:
         return "lunch_drift"
-    elif hm <= 15 * 60 + 15:
+    elif hm < 16 * 60:
         return "power_hour"
+    elif hm < 20 * 60:
+        return "after_hours"
     return "closed"
 
 

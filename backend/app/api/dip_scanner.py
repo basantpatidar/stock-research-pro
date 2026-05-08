@@ -3,6 +3,7 @@ import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
+import yfinance as yf
 from fastapi import APIRouter, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
@@ -96,7 +97,7 @@ async def get_config(_: str = Depends(verify_api_key)):
         "session_windows": {k: v["label"] for k, v in SESSION_WINDOWS.items()},
         "default_capital": DEFAULT_CAPITAL,
         "score_threshold": 65,
-        "trading_hours_et": {"open": "9:40 AM", "close": "3:15 PM"},
+        "trading_hours_et": {"regular_open": "9:40 AM", "regular_close": "4:00 PM", "pre_market": "4:00 AM", "after_hours_close": "8:00 PM"},
     }
 
 
@@ -304,6 +305,30 @@ async def backfill(
         "days": request.days,
         "message": f"Backfilling {len(tickers)} ETFs × {request.days} days in background. Check /dip-scanner/analytics when complete.",
     }
+
+
+def _fetch_intraday(ticker: str) -> list[dict]:
+    stock = yf.Ticker(ticker)
+    df = stock.history(period="1d", interval="5m", prepost=True)
+    if df.empty:
+        return []
+    return [
+        {
+            "time": idx.isoformat(),
+            "open":  round(float(row["Open"]),  2),
+            "high":  round(float(row["High"]),  2),
+            "low":   round(float(row["Low"]),   2),
+            "close": round(float(row["Close"]), 2),
+        }
+        for idx, row in df.iterrows()
+    ]
+
+
+@router.get("/chart/{ticker}")
+async def intraday_chart(ticker: str, _: str = Depends(verify_api_key)):
+    """1-day 5-minute candles for the mini chart on the dashboard."""
+    candles = await asyncio.to_thread(_fetch_intraday, ticker.upper())
+    return {"ticker": ticker.upper(), "candles": candles}
 
 
 @router.get("/weekly")
