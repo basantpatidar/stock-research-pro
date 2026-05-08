@@ -67,6 +67,12 @@ const SIGNAL_TYPE_COLOR: Record<string, string> = {
   vwap_reclaim: T.green,
 }
 
+interface Invalidation {
+  price_close_below: number
+  vix_above: number
+  rvol_resurge_above: number
+}
+
 interface Opportunity {
   ticker: string
   signal_type: string
@@ -88,6 +94,7 @@ interface Opportunity {
   max_risk_dollar: number
   risk_reward_ratio: number
   capital_used: number
+  invalidation?: Invalidation
 }
 
 interface VixSpikePrep {
@@ -503,6 +510,15 @@ RSI: ${opp.rsi_5m}, RVOL: ${opp.rvol}x, VIX: ${opp.vix}, Dip: -${opp.dip_pct}%`
                   <span style={{ color: T.red }}>─ Stop</span>
                   <span style={{ color: T.amber }}>─ VWAP</span>
                 </div>
+                {/* Invalidation line — Opus #16 */}
+                {best.invalidation && (
+                  <div style={{ fontSize: 11, color: T.text3, marginTop: 6, lineHeight: 1.5 }}>
+                    <span style={{ color: T.text2, fontWeight: 500 }}>Setup invalid if: </span>
+                    price closes below <span style={{ fontFamily: T.mono, color: T.red }}>${best.invalidation.price_close_below.toFixed(2)}</span>
+                    {" · "}VIX above <span style={{ fontFamily: T.mono, color: T.amber }}>{best.invalidation.vix_above.toFixed(1)}</span>
+                    {" · "}RVOL resurges above <span style={{ fontFamily: T.mono, color: T.amber }}>{best.invalidation.rvol_resurge_above}×</span>
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -517,18 +533,15 @@ RSI: ${opp.rsi_5m}, RVOL: ${opp.rvol}x, VIX: ${opp.vix}, Dip: -${opp.dip_pct}%`
               Capital too low — need at least ${best.entry_price.toFixed(2)} to buy 1 share
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 12, color: T.text2 }}>
-                Profit: <span style={{ color: T.green, fontFamily: T.mono, fontWeight: 600 }}>+${adjProfit.toFixed(2)}</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.text2 }}>
-                Risk: <span style={{ color: T.red, fontFamily: T.mono, fontWeight: 600 }}>-${adjRisk.toFixed(2)}</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.text2 }}>
-                R:R: <span style={{ color: T.amber, fontFamily: T.mono, fontWeight: 600 }}>{best.risk_reward_ratio}:1</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.text2 }}>
-                Shares: <span style={{ color: T.text, fontFamily: T.mono }}>{wholeShares}</span>
+            <div style={{ marginBottom: 12 }}>
+              {/* Primary: dollars first — Opus #21 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: T.text2 }}>Risk</span>
+                <span style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: T.red }}>−${adjRisk.toFixed(2)}</span>
+                <span style={{ fontSize: 16, color: T.text3 }}>→</span>
+                <span style={{ fontSize: 13, color: T.text2 }}>Make</span>
+                <span style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: T.green }}>+${adjProfit.toFixed(2)}</span>
+                <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>({wholeShares} shares · R:R {best.risk_reward_ratio}:1)</span>
               </div>
             </div>
           )}

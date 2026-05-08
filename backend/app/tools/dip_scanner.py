@@ -41,6 +41,20 @@ SESSION_WINDOWS = {
     "closed":        {"label": "Market Closed",                 "score_delta": None},
 }
 
+# ── Highest-EV cell whitelist ─────────────────────────────────────────────────
+# Enable once n ≥ 5 resolved trades per cell. Based on current backtest:
+# QQQ all sessions positive, SPY morning_trend positive, rest uncertain.
+# Set ENABLE_WHITELIST = True to activate hard-blocking of low-EV cells.
+ENABLE_WHITELIST = False
+WHITELIST_CELLS: set[tuple[str, str]] = {
+    ("QQQ", "morning_trend"),
+    ("QQQ", "power_hour"),
+    ("QQQ", "morning_flush"),
+    ("SPY", "morning_trend"),
+    ("SPY", "morning_flush"),
+    ("IWM", "morning_trend"),
+}
+
 SIGNAL_HINTS: dict[str, str] = {
     "Below VWAP":        "Price is below today's volume-weighted average — institutions typically buy back above this level",
     "Near S1":           "S1 is yesterday's support projected into today — price often bounces here because traders expect it to",
@@ -79,7 +93,8 @@ def _compute_rsi(closes: list[float], period: int = 14) -> float:
     return round(100 - (100 / (1 + rs)), 1)
 
 
-def _detect_hammer(candle: dict) -> bool:
+def _detect_hammer(candle: dict, prior_candles: list[dict] | None = None) -> bool:
+    """Stricter hammer: lower wick >65%, closes in upper third, volume-confirmed."""
     high = candle.get("high", 0)
     low = candle.get("low", 0)
     close = candle.get("close", 0)
@@ -88,7 +103,15 @@ def _detect_hammer(candle: dict) -> bool:
         return False
     lower_wick = close - low
     upper_wick = high - close
-    return (lower_wick / candle_range > 0.6) and (upper_wick < lower_wick * 0.4)
+    if not (lower_wick / candle_range > 0.65 and upper_wick < lower_wick * 0.4):
+        return False
+    if close < low + candle_range * 0.67:  # must close in upper third of range
+        return False
+    if prior_candles and len(prior_candles) >= 7:
+        avg_vol = sum(c.get("volume", 0) for c in prior_candles[-7:-1]) / 6
+        if avg_vol > 0 and candle.get("volume", 0) < avg_vol * 1.5:
+            return False  # low-volume hammer = noise, not absorption
+    return True
 
 
 def _get_session_window(now_et: datetime) -> str:
@@ -121,7 +144,7 @@ def _vix_thresholds(vix: float) -> dict | None:
     return None
 
 
-def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> dict | None:
+def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_slope: float = 0.0) -> dict | None:
     """Score one ETF for dip-buy. Returns opportunity dict or None if conditions not met."""
     candles = price_data.get("intraday_history", [])
     if len(candles) < 15:
@@ -137,6 +160,10 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> d
     score_delta = window_cfg.get("score_delta")
     if score_delta is None:
         return None  # outside trading hours
+
+    # Whitelist gate — only active when ENABLE_WHITELIST = True and n ≥ 5 per cell
+    if ENABLE_WHITELIST and (ticker, window) not in WHITELIST_CELLS:
+        return None
 
     thresholds = _vix_thresholds(vix)
     if thresholds is None:
@@ -179,6 +206,7 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> d
     }
     valid_supports = {k: v for k, v in support_map.items() if v > 0}
 
+    nearest_val = 0.0  # used later for invalidation level
     if valid_supports:
         nearest_label = min(valid_supports, key=lambda k: abs(current_price - valid_supports[k]))
         nearest_val = valid_supports[nearest_label]
@@ -222,17 +250,21 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> d
         elif current_price > intraday_vwap * 1.005:
             score -= 5
 
-    # Hammer candle on last bar
-    if candles and _detect_hammer(candles[-1]):
-        score += 15
+    # Hammer candle on last bar — weight reduced to +5 (tiebreaker, not primary signal)
+    if candles and _detect_hammer(candles[-1], candles):
+        score += 5
         signals.append("Hammer candle")
 
-    # VIX context
-    if 20 <= vix <= 35:
-        score += 10
-        signals.append(f"VIX {vix:.1f} elevated")
-    elif vix < 14:
-        score += 2
+    # VIX context — slope matters more than level
+    if 18 <= vix <= 35:
+        if vix_slope < -0.02:   # vol crush — ideal for mean reversion
+            score += 12
+            signals.append(f"VIX {vix:.1f} falling")
+        elif vix_slope <= 0.02:  # stable
+            score += 5
+        else:                    # vol expanding — rising fear, dip may continue
+            score -= 10
+    # vix < 14: no bonus — complacency doesn't help dip-buys
 
     score += score_delta  # session window bonus/penalty
     score = min(score, 100)
@@ -240,13 +272,28 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> d
     if score < 65:
         return None
 
+    # Hard lunch block — backtest 0% win rate; -5 penalty alone is insufficient
+    if window == "lunch_drift" and score < 80:
+        return None
+
+    entry_price = current_price
+    target_price = round(entry_price * 1.01, 2)
+    stop_price = round(entry_price * 0.995, 2)
+
+    # Invalidation levels — structural thesis controls (different from stop P&L control)
+    invalidation = {
+        "price_close_below": round(nearest_val * 0.998, 2) if nearest_val else round(stop_price * 0.998, 2),
+        "vix_above": round(vix * 1.10, 1),
+        "rvol_resurge_above": 1.8,
+    }
+
     return {
         "ticker": ticker,
         "signal_type": "dip_buy",
         "score": score,
-        "entry_price": current_price,
-        "target_price": round(current_price * 1.01, 2),
-        "stop_price": round(current_price * 0.995, 2),
+        "entry_price": entry_price,
+        "target_price": target_price,
+        "stop_price": stop_price,
         "signals": signals,
         "signal_hints": {s.split(" (")[0].split(f"RSI")[0].strip() if "RSI" in s else s.split(" (")[0]: SIGNAL_HINTS.get(s.split(" (")[0], "") for s in signals},
         "session_window": window,
@@ -256,6 +303,7 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime) -> d
         "rvol": round(rvol_value, 2),
         "vix": vix,
         "dip_pct": round(dip_pct, 2),
+        "invalidation": invalidation,
     }
 
 
@@ -553,6 +601,17 @@ def scan_dip_opportunities(
         except Exception:
             vix = 18.0
 
+    # VIX slope — fetch once for all tickers (rising vs falling vol changes signal quality)
+    vix_slope = 0.0
+    try:
+        vix_hist = yf.Ticker("^VIX").history(period="1d", interval="5m", prepost=False)
+        if len(vix_hist) >= 7:
+            vix_now = float(vix_hist.iloc[-1]["Close"])
+            vix_30m_ago = float(vix_hist.iloc[-7]["Close"])  # 6 bars × 5min = 30 min
+            vix_slope = (vix_now - vix_30m_ago) / vix_30m_ago if vix_30m_ago else 0.0
+    except Exception:
+        vix_slope = 0.0
+
     dip_opportunities: list[dict] = []
     orb_opportunities: list[dict] = []
     vwap_opportunities: list[dict] = []
@@ -566,7 +625,7 @@ def scan_dip_opportunities(
                 continue
             price_cache[ticker] = result
 
-            dip = _score_etf(ticker, result, vix, now_et)
+            dip = _score_etf(ticker, result, vix, now_et, vix_slope)
             if dip:
                 dip_opportunities.append(_add_pnl(dip, capital))
             else:
