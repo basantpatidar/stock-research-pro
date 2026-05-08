@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, BackgroundTasks
 from pydantic import BaseModel
@@ -303,4 +303,44 @@ async def backfill(
         "tickers": tickers,
         "days": request.days,
         "message": f"Backfilling {len(tickers)} ETFs × {request.days} days in background. Check /dip-scanner/analytics when complete.",
+    }
+
+
+@router.get("/weekly")
+async def weekly_pnl(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    """Current week's realized P&L from closed scanner alerts (Mon–today)."""
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc)
+
+    rows = (await db.execute(
+        select(ScannerAlert).where(
+            ScannerAlert.status.in_(["win", "loss"]),
+            ScannerAlert.source == "live",
+            ScannerAlert.entry_time >= week_start,
+        )
+    )).scalars().all()
+
+    total_pnl = sum(r.actual_pnl_dollar or 0 for r in rows)
+    wins = [r for r in rows if r.status == "win"]
+    losses = [r for r in rows if r.status == "loss"]
+
+    daily: dict[str, float] = {}
+    for r in rows:
+        if r.entry_time:
+            day_key = r.entry_time.strftime("%a")
+            daily[day_key] = round(daily.get(day_key, 0) + (r.actual_pnl_dollar or 0), 2)
+
+    return {
+        "week_start": monday.isoformat(),
+        "total_pnl_dollar": round(total_pnl, 2),
+        "wins": len(wins),
+        "losses": len(losses),
+        "trade_count": len(rows),
+        "by_day": daily,
+        "best_day": max(daily.items(), key=lambda x: x[1])[0] if daily else None,
+        "worst_day": min(daily.items(), key=lambda x: x[1])[0] if daily else None,
     }
