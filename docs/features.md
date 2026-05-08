@@ -134,8 +134,90 @@ Configured in `backend/app/services/scheduler.py`, started in FastAPI lifespan.
 |---|---|---|
 | `evaluate_watchlist` | 5 min | Runs all active watchlist tickers through tools; fires WebSocket alert if strong signal |
 | `run_screener_background` | 15 min | Runs all `auto_monitor=True` screener presets; fires WebSocket alert on matches |
+| `_run_dip_scan` | 5 min | Checks session window; calls `scan_dip_opportunities`; broadcasts `dip_buy_alert` via WebSocket for any score ≥ 65 opportunity |
+| `_resolve_open_alerts` | 5 min | Fetches current price for all open `ScannerAlert` rows; marks `win` (target hit), `loss` (stop hit), or `expired` (EOD close) |
 
-Both jobs share the same `_yf_client.py` rate limiter. Heavy watchlist evaluation can slow tier2 tool calls if they run concurrently (same lock). Intervals are configurable via `WATCHLIST_ALERT_INTERVAL_MINUTES` and `SCREENER_INTERVAL_MINUTES` env vars.
+Both watchlist and screener jobs share the same `_yf_client.py` rate limiter. Dip scan jobs run 0 LLM — always safe in any exec mode. Intervals configurable via env vars.
+
+---
+
+<!-- SEC:DIP_SCANNER -->
+## Daily Target Trade Scanner
+
+**Goal:** One intraday trade per day on broad-market ETFs, targeting 1% profit on configurable capital (default $1,000). Zero LLM tokens throughout.
+
+### ETF Tiers
+```
+Tier 1: SPY, QQQ, IWM, DIA   (default)
+Tier 2: XLK, XLF, XLV, GLD  (sector ETFs)
+```
+Both tiers can be enabled simultaneously.
+
+### Signal Types
+
+| Signal | Trigger | Entry | Target | Stop |
+|---|---|---|---|---|
+| `dip_buy` | Dip ≥ VIX-adjusted threshold, RSI-5m oversold, declining RVOL, at support | Market price | Entry × 1.01 | Entry × 0.995 |
+| `orb_breakout` | Price above ORB-15 high with RVOL ≥ 1.5x | Market price | ORB high + 1.5× range | ORB low × 0.999 |
+| `vwap_reclaim` | Price was below VWAP 2+ candles, closes back above VWAP, RVOL > 1.2x | Market price | Entry × 1.008 | VWAP × 0.998 |
+| `vix_spike_prep` | VIX up >8% intraday AND SPY down 0.5–2% | — preparation alert only — | | |
+
+### Session Windows
+
+| Window | Hours (ET) | Score Delta |
+|---|---|---|
+| `morning_trend` | 9:40–11:30 AM | +0 |
+| `morning_flush` | 9:40–10:30 AM (VIX > 20) | +5 |
+| `lunch_drift` | 11:30 AM–2:00 PM | −5 |
+| `power_hour` | 2:00–3:15 PM | +10 |
+| `pre_market` / `closed` | Outside hours | Skip (no signal) |
+
+### VIX-Adjusted Entry Thresholds (dip_buy only)
+
+| VIX | Min dip from open |
+|---|---|
+| < 18 | 0.3% |
+| 18–25 | 0.6% |
+| 25–35 | 1.0% |
+| > 35 | Skip |
+
+### Scoring
+Base score 50. Deltas applied per signal confirmation:
+`rsi_oversold` +15, `vwap_below` +10, `support_nearby` +8, `hammer_candle` +7,
+`rvol_declining` +7, `vix_low` +5, `session_window` ±5–10.
+Fire threshold: **score ≥ 65**.
+
+### Capital Sizing
+`shares = floor(capital / entry_price)`, `capital_used = shares × entry_price`.
+Expected profit: `shares × (target − entry)`. Max risk: `shares × (entry − stop)`.
+R:R displayed in card — minimum 1.5:1 required to fire alert.
+
+### Scenario Guidance System
+`frontend/src/data/scenarios.json` — 30 hardcoded plain-English situation descriptions.
+Each entry: `{ type, headline, summary, action, risk_note }`.
+Types: `buy`, `no_buy`, `prep`, `sell`, `hold`, `neutral`.
+`scenario_key` is returned by the backend scan endpoint and looked up by `SituationSummary`.
+
+Scenarios covered: `waiting`, `market_closed`, `no_buy_vix_extreme`, `no_buy_still_falling`,
+`no_buy_insufficient_dip`, `no_buy_rsi_not_oversold`, `no_buy_score_too_low`,
+`no_buy_lunch_drift`, `no_buy_weekly_target_hit`, `buy_dip_at_support`, `buy_orb_breakout`,
+`buy_vwap_reclaim`, `buy_vix_spike_fade`, `prep_vix_spike`, `prep_power_hour`,
+`sell_target_reached`, `sell_eod_approaching`, `hold_recovering`, `hold_near_target`,
+and more.
+
+### Database Model
+`ScannerAlert` in `backend/app/db/models.py`:
+```
+id (UUID), ticker, entry/target/stop prices, entry_time, score,
+signals (JSONB), session_window, vix_at_entry, capital_used,
+source ("live"|"backtest"), status ("open"|"win"|"loss"|"expired"),
+outcome_price, outcome_time, actual_pnl_pct, actual_pnl_dollar, resolved_by
+```
+
+### Historical Backfill
+`POST /dip-scanner/backfill` replays scanner logic over 60 days of 5-min yfinance data.
+Outcomes simulated: target hit within session = "win", stop hit = "loss", EOD close = "expired".
+Run once after setup to seed analytics — skips automatically if backtest records exist.
 
 ---
 

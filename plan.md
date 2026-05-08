@@ -211,6 +211,21 @@ The day trader's morning starting point. Opens to this page by default when mode
 | **21** ✅ | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
 | **22** ✅ | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
 
+### Completed Out-of-Sequence
+| Sprint | Feature(s) | Audience | Complexity | Tokens |
+|---|---|---|---|---|
+| **25** ✅ | News Catalyst Quality Scorer | Both | Low | 0 |
+| **—** ✅ | Dashboard unified period toggle (1D/1W/1M/3M) | Both | Low | 0 |
+
+### Next Up (from todo.md + backlog)
+| Sprint | Feature(s) | Audience | Complexity | Tokens |
+|---|---|---|---|---|
+| **26** | Sentiment Divergence Signal | Both | Low | 0 |
+| **27** | Portfolio risk page (multi-stock exposure) | Both | Medium | 0 |
+| **28** | Expand screener beyond 30 hardcoded tickers | Both | Low | 0 |
+| **29** | Frontend usage bars in nav (% used inline) | Both | Low | 0 |
+| **30** | Paper trade journal persistence (PostgreSQL) | Both | Medium | 0 |
+
 ---
 
 <!-- SEC:DAY_TRADING -->
@@ -443,4 +458,4 @@ These require paid subscriptions. Noted here so we don't accidentally implement 
 
 ---
 
-*Last updated: 2026-05-03. Sprints 10–22 complete. All free-data features implemented. Remaining: paid API features only (SEC:PAID_LATER) + parked Reddit features (SEC:PARKED). Use SEC: anchors to navigate — never read the full file.*
+*Last updated: 2026-05-08. Sprints 5–22 + 25 + Dashboard toggle complete. Daily Target Trade Scanner (ORB/VWAP/VIX signals, scenario guidance, weekly P&L tracker) on branch `feature/market-intelligence-layer` — PR open. Use SEC: anchors to navigate — never read the full file.*

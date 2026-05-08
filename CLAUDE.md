@@ -29,6 +29,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | UI page layout | plan.md | `SEC:UI_PAGES` |
 | V1 API routes | docs/api.md | `SEC:V1_ROUTES` |
 | V2 tiered routes | docs/api.md | `SEC:V2_ROUTES` |
+| Dip scanner routes (scan, weekly, analytics, backfill) | docs/api.md | `SEC:DIP_SCANNER_ROUTES` |
 | Usage / guard-rail routes | docs/api.md | `SEC:USAGE_ROUTES` |
 | Auth pattern | docs/api.md | `SEC:AUTH` |
 | V1 tool catalog (20 tools) | docs/tools.md | `SEC:V1_TOOLS` |
@@ -43,6 +44,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Guard rails system | docs/features.md | `SEC:GUARD_RAILS` |
 | Usage tracking (usage.json) | docs/features.md | `SEC:USAGE_TRACKING` |
 | Background jobs (APScheduler) | docs/features.md | `SEC:BACKGROUND_JOBS` |
+| Daily Target Trade Scanner (signals, scoring, scenarios, backfill) | docs/features.md | `SEC:DIP_SCANNER` |
 | Signal convergence score | docs/features.md | `SEC:CONVERGENCE` |
 | Dev commands (make up etc.) | docs/dev.md | `SEC:COMMANDS` |
 | Environment variables | docs/dev.md | `SEC:ENV_VARS` |
@@ -67,6 +69,8 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-08 | Market Intelligence Layer (branch `feature/market-intelligence-layer`): ORB breakout + VWAP reclaim + VIX spike prep detectors in dip_scanner.py; GET /dip-scanner/weekly endpoint; 30-scenario scenarios.json; SituationSummary + WeeklyTargetBar components; DipScannerCard wired with scenario guidance, signal-type badges, VIX spike banner; DashboardPage adds WeeklyTargetBar above scanner grid |
+| 2026-05-08 | Daily Target Trade Scanner (branch `feature/daily-target-scanner`): ScannerAlert DB model + migration; dip_scanner.py tool (VWAP/RSI scoring, VIX-adjusted thresholds, 60-day backfill); /dip-scanner/scan + analytics + backfill + config endpoints; DipScannerCard + ScannerPerformanceCard; 5-min background scan + outcome resolver scheduler jobs; dip_buy_alert WebSocket type |
 | 2026-05-03 | Sprint 25: News Catalyst Quality Scorer — _classify_catalyst()/_catalyst_strength() in news.py (12 categories, HIGH/MEDIUM/LOW strength); catalyst_type+catalyst_strength fields on NewsItem; NewsPanel.tsx shows catalyst badge + strength pill |
 | 2026-05-03 | Sprint 22: Institutional Guru Portfolio Tracker — guru_tracker.py (13F-HR via EDGAR for 8 gurus: Berkshire/Pershing/Appaloosa/etc.); GuruHoldingsPanel in Tier3Panels.tsx (verdict badge + holding cards) |
 | 2026-05-03 | Sprint 21: 10-K Risk Factor Change Tracker — edgar_risk_factors.py (EDGAR 10-K Item 1A diff, ~2000 LLM tokens); RiskFactorPanel in Tier3Panels.tsx (trajectory badge + new/removed/changed risks); Tier 3, long_term mode |
