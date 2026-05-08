@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Any
+import uuid
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -62,6 +63,31 @@ class ResearchCache(Base):
     __table_args__ = (
         UniqueConstraint("ticker", "mode", name="uq_research_cache_ticker_mode"),
     )
+
+
+class ScannerAlert(Base):
+    """Records every dip-buy alert fired (live or backtest) and its price outcome."""
+
+    __tablename__ = "scanner_alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    target_price: Mapped[float] = mapped_column(Float, nullable=False)
+    stop_price: Mapped[float] = mapped_column(Float, nullable=False)
+    entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signals: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    session_window: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    vix_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    capital_used: Mapped[float] = mapped_column(Float, default=1000.0)
+    source: Mapped[str] = mapped_column(String(20), default="live")   # "live" | "backtest"
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open / win / loss / expired
+    outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outcome_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_pnl_dollar: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(30), nullable=True)  # target_hit / stop_hit / eod_close
 
 
 class StockDataCache(Base):
