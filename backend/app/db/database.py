@@ -33,6 +33,17 @@ async def get_db():
             raise
 
 
+async def get_db_direct():
+    """Standalone async generator for use outside FastAPI dependency injection (e.g. scheduler jobs)."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 async def get_db_optional():
     """Like get_db but yields None instead of raising if the DB is unreachable.
 
