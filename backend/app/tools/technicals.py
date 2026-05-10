@@ -79,6 +79,43 @@ def _detect_ma_crossover(close: pd.Series):
     }
 
 
+def _compute_rs_rating(stock_hist, spy_hist) -> dict | None:
+    """
+    IBD-style RS Rating (1–99) vs S&P 500.
+    Weighted 52-week performance: recent quarter counts 2×.
+    Formula: (Q1*2 + Q2 + Q3 + Q4) / 5, then normalised vs SPY.
+    NOTE: true IBD ranks against ~3 000 stocks; this approximates
+    using SPY as the baseline (50 = inline with SPY).
+    """
+    def _weighted(hist) -> float | None:
+        if len(hist) < 252:
+            return None
+        c = hist["Close"]
+        # 63 trading days ≈ 1 quarter
+        q1 = float(c.iloc[-1]   / c.iloc[-64]  - 1) * 100
+        q2 = float(c.iloc[-64]  / c.iloc[-127] - 1) * 100
+        q3 = float(c.iloc[-127] / c.iloc[-190] - 1) * 100
+        q4 = float(c.iloc[-190] / c.iloc[-252] - 1) * 100
+        return (q1 * 2 + q2 + q3 + q4) / 5
+
+    stock_score = _weighted(stock_hist)
+    spy_score   = _weighted(spy_hist)
+    if stock_score is None or spy_score is None:
+        return None
+
+    raw = stock_score - spy_score
+    # Each 0.5 percentage point of outperformance = 1 RS point above 50
+    rs  = max(1, min(99, round(50 + raw * 2)))
+
+    signal = (
+        "Top performer — strong relative strength" if rs >= 80 else
+        "Above market average"                     if rs >= 60 else
+        "In line with market"                      if rs >= 40 else
+        "Underperforming market"
+    )
+    return {"rs_rating": rs, "rs_signal": signal}
+
+
 @tool
 def get_technicals(ticker: str) -> dict:
     """
@@ -92,6 +129,12 @@ def get_technicals(ticker: str) -> dict:
 
         if hist.empty or len(hist) < 30:
             return {"error": f"Insufficient history for {ticker} technical analysis"}
+
+        # Fetch SPY for RS rating — lightweight, well-cached by yfinance
+        try:
+            spy_hist = get_ticker("SPY").history(period="1y")
+        except Exception:
+            spy_hist = None
 
         close = hist["Close"]
         volume = hist["Volume"]
@@ -108,6 +151,8 @@ def get_technicals(ticker: str) -> dict:
             else "neutral range"
         )
 
+        rs = _compute_rs_rating(hist, spy_hist) if spy_hist is not None and not spy_hist.empty else None
+
         return {
             "ticker": ticker.upper(),
             "rsi_14": rsi,
@@ -123,6 +168,8 @@ def get_technicals(ticker: str) -> dict:
                 "avg_20d": int(volume.rolling(20).mean().iloc[-1]),
                 "above_average": bool(volume.iloc[-1] > volume.rolling(20).mean().iloc[-1]),
             },
+            "rs_rating": rs["rs_rating"] if rs else None,
+            "rs_signal":  rs["rs_signal"]  if rs else None,
         }
     except Exception as e:
         return {"error": f"Failed to compute technicals for {ticker}: {str(e)}"}

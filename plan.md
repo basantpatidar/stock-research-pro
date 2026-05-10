@@ -177,17 +177,18 @@ The day trader's morning starting point. Opens to this page by default when mode
 ### Pre-requisite (do first, unlocks everything)
 | Sprint | Feature | Audience | Notes |
 |---|---|---|---|
-| **PRE-1** | Per-tool TTL caching (non-LLM + LLM) | Infra | See SEC:CACHING. Do before new data tools. |
-| **PRE-2** | Mode-aware ResearchPage (show/hide panels by mode) | Infra | Fix before new panels land. |
+| **PRE-1** ✅ | Per-tool TTL caching (non-LLM + LLM) | Infra | See SEC:CACHING. Do before new data tools. |
+| **PRE-2** ✅ | Mode-aware ResearchPage (show/hide panels by mode) | Infra | Fix before new panels land. |
 
 ### Day Trading Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **5** | MTF confluence score + RVOL signal | Day trader | Low | 0 |
-| **6** | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
-| **7** | Pre-trade checklist scorecard | Both | Low | 0 |
-| **8** | Position sizing calculator | Both | Low | 0 |
-| **9** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
+| **5** ✅ | MTF confluence score + RVOL signal | Day trader | Low | 0 |
+| **6 (Sprint 7)** ✅ | S/R levels + Pivot Points + ORB levels | Day trader | Medium | 0 |
+| **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
+| **8** ✅ | Position sizing calculator | Both | Low | 0 |
+| **9** ✅ | Seasonality analysis + IBD RS Rating | Both | Low | 0 |
+| **10** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
 | **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
 | **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
 
@@ -225,12 +226,12 @@ RVOL = current volume / average volume for same time-of-day. RVOL > 2 by 10am is
 - Backend: add to `price.py` or `technicals.py`, needs intraday + 10-day average
 - Sources: bullishbears.com, Finviz, r/Daytrading discussions
 
-**Sprint 7 — Support/Resistance + Pivot Points** (0 tokens)
+**Sprint 7 — Support/Resistance + Pivot Points** ✅ (0 tokens)
 Auto-calculate daily/weekly/monthly pivot points (Classic: P=(H+L+C)/3, R1/R2/S1/S2) and key historical S/R levels from price swing highs/lows. Plot as horizontal reference lines on the price chart alongside existing VPOC/VAH/VAL.
 - Backend: add to `price.py` response — `pivots` dict, `support_resistance` list
 - Frontend: additional `ReferenceLine` entries in `PriceChart.tsx`
 
-**Sprint 7 — Opening Range Breakout (ORB) Levels** (0 tokens)
+**Sprint 7 — Opening Range Breakout (ORB) Levels** ✅ (0 tokens)
 Pull first 15-min and 30-min candle from 5-min intraday data. Output ORB high/low, whether current price is above/below, and breakout confirmation (volume + close). Highest win-rate day trading setup — Warrior Trading, Humbled Trader standard.
 - Backend: add to `price.py` intraday processing, returns `orb_15` and `orb_30` dicts
 - Frontend: ORB levels as reference lines on 1d chart only
@@ -246,7 +247,7 @@ Combine float size (yfinance `floatShares`), short float %, days-to-cover, recen
 - Backend: add to `short_interest.py` or new `squeeze.py`
 - Frontend: add to existing Short Interest panel or new card
 
-**Sprint 6 — Pre-Trade Checklist Scorecard** (0 tokens)
+**Sprint 6 — Pre-Trade Checklist Scorecard** ✅ (0 tokens)
 Automate the day trader's pre-trade checklist: trend direction (daily), catalyst present, RVOL >1.5, float tier, sector momentum, above/below VWAP, RSI not extreme. Output: score X/10 with PROCEED/CAUTION/AVOID verdict. Makes the app the decision gate before order entry.
 - Backend: new `pretrade_score.py` — aggregates existing T1 data, no new API calls
 - Frontend: prominent card in ResearchPage T1 section
@@ -319,17 +320,17 @@ Which "guru" investors (Buffett/Berkshire, Ackman, Einhorn etc.) hold the stock 
 <!-- SEC:BOTH -->
 ## Features Serving Both Audiences
 
-**Sprint 8 — Position Sizing Calculator** (0 tokens, frontend only)
+**Sprint 8 — Position Sizing Calculator** ✅ (0 tokens, frontend only)
 User inputs account size once (saved to localStorage). Given entry + stop loss, calculate: max shares, dollar risk, % of portfolio, position value. Output: "Risk $487 (0.97% of $50k) → 127 shares max." Makes the app the final step before order entry.
 - Frontend only: new `PositionSizer.tsx` component in ResearchPage sidebar
 - No backend needed — pure client-side math
 
-**Sprint 9 — Seasonality Analysis** (0 tokens)
+**Sprint 9 — Seasonality Analysis** ✅ (0 tokens)
 Pull 10 years of monthly returns from yfinance. Show: "January: avg +3.2%, positive 7/10 years." Monthly heatmap grid. Both traders (timing entries) and investors (timing additions) use this.
 - Backend: new `seasonality.py` tool
 - Frontend: new Tier 2 `SeasonalityPanel.tsx` with monthly grid
 
-**Sprint 9 — IBD RS Rating** (0 tokens)
+**Sprint 9 — IBD RS Rating** ✅ (0 tokens)
 0–99 percentile relative strength vs S&P 500: 52-week price performance with most-recent-quarter weighted 2x. IBD charges subscription for this. Open-source formula implemented by github.com/skyte/relative-strength.
 - Backend: add to `technicals.py` — needs SPY history for comparison
 - Frontend: add RS badge to price header alongside RSI

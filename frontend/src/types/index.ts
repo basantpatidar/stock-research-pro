@@ -17,6 +17,21 @@ export interface NewsResult {
   }
 }
 
+export interface PreTradeCheck {
+  label: string
+  pass: boolean | null
+  value: string
+  tip?: string
+}
+
+export interface PreTradeScore {
+  score: number
+  total: number
+  verdict: "PROCEED" | "CAUTION" | "AVOID"
+  verdict_color: "green" | "amber" | "red"
+  checks: PreTradeCheck[]
+}
+
 export interface Tier1Response {
   ticker: string
   price: PriceData | { error: string }
@@ -29,6 +44,7 @@ export interface Tier1Response {
   news: NewsResult | { error: string }
   macro: any
   sectors: any
+  pretrade_score: PreTradeScore | null
   cached: boolean
   exec_mode: ExecMode
 }
@@ -117,6 +133,31 @@ export interface VolumeProfile {
   period_days: number
 }
 
+export interface Pivots {
+  P: number
+  R1: number
+  R2: number
+  S1: number
+  S2: number
+}
+
+export interface SupportResistance {
+  resistance: number[]
+  support: number[]
+}
+
+export interface ORBLevel {
+  high: number
+  low: number
+  position: "above" | "below" | "inside"
+  breakout: "above" | "below" | "none"
+}
+
+export interface ORBData {
+  orb_15: ORBLevel
+  orb_30: ORBLevel
+}
+
 export interface PriceData {
   ticker: string
   current_price: number
@@ -138,12 +179,36 @@ export interface PriceData {
   price_history: PricePoint[]
   intraday_history: PricePoint[]
   volume_profile: VolumeProfile | null
+  pivots: Pivots | null
+  support_resistance: SupportResistance | null
+  orb: ORBData | null
+}
+
+export interface MonthData {
+  month: string
+  month_num: number
+  avg_return: number | null
+  positive_years: number
+  total_years: number
+  best_return: number | null
+  worst_return: number | null
+}
+
+export interface SeasonalityData {
+  ticker: string
+  months: MonthData[]
+  current_month: number
+  years_of_data: number
+  best_month: MonthData | null
+  worst_month: MonthData | null
 }
 
 export interface TechnicalData {
   ticker: string
   rsi_14: number
   rsi_signal: string
+  rs_rating: number | null
+  rs_signal: string | null
   macd: {
     macd: number
     signal: number
