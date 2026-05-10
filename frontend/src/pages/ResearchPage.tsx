@@ -16,9 +16,14 @@ import { MultiTimeframePanel } from "../components/research/MultiTimeframePanel"
 import { PreTradeScorecard } from "../components/research/PreTradeScorecard"
 import { PositionSizer } from "../components/research/PositionSizer"
 import { SeasonalityPanel } from "../components/research/SeasonalityPanel"
-import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel } from "../components/research/Tier3Panels"
+import { BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel, RiskFactorPanel, GuruHoldingsPanel } from "../components/research/Tier3Panels"
+import { VolatilityPanel, RegimePanel } from "../components/research/VolatilityPanel"
+import { ValuationPanel } from "../components/research/ValuationPanel"
+import EDGARFundamentalsPanel from "../components/research/EDGARFundamentalsPanel"
+import { CanslimPanel, VCPPanel } from "../components/research/CanslimPanel"
+import { DividendPanel, MoatPanel } from "../components/research/FundamentalsQualityPanels"
 import { T, chgColor, chgDim } from "../theme"
-import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore } from "../types"
+import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore, SmartMoneyScore } from "../types"
 
 type PanelEntry = { loading: boolean; data: any; error: string | null }
 
@@ -63,6 +68,33 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 
   if (tool === "get_seasonality" && data.months)
     return <SeasonalityPanel data={data} />
+
+  if (tool === "get_volatility_forecast")
+    return <VolatilityPanel data={data} />
+
+  if (tool === "get_regime")
+    return <RegimePanel data={data} />
+
+  if (tool === "get_valuation")
+    return <ValuationPanel data={data} />
+
+  if (tool === "get_edgar_fundamentals")
+    return <EDGARFundamentalsPanel data={data} />
+
+  if (tool === "get_canslim_score")
+    return <CanslimPanel data={data} />
+
+  if (tool === "get_vcp_pattern")
+    return <VCPPanel data={data} />
+
+  if (tool === "get_dividend_health")
+    return <DividendPanel data={data} />
+
+  if (tool === "get_moat_score")
+    return <MoatPanel data={data} />
+
+  if (tool === "get_guru_holdings")
+    return <GuruHoldingsPanel data={data} />
 
   if (tool === "get_convergence_score" && data.convergence_score != null)
     return <SignalScore data={data} />
@@ -127,22 +159,32 @@ function Tier2Content({ tool, data }: { tool: string; data: any }) {
 // ── Mode-aware panel definitions ──────────────────────────────────────────────
 
 const TIER2_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[] }[] = [
-  { tool: "get_mtf_confluence",       title: "MTF Confluence",        tokens: 0,   modes: ["day_trade"] },
-  { tool: "get_options_intelligence", title: "Options Intelligence",  tokens: 0,   modes: ["day_trade"] },
-  { tool: "get_sentiment",            title: "Market Sentiment",      tokens: 500, modes: ["day_trade", "long_term"] },
-  { tool: "get_risk_reward",          title: "Risk / Reward",         tokens: 500, modes: ["day_trade"] },
-  { tool: "get_convergence_score",    title: "Signal Convergence",    tokens: 700, modes: ["day_trade", "long_term"] },
-  { tool: "get_price_forecast",       title: "Price Forecast",        tokens: 800, modes: ["day_trade", "long_term"] },
-  { tool: "get_earnings_quality",     title: "Earnings Quality",      tokens: 0,   modes: ["long_term"] },
-  { tool: "get_seasonality",          title: "Seasonality",           tokens: 0,   modes: ["day_trade", "long_term"] },
+  { tool: "get_mtf_confluence",        title: "MTF Confluence",         tokens: 0,   modes: ["day_trade"] },
+  { tool: "get_options_intelligence",  title: "Options Intelligence",   tokens: 0,   modes: ["day_trade"] },
+  { tool: "get_volatility_forecast",   title: "Volatility Forecast",    tokens: 0,   modes: ["day_trade"] },
+  { tool: "get_regime",                title: "Regime Classifier",      tokens: 0,   modes: ["day_trade"] },
+  { tool: "get_sentiment",             title: "Market Sentiment",       tokens: 500, modes: ["day_trade", "long_term"] },
+  { tool: "get_risk_reward",           title: "Risk / Reward",          tokens: 500, modes: ["day_trade"] },
+  { tool: "get_convergence_score",     title: "Signal Convergence",     tokens: 700, modes: ["day_trade", "long_term"] },
+  { tool: "get_price_forecast",        title: "Price Forecast",         tokens: 800, modes: ["day_trade", "long_term"] },
+  { tool: "get_seasonality",           title: "Seasonality",            tokens: 0,   modes: ["day_trade", "long_term"] },
+  { tool: "get_earnings_quality",      title: "Earnings Quality",       tokens: 0,   modes: ["long_term"] },
+  { tool: "get_valuation",             title: "DCF & Valuation",        tokens: 0,   modes: ["long_term"] },
+  { tool: "get_edgar_fundamentals",    title: "EDGAR 8-Year Financials",tokens: 0,   modes: ["long_term"] },
+  { tool: "get_canslim_score",         title: "CANSLIM Score",          tokens: 0,   modes: ["long_term"] },
+  { tool: "get_vcp_pattern",           title: "Minervini VCP Setup",    tokens: 0,   modes: ["long_term", "day_trade"] },
+  { tool: "get_dividend_health",       title: "Dividend Health",        tokens: 0,   modes: ["long_term"] },
+  { tool: "get_moat_score",            title: "Economic Moat",          tokens: 0,   modes: ["long_term"] },
+  { tool: "get_guru_holdings",         title: "Guru Holdings (13F)",    tokens: 0,   modes: ["long_term"] },
 ]
 
 const TIER3_PANELS: { tool: string; title: string; tokens: number; modes: TradeMode[]; Component: any }[] = [
-  { tool: "run_backtest",                title: "Strategy Backtester", tokens: 0,    modes: ["day_trade"],               Component: BacktesterPanel },
-  { tool: "bull_bear_debate",            title: "Bull vs Bear Debate", tokens: 6000, modes: ["day_trade", "long_term"],  Component: BullBearPanel },
-  { tool: "analyze_paper_trade",         title: "Paper Trade Coach",   tokens: 800,  modes: ["day_trade"],               Component: PaperTradePanel },
-  { tool: "investor_personas",           title: "Investor Personas",   tokens: 5000, modes: ["long_term"],               Component: InvestorPersonasPanel },
-  { tool: "analyze_earnings_transcript", title: "Earnings Transcript", tokens: 4000, modes: ["long_term"],               Component: EarningsTranscriptPanel },
+  { tool: "run_backtest",                title: "Strategy Backtester",     tokens: 0,    modes: ["day_trade"],               Component: BacktesterPanel },
+  { tool: "bull_bear_debate",            title: "Bull vs Bear Debate",     tokens: 6000, modes: ["day_trade", "long_term"],  Component: BullBearPanel },
+  { tool: "analyze_paper_trade",         title: "Paper Trade Coach",       tokens: 800,  modes: ["day_trade"],               Component: PaperTradePanel },
+  { tool: "investor_personas",           title: "Investor Personas",       tokens: 5000, modes: ["long_term"],               Component: InvestorPersonasPanel },
+  { tool: "analyze_earnings_transcript", title: "Earnings Transcript",     tokens: 4000, modes: ["long_term"],               Component: EarningsTranscriptPanel },
+  { tool: "get_risk_factor_changes",     title: "10-K Risk Factor Changes",tokens: 2000, modes: ["long_term"],               Component: RiskFactorPanel },
 ]
 
 export function ResearchPage() {
@@ -388,6 +430,44 @@ export function ResearchPage() {
             </div>
           )}
 
+          {/* Smart Money Score — both modes */}
+          {tier1?.smart_money && (tier1.smart_money as SmartMoneyScore).signals.length > 0 && (() => {
+            const sm = tier1.smart_money as SmartMoneyScore
+            const vColor = sm.color === "green" ? T.green : sm.color === "red" ? T.red : T.text2
+            return (
+              <div style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+                display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em" }}>Smart Money</span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, fontFamily: T.mono,
+                    padding: "2px 10px", borderRadius: 4,
+                    background: vColor + "20", color: vColor,
+                    border: `1px solid ${vColor}40`,
+                  }}>
+                    {sm.verdict}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {sm.signals.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                        background: s.direction === "bullish" ? T.green : T.red,
+                        display: "inline-block",
+                      }} />
+                      <span style={{ fontSize: 11, color: T.text2 }}>{s.label}</span>
+                      <span style={{ fontSize: 10, color: T.text3 }}>— {s.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Position Sizer — Day Trade + Both */}
           {show(["day_trade"], mode) && price && (
             <div style={{ marginBottom: 12 }}>
@@ -452,16 +532,35 @@ export function ResearchPage() {
                       color={shortInt.change_vs_prior_month_pct > 0 ? T.red : T.green}
                     />
                   )}
-                  {shortInt.squeeze_potential != null && (
+                  {shortInt.float_class && (
                     <StatCard
-                      label="Squeeze Potential"
-                      value={shortInt.squeeze_potential ? "YES" : "LOW"}
-                      color={shortInt.squeeze_potential ? T.amber : T.text2}
+                      label="Float Class"
+                      value={shortInt.float_class.toUpperCase()}
+                      color={shortInt.float_class === "nano" ? T.red : shortInt.float_class === "micro" ? T.amber : T.text2}
+                    />
+                  )}
+                  {shortInt.vol_ratio != null && (
+                    <StatCard
+                      label="Vol Ratio"
+                      value={`${shortInt.vol_ratio.toFixed(1)}×`}
+                      color={shortInt.vol_ratio > 2 ? T.green : T.text2}
+                    />
+                  )}
+                  {shortInt.squeeze_score != null && (
+                    <StatCard
+                      label="Squeeze Score"
+                      value={`${shortInt.squeeze_score}/100`}
+                      color={shortInt.squeeze_score >= 65 ? T.red : shortInt.squeeze_score >= 45 ? T.amber : T.text2}
                     />
                   )}
                 </div>
+                {shortInt.squeeze_tier && (
+                  <div style={{ fontSize: 11, color: T.amber, marginTop: 6, fontFamily: T.mono, fontWeight: 600 }}>
+                    {shortInt.squeeze_tier}
+                  </div>
+                )}
                 {shortInt.signal && (
-                  <div style={{ fontSize: 11, color: T.text3, marginTop: 8, fontFamily: T.mono }}>
+                  <div style={{ fontSize: 11, color: T.text3, marginTop: 4, fontFamily: T.mono }}>
                     Signal: {shortInt.signal}
                   </div>
                 )}
@@ -513,13 +612,34 @@ export function ResearchPage() {
                   })()}
                   {analyst.price_target && (
                     <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 8, paddingTop: 8 }}>
-                      <Label>Price Target</Label>
-                      <span style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${analyst.price_target.toFixed(2)}</span>
-                      {analyst.upside_pct != null && (
-                        <span style={{ marginLeft: 8, fontSize: 12, fontFamily: T.mono, color: analyst.upside_pct >= 0 ? T.green : T.red }}>
-                          {analyst.upside_pct >= 0 ? "+" : ""}{analyst.upside_pct.toFixed(1)}%
-                        </span>
-                      )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <div>
+                          <Label>Price Target (Mean)</Label>
+                          <span style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color: T.text }}>${analyst.price_target.toFixed(2)}</span>
+                          {analyst.upside_pct != null && (
+                            <span style={{ marginLeft: 8, fontSize: 12, fontFamily: T.mono, color: analyst.upside_pct >= 0 ? T.green : T.red }}>
+                              {analyst.upside_pct >= 0 ? "+" : ""}{analyst.upside_pct.toFixed(1)}% upside
+                            </span>
+                          )}
+                        </div>
+                        {analyst.target_low != null && analyst.target_high != null && (
+                          <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                            range: <span style={{ color: T.red }}>${analyst.target_low.toFixed(0)}</span>
+                            {" — "}
+                            <span style={{ color: T.green }}>${analyst.target_high.toFixed(0)}</span>
+                          </div>
+                        )}
+                        {analyst.target_trend && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 12,
+                            background: analyst.target_trend === "RISING" ? T.greenDim : analyst.target_trend === "FALLING" ? T.redDim : T.surface2,
+                            color: analyst.target_trend === "RISING" ? T.green : analyst.target_trend === "FALLING" ? T.red : T.text2,
+                            border: `1px solid ${analyst.target_trend === "RISING" ? T.green : analyst.target_trend === "FALLING" ? T.red : T.border}`,
+                          }}>
+                            {analyst.target_trend === "RISING" ? "↑" : analyst.target_trend === "FALLING" ? "↓" : "→"} {analyst.target_trend}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </ExpandablePanel>

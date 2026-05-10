@@ -42,6 +42,42 @@ def _resolve_query(ticker: str, company_name: str) -> str:
     return f'"{search_term}" AND {financial_terms}'
 
 
+_CATALYST_RULES: list[tuple[str, list[str]]] = [
+    ("Earnings Beat/Miss",   ["beat", "miss", "earnings", "eps", "quarterly results", "revenue beat", "revenue miss"]),
+    ("Analyst Upgrade",      ["upgrade", "outperform", "overweight", "buy rating", "price target raised", "target raised"]),
+    ("Analyst Downgrade",    ["downgrade", "underperform", "underweight", "sell rating", "price target cut", "target cut"]),
+    ("FDA / Regulatory",     ["fda", "approval", "approved", "cleared", "rejected", "clinical trial", "drug"]),
+    ("Contract / Deal",      ["contract", "deal", "partnership", "agreement", "awarded", "signed"]),
+    ("Product Launch",       ["launch", "unveiled", "announced", "new product", "release"]),
+    ("Insider Buy",          ["insider buy", "insider purchase", "executive buy", "ceo buy"]),
+    ("Legal / Regulatory",   ["lawsuit", "investigation", "probe", "antitrust", "fine", "penalty", "fraud", "sec"]),
+    ("Macro Headwind",       ["tariff", "fed", "interest rate", "inflation", "recession", "gdp", "jobs report"]),
+    ("Layoffs / Restructure",["layoff", "restructur", "job cut", "workforce reduction", "downsiz"]),
+    ("M&A",                  ["acqui", "merger", "takeover", "buyout", "bid for"]),
+    ("Earnings Warning",     ["warning", "guidance cut", "lowered guidance", "below expectations", "profit warning"]),
+]
+
+_STRENGTH_HIGH = ["beat", "raised", "upgrade", "approval", "contract", "merger", "acqui", "record", "fda approved"]
+_STRENGTH_LOW  = ["watch", "consider", "analyst note", "report says", "could", "may"]
+
+
+def _classify_catalyst(headline: str) -> str:
+    h = headline.lower()
+    for label, keywords in _CATALYST_RULES:
+        if any(k in h for k in keywords):
+            return label
+    return "General News"
+
+
+def _catalyst_strength(headline: str) -> str:
+    h = headline.lower()
+    if any(k in h for k in _STRENGTH_HIGH):
+        return "HIGH"
+    if any(k in h for k in _STRENGTH_LOW):
+        return "LOW"
+    return "MEDIUM"
+
+
 @tool
 def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
     """
@@ -118,6 +154,8 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 "published": published,
                 "sentiment": sentiment,
                 "url": url_link,
+                "catalyst_type": _classify_catalyst(title),
+                "catalyst_strength": _catalyst_strength(title),
             })
 
         negative_count = sum(1 for n in news_items if n["sentiment"] == "negative")

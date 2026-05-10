@@ -11,7 +11,7 @@ function handleError(e: any): never {
 
 export const researchV2 = {
   tier1: (ticker: string, mode: TradeMode, execMode: ExecMode): Promise<Tier1Response> =>
-    api.post("/v2/research/tier1", { ticker, mode, exec_mode: execMode })
+    api.post("/v2/research/tier1", { ticker, mode, exec_mode: execMode }, { timeout: 60000 })
       .then(r => r.data)
       .catch(handleError),
 

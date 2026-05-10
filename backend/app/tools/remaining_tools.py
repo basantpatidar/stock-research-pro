@@ -25,17 +25,26 @@ def get_macro_environment() -> dict:
         for name, symbol in tickers.items():
             try:
                 t = get_ticker(symbol)
-                hist = t.history(period="1mo")
+                hist = t.history(period="3mo")
                 if not hist.empty:
                     current = round(float(hist["Close"].iloc[-1]), 2)
-                    prev = round(float(hist["Close"].iloc[-2]), 2)
-                    change_pct = round(((current - prev) / prev) * 100, 2)
-                    week_ago = round(float(hist["Close"].iloc[-6]), 2) if len(hist) >= 7 else prev
-                    week_change = round(((current - week_ago) / week_ago) * 100, 2)
+                    n = len(hist)
+
+                    def _chg(base: float) -> float:
+                        return round(((current - base) / base) * 100, 2) if base else 0.0
+
+                    prev = float(hist["Close"].iloc[-2]) if n >= 2 else current
+                    week_ago = float(hist["Close"].iloc[-6]) if n >= 6 else prev
+                    month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    three_m_ago = float(hist["Close"].iloc[0])
+
                     results[name] = {
                         "current": current,
-                        "change_today_pct": change_pct,
-                        "change_7d_pct": week_change,
+                        "change_today_pct": _chg(prev),
+                        "change_1d_pct": _chg(prev),
+                        "change_7d_pct": _chg(week_ago),
+                        "change_1m_pct": _chg(month_ago),
+                        "change_3m_pct": _chg(three_m_ago),
                     }
             except Exception:
                 results[name] = {"error": "unavailable"}
@@ -95,16 +104,29 @@ def get_sector_heatmap() -> dict:
         for sector_name, etf in sector_etfs.items():
             try:
                 t = get_ticker(etf)
-                hist = t.history(period="5d")
+                hist = t.history(period="3mo")
                 if not hist.empty and len(hist) >= 2:
                     current = float(hist["Close"].iloc[-1])
-                    week_start = float(hist["Close"].iloc[0])
-                    change = round(((current - week_start) / week_start) * 100, 2)
+                    n = len(hist)
+
+                    def _chg(base: float) -> float:
+                        return round(((current - base) / base) * 100, 2) if base else 0.0
+
+                    prev_day = float(hist["Close"].iloc[-2]) if n >= 2 else current
+                    week_start = float(hist["Close"].iloc[-6]) if n >= 6 else float(hist["Close"].iloc[0])
+                    month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    three_m_ago = float(hist["Close"].iloc[0])
+
+                    change_5d = _chg(week_start)
                     sectors.append({
                         "sector": sector_name,
                         "etf": etf,
-                        "change_5d_pct": change,
-                        "trend": "up" if change > 0.5 else "down" if change < -0.5 else "flat",
+                        "change_1d_pct": _chg(prev_day),
+                        "change_5d_pct": change_5d,
+                        "change_7d_pct": change_5d,
+                        "change_1m_pct": _chg(month_ago),
+                        "change_3m_pct": _chg(three_m_ago),
+                        "trend": "up" if change_5d > 0.5 else "down" if change_5d < -0.5 else "flat",
                     })
             except Exception:
                 continue
@@ -287,7 +309,7 @@ def run_screener(
             try:
                 stock = get_ticker(ticker)
                 info = stock.info
-                hist = stock.history(period="10d")
+                hist = stock.history(period="3mo")
 
                 if hist.empty or len(hist) < 5:
                     continue
@@ -301,8 +323,17 @@ def run_screener(
                     continue
 
                 current = float(hist["Close"].iloc[-1])
-                week_ago = float(hist["Close"].iloc[0])
-                drop_pct = ((current - week_ago) / week_ago) * 100
+                n = len(hist)
+
+                def _chg(base: float) -> float:
+                    return round(((current - base) / base) * 100, 2) if base else 0.0
+
+                prev_day = float(hist["Close"].iloc[-2]) if n >= 2 else current
+                week_ago = float(hist["Close"].iloc[-6]) if n >= 6 else float(hist["Close"].iloc[0])
+                month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                three_m_ago = float(hist["Close"].iloc[0])
+
+                drop_pct = _chg(week_ago)
 
                 if drop_pct > -min_price_drop_pct:
                     continue
@@ -316,7 +347,10 @@ def run_screener(
                     "ticker": ticker,
                     "company": info.get("longName", ticker),
                     "price": round(current, 2),
-                    "change_7d_pct": round(drop_pct, 2),
+                    "change_1d_pct": _chg(prev_day),
+                    "change_7d_pct": drop_pct,
+                    "change_1m_pct": _chg(month_ago),
+                    "change_3m_pct": _chg(three_m_ago),
                     "market_cap_b": round(market_cap / 1_000_000_000, 1),
                     "avg_volume": int(avg_vol),
                     "sector": info.get("sector", "Unknown"),

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Any
 import asyncio
+import concurrent.futures
 import logging
 import time
 
@@ -43,12 +44,23 @@ from app.tools.options_intelligence import get_options_intelligence
 from app.tools.technicals_mtf import get_mtf_confluence
 
 from app.tools.pretrade_score import compute_pretrade_score
+from app.tools.smart_money import compute_smart_money_score
 from app.tools.seasonality import get_seasonality
 from app.tools.new.investor_personas import investor_personas
 from app.tools.new.bull_bear import bull_bear_debate
 from app.tools.new.backtester import run_backtest
 from app.tools.new.earnings_transcript import analyze_earnings_transcript
 from app.tools.new.paper_trade import analyze_paper_trade
+from app.tools.volatility_forecast import get_volatility_forecast
+from app.tools.regime import get_regime
+from app.tools.valuation import get_valuation
+from app.tools.edgar_fundamentals import get_edgar_fundamentals
+from app.tools.canslim import get_canslim_score
+from app.tools.patterns import get_vcp_pattern
+from app.tools.dividend import get_dividend_health
+from app.tools.moat import get_moat_score
+from app.tools.edgar_risk_factors import get_risk_factor_changes
+from app.tools.guru_tracker import get_guru_holdings
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +72,20 @@ _TOKEN_ESTIMATES: dict[str, int] = {
     "get_convergence_score": 700,
     "get_price_forecast": 800,
     "get_risk_reward": 500,
-    "get_earnings_quality": 0,       # pure math — no LLM tokens
-    "get_options_intelligence": 0,   # pure math — no LLM tokens
-    "get_mtf_confluence": 0,         # pure math — no LLM tokens
-    "get_seasonality": 0,            # pure math — no LLM tokens
+    "get_earnings_quality": 0,
+    "get_options_intelligence": 0,
+    "get_mtf_confluence": 0,
+    "get_seasonality": 0,
+    "get_volatility_forecast": 0,
+    "get_regime": 0,
+    "get_valuation": 0,
+    "get_edgar_fundamentals": 0,
+    "get_canslim_score": 0,
+    "get_vcp_pattern": 0,
+    "get_dividend_health": 0,
+    "get_moat_score": 0,
+    "get_guru_holdings": 0,
+    "get_risk_factor_changes": 2000,
     "investor_personas": 5000,
     "bull_bear_debate": 6000,
     "run_backtest": 0,
@@ -82,6 +104,21 @@ _TIER2_TOOLS = {
     "get_options_intelligence": get_options_intelligence,
     "get_mtf_confluence": get_mtf_confluence,
     "get_seasonality": get_seasonality,
+    # Sprint 10/14
+    "get_volatility_forecast": get_volatility_forecast,
+    "get_regime": get_regime,
+    # Sprint 17
+    "get_valuation": get_valuation,
+    # Sprint 18
+    "get_edgar_fundamentals": get_edgar_fundamentals,
+    # Sprint 19
+    "get_canslim_score": get_canslim_score,
+    "get_vcp_pattern": get_vcp_pattern,
+    # Sprint 20
+    "get_dividend_health": get_dividend_health,
+    "get_moat_score": get_moat_score,
+    # Sprint 22
+    "get_guru_holdings": get_guru_holdings,
 }
 
 _TIER3_TOOLS = {
@@ -91,6 +128,8 @@ _TIER3_TOOLS = {
     "analyze_earnings_transcript": analyze_earnings_transcript,
     "analyze_paper_trade": analyze_paper_trade,
     "get_congressional_trades": get_congressional_trades,
+    # Sprint 21
+    "get_risk_factor_changes": get_risk_factor_changes,
 }
 
 
@@ -162,26 +201,46 @@ async def tier1(
 
     # 2. Fetch fresh data in a thread — only call yfinance for cache misses.
     #    Price, technicals, macro, sectors are always fresh (intraday data).
-    def _run_fresh():
-        price = get_price.invoke({"ticker": sym})
-        company_name = price.get("company_name", "") if isinstance(price, dict) else ""
-        technicals = get_technicals.invoke({"ticker": sym})
-        macro = get_macro_environment.invoke({})
-        sectors = get_sector_heatmap.invoke({})
+    class _InvalidTicker(Exception):
+        pass
 
-        fresh: dict[str, Any] = {}
+    def _run_fresh():
+        # Price runs first — needed for ticker validation and company_name for news
+        price = get_price.invoke({"ticker": sym})
+        if isinstance(price, dict) and "error" in price:
+            err = price["error"]
+            if "not found" in err or "No price data" in err:
+                raise _InvalidTicker(err)
+        company_name = price.get("company_name", "") if isinstance(price, dict) else ""
+
+        # All remaining fetches are independent — run them in parallel
+        fetch_map: dict[str, Any] = {
+            "technicals": lambda: get_technicals.invoke({"ticker": sym}),
+            "macro":      lambda: get_macro_environment.invoke({}),
+            "sectors":    lambda: get_sector_heatmap.invoke({}),
+        }
         if needs["earnings"]:
-            fresh["earnings"] = get_earnings.invoke({"ticker": sym})
+            fetch_map["earnings"] = lambda: get_earnings.invoke({"ticker": sym})
         if needs["fundamentals"]:
-            fresh["fundamentals"] = get_fundamentals.invoke({"ticker": sym})
+            fetch_map["fundamentals"] = lambda: get_fundamentals.invoke({"ticker": sym})
         if needs["analyst"]:
-            fresh["analyst"] = get_analyst_consensus.invoke({"ticker": sym})
+            fetch_map["analyst"] = lambda: get_analyst_consensus.invoke({"ticker": sym})
         if needs["short_interest"]:
-            fresh["short_interest"] = get_short_interest.invoke({"ticker": sym})
+            fetch_map["short_interest"] = lambda: get_short_interest.invoke({"ticker": sym})
         if needs["congressional"]:
-            fresh["congressional"] = get_congressional_trades.invoke({"ticker": sym})
+            fetch_map["congressional"] = lambda: get_congressional_trades.invoke({"ticker": sym})
         if needs["news"]:
-            fresh["news"] = get_news_impact.invoke({"ticker": sym, "company_name": company_name})
+            _cn = company_name
+            fetch_map["news"] = lambda: get_news_impact.invoke({"ticker": sym, "company_name": _cn})
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(fetch_map)) as pool:
+            fut_map = {key: pool.submit(fn) for key, fn in fetch_map.items()}
+            results = {key: fut.result() for key, fut in fut_map.items()}
+
+        technicals = results["technicals"]
+        macro      = results["macro"]
+        sectors    = results["sectors"]
+        fresh      = {k: v for k, v in results.items() if k not in ("technicals", "macro", "sectors")}
 
         return price, technicals, macro, sectors, fresh
 
@@ -192,6 +251,9 @@ async def tier1(
 
     try:
         price, technicals, macro, sectors, fresh = await asyncio.to_thread(_run_fresh)
+    except _InvalidTicker as e:
+        logger.warning("tier1 %s — invalid ticker: %s", sym, e)
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("tier1 failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Tier1 fetch failed: {str(e)}")
@@ -252,6 +314,12 @@ async def tier1(
         sectors=sectors if isinstance(sectors, dict) else {},
     )
 
+    smart_money = compute_smart_money_score(
+        congressional=congressional if isinstance(congressional, dict) else {},
+        analyst=analyst if isinstance(analyst, dict) else {},
+        short_interest=short_interest if isinstance(short_interest, dict) else {},
+    )
+
     return _sanitize({
         "ticker": sym,
         "price": price,
@@ -265,6 +333,7 @@ async def tier1(
         "macro": macro,
         "sectors": sectors,
         "pretrade_score": pretrade_score,
+        "smart_money": smart_money,
         "cached": cache_hits > 0,
         "cache_hits": cache_hits,
         "exec_mode": request.exec_mode,

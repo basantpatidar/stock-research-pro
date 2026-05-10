@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api"
 import { T, chgColor, chgDim } from "../theme"
-import type { MacroEnvironment, SectorData, GeoEvent, FREDMacroData, FREDIndicator, FREDCrossAsset } from "../types"
+import type { MacroEnvironment, SectorData, GeoEvent, FREDMacroData, FREDIndicator, FREDCrossAsset, FearGreedData, EconomicCalendar, MarketBreadth } from "../types"
 
 interface MacroState {
   environment: MacroEnvironment | null
   sectors: SectorData[]
   geoEvents: GeoEvent[]
   fred: FREDMacroData | null
+  fearGreed: FearGreedData | null
+  calendar: EconomicCalendar | null
+  breadth: MarketBreadth | null
   loading: boolean
 }
 
@@ -207,10 +210,188 @@ function FREDSection({ fred }: { fred: FREDMacroData }) {
   )
 }
 
+// ── Fear & Greed Gauge ────────────────────────────────────────────────────────
+
+function FearGreedGauge({ fg }: { fg: FearGreedData }) {
+  if (fg.error) return null
+
+  const fgColor =
+    fg.color === "red"    ? T.red    :
+    fg.color === "amber"  ? T.amber  :
+    fg.color === "green"  ? T.green  : T.text2
+
+  // gauge arc — value 0-100 maps to 0-180deg arc
+  const pct = fg.value / 100
+  const rotation = Math.round(pct * 180)
+
+  return (
+    <div style={{
+      background: T.surface, border: `1px solid ${T.border}`,
+      borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+      display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap",
+    }}>
+      {/* Gauge visual */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ position: "relative", width: 120, height: 64, overflow: "hidden" }}>
+          {/* Arc track */}
+          <div style={{
+            position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
+            width: 120, height: 60,
+            borderRadius: "60px 60px 0 0",
+            background: T.surface2,
+            border: `2px solid ${T.border}`,
+            borderBottom: "none",
+          }} />
+          {/* Colored fill */}
+          <div style={{
+            position: "absolute", bottom: 0, left: "50%",
+            transformOrigin: "bottom center",
+            transform: `translateX(-50%) rotate(${rotation - 90}deg)`,
+            width: 4, height: 56,
+            background: fgColor,
+            borderRadius: 2,
+            transition: "transform 0.4s ease",
+          }} />
+          {/* Center circle */}
+          <div style={{
+            position: "absolute", bottom: -8, left: "50%", transform: "translateX(-50%)",
+            width: 14, height: 14, borderRadius: "50%",
+            background: fgColor,
+            border: `2px solid ${T.surface}`,
+          }} />
+        </div>
+        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: T.mono, color: fgColor, marginTop: 8, lineHeight: 1 }}>
+          {fg.value}
+        </div>
+        <div style={{ fontSize: 11, color: fgColor, fontWeight: 600, marginTop: 2 }}>{fg.classification}</div>
+      </div>
+
+      {/* Signal + history */}
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+          Fear &amp; Greed Index
+        </div>
+        <div style={{ fontSize: 12, color: T.text2, marginBottom: 12, lineHeight: 1.5 }}>{fg.signal}</div>
+        {fg.history.length > 1 && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {fg.history.slice(1, 6).map((h, i) => {
+              const hColor = h.value <= 25 ? T.red : h.value <= 45 ? T.amber : h.value <= 55 ? T.text3 : T.green
+              return (
+                <div key={i} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 12, fontFamily: T.mono, fontWeight: 600, color: hColor }}>{h.value}</div>
+                  <div style={{ fontSize: 9, color: T.text3 }}>{i + 1}d ago</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div style={{ fontSize: 9, color: T.text3, marginTop: 8 }}>Source: Alternative.me · Updated daily</div>
+      </div>
+
+      {/* Scale legend */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, flexShrink: 0 }}>
+        {[
+          { label: "Extreme Fear", range: "0–24",  color: T.red   },
+          { label: "Fear",         range: "25–44", color: T.amber },
+          { label: "Neutral",      range: "45–55", color: T.text2 },
+          { label: "Greed",        range: "56–79", color: T.green },
+          { label: "Extreme Greed",range: "80–100",color: T.red   },
+        ].map(({ label, range, color }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+            <span style={{ fontSize: 10, color: T.text3 }}>{label}</span>
+            <span style={{ fontSize: 9, fontFamily: T.mono, color: T.text3 }}>{range}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Economic Calendar ─────────────────────────────────────────────────────────
+
+function EconomicCalendarSection({ cal }: { cal: EconomicCalendar }) {
+  if (cal.error || !cal.events?.length) {
+    if (cal.error?.includes("not configured")) {
+      return (
+        <div style={{
+          background: T.surface, border: `1px solid ${T.border}`,
+          borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            Economic Calendar (Next 14 days)
+          </div>
+          <div style={{ fontSize: 12, color: T.amber }}>
+            FRED_API_KEY not configured — add it to .env to see upcoming CPI, NFP, FOMC dates.
+          </div>
+        </div>
+      )
+    }
+    if (!cal.events?.length) return null
+  }
+
+  return (
+    <div style={{
+      background: T.surface, border: `1px solid ${T.border}`,
+      borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+        Economic Calendar — Next {cal.days_ahead} Days
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {cal.events.map((evt, i) => {
+          const impactColor = evt.impact === "high" ? T.red : T.amber
+          const isToday = evt.days_until === 0
+          const isTomorrow = evt.days_until === 1
+          const dayLabel = isToday ? "TODAY" : isTomorrow ? "TOMORROW" : `${evt.days_until}d`
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "9px 0",
+              borderBottom: i < cal.events.length - 1 ? `1px solid ${T.border}` : "none",
+            }}>
+              <div style={{
+                minWidth: 68, textAlign: "center",
+                fontSize: isToday || isTomorrow ? 10 : 10,
+                fontWeight: isToday || isTomorrow ? 700 : 400,
+                fontFamily: T.mono,
+                color: isToday ? T.green : isTomorrow ? T.amber : T.text3,
+                background: isToday ? T.greenDim : isTomorrow ? T.amberDim : T.surface2,
+                borderRadius: 4, padding: "2px 6px",
+              }}>
+                {dayLabel}
+              </div>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: impactColor, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{evt.name}</span>
+                <span style={{ fontSize: 11, color: T.text3, marginLeft: 8, fontFamily: T.mono }}>
+                  {new Date(evt.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 700, fontFamily: T.mono,
+                padding: "2px 7px", borderRadius: 3,
+                background: impactColor + "20", color: impactColor,
+                border: `1px solid ${impactColor}40`,
+              }}>
+                {evt.impact.toUpperCase()}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 9, color: T.text3, marginTop: 10 }}>Source: St. Louis Fed FRED · CPI, NFP, FOMC, GDP, PCE, PPI, Retail Sales</div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function MacroPage() {
-  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], fred: null, loading: false })
+  const [state, setState] = useState<MacroState>({ environment: null, sectors: [], geoEvents: [], fred: null, fearGreed: null, calendar: null, breadth: null, loading: false })
 
   const fetchMacro = async () => {
     setState(s => ({ ...s, loading: true }))
@@ -221,6 +402,9 @@ export function MacroPage() {
         sectors: res.data.sectors?.sectors || [],
         geoEvents: res.data.geopolitical?.all_events || [],
         fred: res.data.fred ?? null,
+        fearGreed: res.data.fear_greed ?? null,
+        calendar: res.data.calendar ?? null,
+        breadth: res.data.breadth ?? null,
         loading: false,
       })
     } catch {
@@ -230,7 +414,7 @@ export function MacroPage() {
 
   useEffect(() => { fetchMacro() }, [])
 
-  const { environment: env, sectors, geoEvents, fred, loading } = state
+  const { environment: env, sectors, geoEvents, fred, fearGreed, calendar, breadth, loading } = state
 
   const isRiskOff = env?.environment?.includes("RISK-OFF")
   const isRiskOn  = env?.environment?.includes("RISK-ON")
@@ -310,6 +494,50 @@ export function MacroPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Fear & Greed Index */}
+      {fearGreed && !fearGreed.error && <FearGreedGauge fg={fearGreed} />}
+
+      {/* Economic Calendar */}
+      {calendar && <EconomicCalendarSection cal={calendar} />}
+
+      {/* Market Breadth Dashboard */}
+      {breadth && !breadth.error && (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: T.text2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Market Breadth — S&P 500 Proxy
+            </div>
+            {(() => {
+              const vc = breadth.verdict_color === "green" ? T.green : breadth.verdict_color === "amber" ? T.amber : breadth.verdict_color === "red" ? T.red : T.text2
+              return (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 20, background: `${vc}18`, color: vc, border: `1px solid ${vc}`, fontFamily: T.mono }}>
+                  {breadth.verdict}
+                </span>
+              )
+            })()}
+          </div>
+          <div style={{ fontSize: 12, color: T.text2, marginBottom: 12 }}>{breadth.signal}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8 }}>
+            {[
+              { label: "% Above 50d MA", value: `${breadth.pct_above_50d}%`, color: breadth.pct_above_50d >= 60 ? T.green : breadth.pct_above_50d >= 40 ? T.amber : T.red },
+              { label: "% Above 200d MA", value: breadth.pct_above_200d != null ? `${breadth.pct_above_200d}%` : "—", color: T.text },
+              { label: "Adv / Dec", value: `${breadth.advancing} / ${breadth.declining}`, color: breadth.advancing > breadth.declining ? T.green : T.red },
+              { label: "A/D Ratio", value: `${breadth.ad_ratio}x`, color: breadth.ad_ratio >= 1.5 ? T.green : breadth.ad_ratio >= 1 ? T.amber : T.red },
+              { label: "Near 52w High", value: `${breadth.new_highs_proxy}`, color: T.green },
+              { label: "Near 52w Low", value: `${breadth.new_lows_proxy}`, color: T.red },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ background: T.surface2, borderRadius: 8, padding: "10px 12px", border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono, color }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: T.text3, marginTop: 8 }}>
+            Based on {breadth.stocks_measured} representative S&P 500 stocks across 11 sectors
           </div>
         </div>
       )}

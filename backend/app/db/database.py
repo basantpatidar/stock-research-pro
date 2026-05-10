@@ -39,13 +39,17 @@ async def get_db_optional():
     Use this for endpoints where DB is only needed for caching — the endpoint
     still works without a DB connection, just without cache reads/writes.
     """
+    yielded = False
     try:
         async with AsyncSessionLocal() as session:
             try:
+                yielded = True
                 yield session
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
     except Exception:
-        yield None
+        if not yielded:
+            # DB connection failed before we ever yielded — safe to yield None
+            yield None

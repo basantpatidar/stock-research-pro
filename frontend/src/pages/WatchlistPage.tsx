@@ -2,13 +2,62 @@ import { useState } from "react"
 import { useWatchlist } from "../hooks/useWatchlist"
 import { useStore } from "../store"
 import { SignalTag } from "../components/shared/SignalTag"
+import { GapScannerCard } from "../components/research/GapScannerCard"
 import { T, scoreStyle } from "../theme"
 
 type Filter = "all" | "buy" | "sell"
+type ViewMode = "table" | "heatmap"
 
 const Label = ({ children }: { children: React.ReactNode }) => (
   <div style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{children}</div>
 )
+
+function HeatmapView({ items }: { items: any[] }) {
+  if (!items.length) return <div style={{ padding: "2rem", textAlign: "center", color: T.text3, fontSize: 13 }}>Watchlist is empty.</div>
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8, padding: "16px 0" }}>
+      {items.map(item => {
+        const chg = item.last_score ? ((item.last_score - 50) / 50) : 0
+        const pct = item.last_price ? chg * 5 : 0
+        const isPos = pct >= 0
+        const intensity = Math.min(Math.abs(pct) / 10, 1)
+        const bg = isPos
+          ? `rgba(16,185,129,${0.08 + intensity * 0.25})`
+          : `rgba(239,68,68,${0.08 + intensity * 0.25})`
+        const border = isPos
+          ? `rgba(16,185,129,${0.3 + intensity * 0.5})`
+          : `rgba(239,68,68,${0.3 + intensity * 0.5})`
+        const textColor = isPos ? T.green : T.red
+        const score = item.last_score
+        return (
+          <div key={item.ticker} style={{
+            background: bg, border: `1px solid ${border}`, borderRadius: 10,
+            padding: "12px 13px", textAlign: "center",
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: T.mono, color: textColor, marginBottom: 3 }}>
+              {item.ticker}
+            </div>
+            {item.last_price && (
+              <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text, marginBottom: 3 }}>
+                ${item.last_price.toFixed(2)}
+              </div>
+            )}
+            {score != null && (
+              <div style={{ fontSize: 11, color: textColor, fontFamily: T.mono }}>
+                score: {score}
+              </div>
+            )}
+            {item.last_signal && (
+              <div style={{ fontSize: 9, color: textColor, marginTop: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                {item.last_signal}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 export function WatchlistPage() {
   const { watchlist, addTicker, removeTicker, refresh } = useWatchlist()
@@ -16,6 +65,7 @@ export function WatchlistPage() {
   const [newTicker, setNewTicker] = useState("")
   const [addError, setAddError] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
+  const [viewMode, setViewMode] = useState<ViewMode>("table")
 
   const handleAdd = async () => {
     if (!newTicker.trim()) return
@@ -30,8 +80,12 @@ export function WatchlistPage() {
     return true
   })
 
+  const tickers = watchlist.map(item => item.ticker)
+
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 1.25rem" }}>
+
+      <GapScannerCard tickers={tickers} />
 
       {/* Live alerts */}
       {alerts.length > 0 && (
@@ -78,19 +132,40 @@ export function WatchlistPage() {
             )}
           </button>
         ))}
-        <button
-          onClick={refresh}
-          style={{
-            marginLeft: "auto", fontSize: 12, color: T.text2, background: "none",
-            border: `1px solid ${T.border}`, cursor: "pointer", borderRadius: 6,
-            padding: "4px 12px", transition: "all 0.12s ease",
-          }}
-        >
-          ↻ Refresh
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+          {(["table", "heatmap"] as ViewMode[]).map(v => (
+            <button
+              key={v}
+              onClick={() => setViewMode(v)}
+              style={{
+                fontSize: 11, color: viewMode === v ? T.text : T.text2,
+                background: viewMode === v ? T.surface2 : "none",
+                border: `1px solid ${viewMode === v ? T.borderBright : T.border}`,
+                cursor: "pointer", borderRadius: 5, padding: "3px 10px",
+                transition: "all 0.12s ease",
+              }}
+            >
+              {v === "table" ? "≡ Table" : "▦ Heatmap"}
+            </button>
+          ))}
+          <button
+            onClick={refresh}
+            style={{
+              fontSize: 12, color: T.text2, background: "none",
+              border: `1px solid ${T.border}`, cursor: "pointer", borderRadius: 6,
+              padding: "4px 12px", transition: "all 0.12s ease",
+            }}
+          >
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
+      {/* Heatmap view */}
+      {viewMode === "heatmap" && <HeatmapView items={filtered} />}
+
       {/* Table */}
+      {viewMode === "table" &&
       <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
         {/* Header */}
         <div style={{
@@ -229,7 +304,7 @@ export function WatchlistPage() {
         {addError && (
           <div style={{ padding: "4px 16px 10px", fontSize: 12, color: T.red }}>{addError}</div>
         )}
-      </div>
+      </div>}
 
       <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
         Signals refresh every 5 min · Score 0–100 convergence across technical + fundamental signals

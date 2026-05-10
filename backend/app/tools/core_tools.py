@@ -59,17 +59,65 @@ def get_analyst_consensus(ticker: str) -> dict:
             else:
                 consensus_label = "Sell"
 
+        # Price target range from analyst_price_targets if available
+        target_low = info.get("targetLowPrice")
+        target_high = info.get("targetHighPrice")
+        target_median = info.get("targetMedianPrice")
+
+        # Rating momentum: split recent_changes into last 90d vs prior 90d
+        momentum_recent = {"upgrades": 0, "downgrades": 0}
+        momentum_prior = {"upgrades": 0, "downgrades": 0}
+        try:
+            from datetime import datetime, timedelta, timezone
+            cutoff_recent = datetime.now(timezone.utc) - timedelta(days=90)
+            cutoff_prior = datetime.now(timezone.utc) - timedelta(days=180)
+            if recs is not None and not recs.empty:
+                for ts, row in recs.iterrows():
+                    action = str(row.get("Action", "")).lower()
+                    is_up = action in ("upgrade", "init", "initiated", "reiterated")
+                    is_down = action == "downgrade"
+                    ts_aware = ts.to_pydatetime()
+                    if ts_aware.tzinfo is None:
+                        ts_aware = ts_aware.replace(tzinfo=timezone.utc)
+                    if ts_aware >= cutoff_recent:
+                        if is_up: momentum_recent["upgrades"] += 1
+                        if is_down: momentum_recent["downgrades"] += 1
+                    elif ts_aware >= cutoff_prior:
+                        if is_up: momentum_prior["upgrades"] += 1
+                        if is_down: momentum_prior["downgrades"] += 1
+        except Exception:
+            pass
+
+        recent_net = momentum_recent["upgrades"] - momentum_recent["downgrades"]
+        prior_net = momentum_prior["upgrades"] - momentum_prior["downgrades"]
+        if recent_net > prior_net:
+            target_trend = "RISING"
+            target_trend_color = "green"
+        elif recent_net < prior_net:
+            target_trend = "FALLING"
+            target_trend_color = "red"
+        else:
+            target_trend = "STABLE"
+            target_trend_color = "neutral"
+
         return {
             "ticker": ticker.upper(),
             "consensus": consensus_label,
             "mean_rating": buy,
             "price_target": target,
+            "target_low": target_low,
+            "target_high": target_high,
+            "target_median": target_median,
             "current_price": current,
             "upside_pct": upside,
             "num_analysts": info.get("numberOfAnalystOpinions"),
             "rating_counts": rating_counts,
             "total_ratings": total_ratings,
             "recent_rating_changes": recent_changes,
+            "target_trend": target_trend,
+            "target_trend_color": target_trend_color,
+            "momentum_recent_90d": momentum_recent,
+            "momentum_prior_90d": momentum_prior,
         }
     except Exception as e:
         return {"error": f"Failed to fetch analyst data for {ticker}: {str(e)}"}
@@ -344,6 +392,41 @@ def get_institutional_changes(ticker: str) -> dict:
         return {"error": f"Failed to fetch institutional data for {ticker}: {str(e)}"}
 
 
+def _float_class(float_shares) -> str:
+    if not float_shares:           return "unknown"
+    if float_shares < 1_000_000:  return "nano"
+    if float_shares < 10_000_000: return "micro"
+    if float_shares < 50_000_000: return "small"
+    return "large"
+
+
+def _squeeze_score(short_pct_val, float_shares, days_to_cover, vol_ratio) -> dict:
+    """Squeeze Probability Score (0–100) combining float, short %, DTC, volume."""
+    score = 0
+    if short_pct_val:
+        if short_pct_val > 20:   score += 35
+        elif short_pct_val > 10: score += 25
+        elif short_pct_val > 5:  score += 10
+    if float_shares:
+        if float_shares < 5_000_000:    score += 30
+        elif float_shares < 20_000_000: score += 20
+        elif float_shares < 50_000_000: score += 10
+    if days_to_cover:
+        if days_to_cover > 5:   score += 20
+        elif days_to_cover > 2: score += 10
+    if vol_ratio:
+        if vol_ratio > 2.0:   score += 15
+        elif vol_ratio > 1.5: score += 8
+    score = min(score, 100)
+    tier = (
+        "Short Squeeze Setup"   if score >= 65 else
+        "Elevated Squeeze Risk" if score >= 45 else
+        "Low Float Momentum"    if score >= 25 else
+        "No Setup"
+    )
+    return {"squeeze_score": score, "squeeze_tier": tier}
+
+
 @tool
 def get_short_interest(ticker: str) -> dict:
     """
@@ -355,33 +438,45 @@ def get_short_interest(ticker: str) -> dict:
         stock = get_ticker(ticker)
         info = stock.info
 
-        short_pct = info.get("shortPercentOfFloat")
-        short_ratio = info.get("shortRatio")
-        shares_short = info.get("sharesShort")
+        short_pct        = info.get("shortPercentOfFloat")
+        short_ratio      = info.get("shortRatio")
+        shares_short     = info.get("sharesShort")
         shares_short_prior = info.get("sharesShortPriorMonth")
+        float_shares     = info.get("floatShares")
 
         change_pct = None
         if shares_short and shares_short_prior and shares_short_prior > 0:
             change_pct = round(((shares_short - shares_short_prior) / shares_short_prior) * 100, 1)
 
-        short_pct_val = short_pct * 100 if short_pct else None
+        short_pct_val = round(short_pct * 100, 1) if short_pct else None
         signal = (
-            "extreme — short squeeze risk possible" if short_pct_val and short_pct_val > 20
+            "extreme — short squeeze risk possible"      if short_pct_val and short_pct_val > 20
             else "high — significant bearish positioning" if short_pct_val and short_pct_val > 10
-            else "elevated" if short_pct_val and short_pct_val > 5
-            else "normal" if short_pct_val
+            else "elevated"                              if short_pct_val and short_pct_val > 5
+            else "normal"                                if short_pct_val
             else "unknown"
         )
 
+        vol     = info.get("regularMarketVolume") or info.get("volume")
+        avg_vol = info.get("averageVolume") or info.get("averageDailyVolume10Day")
+        vol_ratio = round(vol / avg_vol, 2) if vol and avg_vol and avg_vol > 0 else None
+
+        squeeze = _squeeze_score(short_pct_val, float_shares, short_ratio, vol_ratio)
+
         return {
-            "ticker": ticker.upper(),
-            "short_pct_of_float": round(short_pct_val, 1) if short_pct_val else None,
-            "days_to_cover": short_ratio,
-            "shares_short": shares_short,
-            "shares_short_prior_month": shares_short_prior,
+            "ticker":                    ticker.upper(),
+            "short_pct_of_float":        short_pct_val,
+            "days_to_cover":             short_ratio,
+            "shares_short":              shares_short,
+            "shares_short_prior_month":  shares_short_prior,
             "change_vs_prior_month_pct": change_pct,
-            "signal": signal,
-            "squeeze_potential": short_pct_val > 15 if short_pct_val else False,
+            "signal":                    signal,
+            "squeeze_potential":         short_pct_val > 15 if short_pct_val else False,
+            "float_shares":              float_shares,
+            "float_class":               _float_class(float_shares),
+            "vol_ratio":                 vol_ratio,
+            "squeeze_score":             squeeze["squeeze_score"],
+            "squeeze_tier":              squeeze["squeeze_tier"],
         }
     except Exception as e:
         return {"error": f"Failed to fetch short interest for {ticker}: {str(e)}"}

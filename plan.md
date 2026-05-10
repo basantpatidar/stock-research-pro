@@ -188,28 +188,28 @@ The day trader's morning starting point. Opens to this page by default when mode
 | **7 (Sprint 6)** ✅ | Pre-trade checklist scorecard | Both | Low | 0 |
 | **8** ✅ | Position sizing calculator | Both | Low | 0 |
 | **9** ✅ | Seasonality analysis + IBD RS Rating | Both | Low | 0 |
-| **10** | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
-| **10** | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
-| **11** | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
+| **10** ✅ | Pre-market gap scanner + Float/squeeze score | Day trader | Medium | 0 |
+| **10** ✅ | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
+| **11** ✅ | Dashboard page (market pulse + movers + calendar) | Day trader | Medium | 0 |
 
 ### Both Audiences Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **12** | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
-| **13** | IBD RS Rating + Seasonality analysis | Both | Low | 0 |
-| **14** | Smart money composite score | Both | Low | 0 |
-| **15** | Market breadth dashboard | Both | Medium | 0 |
-| **16** | Watchlist heatmap + Price target trend | Both | Low | 0 |
+| **12** ✅ | Economic calendar (FRED) + Fear/Greed index | Both | Low | 0 |
+| **13** ✅ | Smart money composite score | Both | Low | 0 |
+| **14** ✅ | GARCH volatility forecast + Regime classifier | Day trader | High | 0 |
+| **15** ✅ | Market breadth dashboard | Both | Medium | 0 |
+| **16** ✅ | Watchlist heatmap + Price target trend | Both | Low | 0 |
 
 ### Long-Term Block
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **17** | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
-| **18** | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
-| **19** | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
-| **20** | Dividend health score + Moat score | Long-term | Low | 0 |
-| **21** | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
-| **22** | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
+| **17** ✅ | DCF + Graham Number + Peer comps | Long-term | Medium | 0 |
+| **18** ✅ | SEC EDGAR 8-year fundamentals | Long-term | Medium | 0 |
+| **19** ✅ | CANSLIM score + Minervini VCP detector | Long-term | Medium | 0 |
+| **20** ✅ | Dividend health score + Moat score | Long-term | Low | 0 |
+| **21** ✅ | 10-K risk factor change tracker | Long-term | Medium | ~2000 |
+| **22** ✅ | Institutional guru portfolio tracker (13F) | Long-term | Medium | 0 |
 
 ---
 
@@ -236,16 +236,11 @@ Pull first 15-min and 30-min candle from 5-min intraday data. Output ORB high/lo
 - Backend: add to `price.py` intraday processing, returns `orb_15` and `orb_30` dicts
 - Frontend: ORB levels as reference lines on 1d chart only
 
-**Sprint 11 — Pre-Market Gap Scanner** (0 tokens)
+**Sprint 10 — Pre-Market Gap Scanner + Float/Squeeze Score** ✅ (0 tokens)
 For the user's watchlist, surface all tickers gapping >2% pre-market with: gap %, gap type (earnings/news/sector/no-catalyst), RVOL, float classification. Day traders call this the "morning watchlist" — their #1 daily workflow.
-- Backend: new `gap_scanner.py` tool, runs against watchlist tickers
-- Frontend: new card on WatchlistPage showing pre-market movers
-- Sources: warriortrading.com, centerpointsecurities.com
-
-**Sprint 11 — Float + Short Squeeze Score** (0 tokens)
-Combine float size (yfinance `floatShares`), short float %, days-to-cover, recent volume surge, and catalyst present → Squeeze Probability Score (0–100) with tier label: Low Float Momentum / Short Squeeze Setup / Overextended / No Setup.
-- Backend: add to `short_interest.py` or new `squeeze.py`
-- Frontend: add to existing Short Interest panel or new card
+- Backend: `gap_scanner.py` scan_gaps(), `/gap-scanner/` POST endpoint registered in main.py
+- Backend: `core_tools.py` — added `_float_class()`, `_squeeze_score()`, updated `get_short_interest()` with squeeze_score, squeeze_tier, float_class, vol_ratio
+- Frontend: `GapScannerCard.tsx` on WatchlistPage; Short Interest panel shows float_class, vol_ratio, squeeze_score/100, squeeze_tier label
 
 **Sprint 6 — Pre-Trade Checklist Scorecard** ✅ (0 tokens)
 Automate the day trader's pre-trade checklist: trend direction (daily), catalyst present, RVOL >1.5, float tier, sector momentum, above/below VWAP, RSI not extreme. Output: score X/10 with PROCEED/CAUTION/AVOID verdict. Makes the app the decision gate before order entry.
@@ -448,4 +443,4 @@ These require paid subscriptions. Noted here so we don't accidentally implement 
 
 ---
 
-*Last updated: 2026-05-02. Decisions locked. Next: PRE-1 (per-tool caching) → PRE-2 (mode-aware UI) → Sprint 5. Use SEC: anchors to navigate — never read the full file.*
+*Last updated: 2026-05-03. Sprints 10–22 complete. All free-data features implemented. Remaining: paid API features only (SEC:PAID_LATER) + parked Reddit features (SEC:PARKED). Use SEC: anchors to navigate — never read the full file.*
