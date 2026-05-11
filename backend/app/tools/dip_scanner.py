@@ -14,21 +14,49 @@ Scoring uses intraday 5-min candle data already fetched by get_price():
   - Session window bonus/penalty
 """
 
+import json
 import logging
+import os
 import pytz
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import yfinance as yf
+from app.tools.regime import classify_regime
 
 logger = logging.getLogger(__name__)
+
+# Near-miss log — signals that passed all pattern checks but scored 65-71 (just below threshold).
+# Written to local_debugging/near_miss_log.jsonl for EOD analysis.
+_NEAR_MISS_LOG = Path(
+    os.getenv("NEAR_MISS_LOG", str(Path(__file__).resolve().parents[3] / "local_debugging" / "near_miss_log.jsonl"))
+)
+
+def _log_near_miss(ticker: str, score: int, signals: list, price: float, window: str) -> None:
+    """Append one near-miss entry to the JSONL log. Silent on any failure."""
+    try:
+        _NEAR_MISS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "date":    datetime.now(tz=pytz.timezone("America/New_York")).date().isoformat(),
+            "time_et": datetime.now(tz=pytz.timezone("America/New_York")).strftime("%H:%M"),
+            "ticker":  ticker,
+            "score":   score,
+            "window":  window,
+            "price":   round(price, 2),
+            "reasons": signals[:3],
+        }
+        with _NEAR_MISS_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass  # never let logging affect the scanner
 
 ET_TZ = pytz.timezone("America/New_York")
 
 # ── ETF universe ──────────────────────────────────────────────────────────────
 
 ETF_TIERS: dict[int, list[str]] = {
-    1: ["SPY", "QQQ", "IWM", "DIA"],
-    2: ["XLK", "XLF", "XLV", "GLD"],
+    1: ["SPY", "QQQ"],
+    2: ["XLK"],   # Data-driven cut: IWM 46.2%, DIA 54.5%, XLF 47.1%, XLV 36.6%, TLT 27.3% win rates — removed
 }
 
 SESSION_WINDOWS = {
@@ -114,6 +142,80 @@ def _detect_hammer(candle: dict, prior_candles: list[dict] | None = None) -> boo
     return True
 
 
+def _compute_cvd(candles: list[dict]) -> float:
+    """Approximate Cumulative Volume Delta from OHLCV. Up-close bars add vol, down-close bars subtract."""
+    cvd = 0.0
+    for c in candles:
+        o = c.get("open", 0) or c.get("close", 0)
+        cl = c.get("close", 0)
+        vol = c.get("volume", 0)
+        if cl > o:
+            cvd += vol
+        elif cl < o:
+            cvd -= vol
+    return cvd
+
+
+# ── Per-ETF ATR cache ─────────────────────────────────────────────────────────
+# ATR normalises all thresholds so a "0.6% dip" means the same thing across DIA
+# (low vol) and IWM (high vol). Cached 30 min — stale ATR is still useful.
+
+_atr_cache: dict[str, dict] = {}
+_ATR_REFRESH_SECONDS = 1800
+
+
+def _get_atr_5m(ticker: str) -> float:
+    """Wilder's ATR-14 on 5-min bars. Returns 0.0 on failure (caller uses price×0.002)."""
+    global _atr_cache
+    now = datetime.now()
+    cached = _atr_cache.get(ticker)
+    if cached and (now - cached["ts"]).total_seconds() < _ATR_REFRESH_SECONDS:
+        return cached["atr"]
+    try:
+        hist = yf.Ticker(ticker).history(period="5d", interval="5m", prepost=False)
+        if hist.empty or len(hist) < 15:
+            return 0.0
+        highs  = hist["High"].values
+        lows   = hist["Low"].values
+        closes = hist["Close"].values
+        trs = [
+            max(highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i]  - closes[i - 1]))
+            for i in range(1, len(hist))
+        ]
+        if len(trs) < 14:
+            return 0.0
+        atr = sum(trs[:14]) / 14.0
+        for tr in trs[14:]:
+            atr = (atr * 13 + tr) / 14.0
+        _atr_cache[ticker] = {"atr": round(atr, 4), "ts": now}
+        return atr
+    except Exception as exc:
+        logger.warning("ATR computation failed for %s: %s", ticker, exc)
+        return 0.0
+
+
+def _compute_intraday_trend(candles: list[dict]) -> int:
+    """Compare avg close of last 6 bars vs prior 6 bars. +5 recovering, -10 still falling, 0 flat."""
+    if len(candles) < 12:
+        return 0
+    recent = [c.get("close", 0) for c in candles[-6:]]
+    prior  = [c.get("close", 0) for c in candles[-12:-6]]
+    if not all(recent) or not all(prior):
+        return 0
+    recent_avg = sum(recent) / 6
+    prior_avg  = sum(prior) / 6
+    if prior_avg == 0:
+        return 0
+    change_pct = (recent_avg - prior_avg) / prior_avg * 100
+    if change_pct > 0.10:
+        return 5    # 30-min recovery underway — buy side gaining
+    if change_pct < -0.10:
+        return -10  # still in free-fall — wait
+    return 0
+
+
 def _get_session_window(now_et: datetime) -> str:
     hm = now_et.hour * 60 + now_et.minute
     if hm < 4 * 60:
@@ -134,17 +236,26 @@ def _get_session_window(now_et: datetime) -> str:
 
 
 def _vix_thresholds(vix: float) -> dict | None:
-    """Returns adjusted entry thresholds per VIX level. None = skip (extreme crash)."""
+    """ATR-normalised entry thresholds per VIX level. None = skip (extreme crash).
+    min_dip_atr: minimum dip size as a multiple of the ETF's 5-min ATR-14.
+    This replaces fixed % values — automatically tighter for DIA, wider for IWM."""
     if vix < 18:
-        return {"min_dip_pct": 0.3, "max_rsi": 42, "min_rvol": 0.8}
+        return {"min_dip_atr": 0.4, "max_rsi": 42, "min_rvol": 0.8}
     elif vix <= 25:
-        return {"min_dip_pct": 0.6, "max_rsi": 38, "min_rvol": 1.2}
+        return {"min_dip_atr": 0.7, "max_rsi": 38, "min_rvol": 1.2}
     elif vix <= 35:
-        return {"min_dip_pct": 1.0, "max_rsi": 33, "min_rvol": 1.5}
+        return {"min_dip_atr": 1.1, "max_rsi": 33, "min_rvol": 1.5}
     return None
 
 
-def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_slope: float = 0.0) -> dict | None:
+def _score_etf(
+    ticker: str,
+    price_data: dict,
+    vix: float,
+    now_et: datetime,
+    vix_slope: float = 0.0,
+    regime_info: dict | None = None,
+) -> dict | None:
     """Score one ETF for dip-buy. Returns opportunity dict or None if conditions not met."""
     candles = price_data.get("intraday_history", [])
     if len(candles) < 15:
@@ -165,18 +276,31 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
     if ENABLE_WHITELIST and (ticker, window) not in WHITELIST_CELLS:
         return None
 
+    # ── Market-regime gate (#2) ────────────────────────────────────────────────
+    regime = (regime_info or {}).get("regime", "mean_revert")
+    if regime == "trend_down":
+        return None  # dip buying has negative EV on trend-down days
+
     thresholds = _vix_thresholds(vix)
     if thresholds is None:
         return None  # extreme crash day
 
-    dip_pct = (day_open - current_price) / day_open * 100
-    if dip_pct < thresholds["min_dip_pct"]:
+    # Per-ETF ATR — normalises dip/support thresholds across different vol regimes (#1)
+    atr_5m = _get_atr_5m(ticker)
+    atr_unit = atr_5m if atr_5m > 0 else current_price * 0.002  # fallback: 0.2% of price
+
+    dip_dollars = day_open - current_price
+    dip_pct = dip_dollars / day_open * 100  # kept for display
+    if dip_dollars < atr_unit * thresholds["min_dip_atr"]:
         return None
 
     intraday_vwap = _compute_intraday_vwap(candles)
     closes = [c["close"] for c in candles if c.get("close")]
     rsi_5m = _compute_rsi(closes)
-    if rsi_5m > thresholds["max_rsi"]:
+
+    # On trend_up days require RSI < 30 — only true exhaustion warrants a dip entry
+    max_rsi = 30 if regime == "trend_up" else thresholds["max_rsi"]
+    if rsi_5m > max_rsi:
         return None
 
     rvol_data = price_data.get("rvol", {})
@@ -210,14 +334,16 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
     if valid_supports:
         nearest_label = min(valid_supports, key=lambda k: abs(current_price - valid_supports[k]))
         nearest_val = valid_supports[nearest_label]
-        dist_pct = abs(current_price - nearest_val) / nearest_val * 100
-        if dist_pct <= 0.2:
+        dist_abs = abs(current_price - nearest_val)
+        # ATR-normalised tolerances: 0.10 / 0.20 / 0.35 × ATR (#1)
+        # auto-widens for IWM/QQQ, tightens for DIA
+        if dist_abs <= 0.10 * atr_unit:
             score += 15
             signals.append(f"Near {nearest_label} ({nearest_val:.2f})")
-        elif dist_pct <= 0.4:
+        elif dist_abs <= 0.20 * atr_unit:
             score += 10
             signals.append(f"Near {nearest_label} ({nearest_val:.2f})")
-        elif dist_pct <= 0.7:
+        elif dist_abs <= 0.35 * atr_unit:
             score += 5
         else:
             score -= 5
@@ -255,6 +381,39 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
         score += 5
         signals.append("Hammer candle")
 
+    # Capitulation vs exhaustion detection (#5)
+    # Compare last 4 bars vs bars 5-8 back to gauge how fast volume is drying
+    recent_4 = [c.get("volume", 0) for c in candles[-4:]]
+    prior_4  = [c.get("volume", 0) for c in candles[-8:-4]]
+    avg_recent_4 = sum(recent_4) / max(len(recent_4), 1)
+    avg_prior_4  = sum(prior_4) / max(len(prior_4), 1)
+    rvol_drying_fast = avg_prior_4 > 0 and avg_recent_4 < avg_prior_4 * 0.55
+    below_vwap_far = intraday_vwap > 0 and current_price < intraday_vwap * 0.993
+
+    # Rising VIX + extreme RSI + far below VWAP in morning flush = knife still falling
+    if rsi_5m < 25 and vix_slope > 0.03 and below_vwap_far and window == "morning_flush":
+        score -= 15
+        signals.append("Capitulation risk — wait for base")
+    # Volume halved from peak + oversold + VIX calming = sellers genuinely done
+    elif rvol_drying_fast and rsi_5m < 35 and vix_slope <= 0.01:
+        score += 8
+        signals.append("Volume exhaustion (sellers done)")
+
+    # CVD — cumulative buy/sell pressure from 5-min bars, zero extra API calls (#8)
+    recent_cvd = _compute_cvd(candles[-12:]) if len(candles) >= 12 else _compute_cvd(candles)
+    prior_cvd: float | None = _compute_cvd(candles[-24:-12]) if len(candles) >= 24 else None
+    if recent_cvd > 0:
+        # Net buying in last 60 min — bounce already underway
+        score += 8
+        signals.append("CVD positive (buyers in control)")
+    elif prior_cvd is not None and recent_cvd > prior_cvd:
+        # Still net selling but improving — buying pressure building
+        score += 5
+        signals.append("CVD improving (selling pressure easing)")
+    elif prior_cvd is not None and recent_cvd < prior_cvd * 0.5:
+        # Selling accelerating — not ready yet
+        score -= 5
+
     # VIX context — slope matters more than level
     if 18 <= vix <= 35:
         if vix_slope < -0.02:   # vol crush — ideal for mean reversion
@@ -266,10 +425,32 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
             score -= 10
     # vix < 14: no bonus — complacency doesn't help dip-buys
 
+    # 30-min trend alignment — existing 5-min bars, zero extra API calls (#7)
+    trend_adj = _compute_intraday_trend(candles)
+    score += trend_adj
+    if trend_adj > 0:
+        signals.append("30-min trend recovering")
+    elif trend_adj < 0:
+        signals.append("30-min still declining")
+
     score += score_delta  # session window bonus/penalty
     score = min(score, 100)
 
-    if score < 65:
+    # Confidence tier — plain-language score label for simple view (#20)
+    if score >= 85:
+        confidence_tier = "very_high"
+    elif score >= 75:
+        confidence_tier = "high"
+    else:
+        confidence_tier = "medium"
+    _warn_words = ("Capitulation", "declining", "still")
+    top_reasons = [s for s in signals if not any(w in s for w in _warn_words)][:2]
+    if not top_reasons:
+        top_reasons = signals[:2]
+
+    if score < 72:
+        if score >= 65:  # near-miss: passed pattern checks, just below threshold
+            _log_near_miss(ticker, score, signals, current_price, window)
         return None
 
     # Hard lunch block — backtest 0% win rate; -5 penalty alone is insufficient
@@ -277,8 +458,17 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
         return None
 
     entry_price = current_price
-    target_price = round(entry_price * 1.01, 2)
-    stop_price = round(entry_price * 0.995, 2)
+    # ATR-based stops and targets (#11) — scales with ETF volatility
+    if atr_5m > 0:
+        raw_target = entry_price + max(1.0 * atr_5m, entry_price * 0.004)
+        raw_stop   = entry_price - max(0.5 * atr_5m, entry_price * 0.0025)
+        target_price = round(min(raw_target, entry_price * 1.015), 2)  # cap: 1.5%
+        stop_price   = round(max(raw_stop,  entry_price * 0.975),  2)  # floor: -2.5%
+        atr_adjusted = True
+    else:
+        target_price = round(entry_price * 1.01, 2)
+        stop_price   = round(entry_price * 0.995, 2)
+        atr_adjusted = False
 
     # Invalidation levels — structural thesis controls (different from stop P&L control)
     invalidation = {
@@ -304,6 +494,12 @@ def _score_etf(ticker: str, price_data: dict, vix: float, now_et: datetime, vix_
         "vix": vix,
         "dip_pct": round(dip_pct, 2),
         "invalidation": invalidation,
+        "side": "BUY",
+        "time_stop_minutes": 25,
+        "confidence_tier": confidence_tier,
+        "top_reasons": top_reasons,
+        "atr_5m": round(atr_5m, 4),
+        "atr_adjusted": atr_adjusted,
     }
 
 
@@ -368,8 +564,12 @@ def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: date
         score += 8
 
     window_cfg = SESSION_WINDOWS.get(window, {})
-    target = round(orb_high + orb_range * 1.5, 2)
     stop = round(orb_low * 0.999, 2)
+    risk = current_price - stop
+    # 3:1 R-multiple for trend continuation trades (#13); floor at 1.5× range extension
+    r3_target    = current_price + risk * 3.0 if risk > 0 else orb_high + orb_range * 1.5
+    range_target = orb_high + orb_range * 1.5
+    target = round(max(r3_target, range_target), 2)
 
     return {
         "ticker": ticker,
@@ -378,6 +578,7 @@ def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: date
         "entry_price": current_price,
         "target_price": target,
         "stop_price": stop,
+        "time_stop_minutes": 60,  # trend trades take longer — wider window
         "signals": signals,
         "signal_hints": {
             f"ORB-15 breakout above {orb_high:.2f}": SIGNAL_HINTS.get("ORB-15 breakout", "Price broke above the first 15-min trading range — institutional momentum signal"),
@@ -390,7 +591,10 @@ def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: date
         "rvol": round(rvol_value, 2),
         "vix": vix,
         "dip_pct": 0.0,
+        "side": "BUY",
         "orb_range": round(orb_range, 2),
+        "confidence_tier": "high" if min(score, 100) >= 80 else "medium",
+        "top_reasons": signals[:2],
     }
 
 
@@ -447,8 +651,8 @@ def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: date
         "signal_type": "vwap_reclaim",
         "score": min(score, 100),
         "entry_price": current_price,
-        "target_price": round(current_price * 1.008, 2),   # 0.8% target — tighter than dip buy
-        "stop_price": round(intraday_vwap * 0.998, 2),      # just below VWAP
+        "stop_price": round(intraday_vwap * 0.998, 2),
+        "target_price": round(current_price + (current_price - intraday_vwap * 0.998) * 1.5, 2),  # 1.5:1 R (#13)
         "signals": signals,
         "signal_hints": {
             f"VWAP reclaim ({intraday_vwap:.2f})": SIGNAL_HINTS.get("Near VWAP", "Price crossed back above today's average — institutions are buying"),
@@ -461,7 +665,139 @@ def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: date
         "rvol": round(rvol_reclaim, 2),
         "vix": vix,
         "dip_pct": dip_pct,
+        "side": "BUY",
+        "time_stop_minutes": 20,  # VWAP reclaims fail fast if they fail at all
+        "confidence_tier": "high" if min(score, 100) >= 80 else "medium",
+        "top_reasons": signals[:2],
     }
+
+
+def _detect_failed_breakdown(ticker: str, price_data: dict, vix: float, now_et: datetime) -> dict | None:
+    """Failed breakdown: price briefly broke below a key support then snapped back above it.
+    Trapped shorts must cover → strong mean-reversion setup."""
+    window = _get_session_window(now_et)
+    window_cfg = SESSION_WINDOWS.get(window, {})
+    if window_cfg.get("score_delta") is None:
+        return None
+
+    candles = price_data.get("intraday_history", [])
+    if len(candles) < 6:
+        return None
+
+    current_price = price_data.get("current_price", 0)
+    if not current_price:
+        return None
+
+    pivots = price_data.get("pivots") or {}
+    vp = price_data.get("volume_profile") or {}
+    s1 = pivots.get("S1", 0) or 0
+    s2 = pivots.get("S2", 0) or 0
+    val = vp.get("val", 0) or 0
+
+    support_levels = {k: v for k, v in {"S1": s1, "S2": s2, "VAL": val}.items() if v > 0}
+    if not support_levels:
+        return None
+
+    # Find the highest support level that was briefly breached then reclaimed
+    broken_support = None
+    broken_label = None
+    for label, level in sorted(support_levels.items(), key=lambda x: x[1], reverse=True):
+        prior_lows = [c.get("low", float("inf")) for c in candles[-5:-1]]
+        if any(low < level for low in prior_lows):
+            if current_price > level * 1.001:  # confirmed reclaim — at least 0.1% above
+                broken_support = level
+                broken_label = label
+                break
+
+    if broken_support is None:
+        return None
+
+    # Volume confirmation on the reclaim candle — real buyers, not a dead-cat drift
+    avg_vol = sum(c.get("volume", 0) for c in candles) / len(candles) if candles else 1
+    reclaim_vol = candles[-1].get("volume", 0)
+    rvol_reclaim = reclaim_vol / avg_vol if avg_vol > 0 else 1.0
+    if rvol_reclaim < 1.2:
+        return None
+
+    score = 74
+    signals = [
+        f"Failed breakdown below {broken_label} ({broken_support:.2f})",
+        f"Reclaim RVOL {rvol_reclaim:.1f}x",
+    ]
+    if rvol_reclaim >= 2.0:
+        score += 10
+        signals.append("High-volume reclaim (trapped shorts covering)")
+    elif rvol_reclaim >= 1.5:
+        score += 5
+
+    if window == "morning_flush":
+        score += 5  # morning failed breakdowns have highest historical probability
+    elif window == "power_hour":
+        score += 8
+
+    rsi_5m = _compute_rsi([c["close"] for c in candles if c.get("close")])
+    if rsi_5m < 40:
+        score += 5  # still oversold = more room to recover
+
+    if 14 <= vix <= 25:
+        score += 5  # calm-moderate VIX ideal for quick reclaims
+
+    window_delta = window_cfg.get("score_delta", 0) or 0
+    score += window_delta
+    score = min(score, 100)
+
+    intraday_vwap = _compute_intraday_vwap(candles)
+    rvol_data = price_data.get("rvol") or {}
+    rvol_value = rvol_data.get("value", rvol_reclaim) if isinstance(rvol_data, dict) else rvol_reclaim
+    day_open = price_data.get("day_open", current_price)
+    dip_pct = round((day_open - current_price) / day_open * 100, 2) if day_open else 0.0
+
+    return {
+        "ticker": ticker,
+        "signal_type": "failed_breakdown",
+        "score": score,
+        "entry_price": current_price,
+        "stop_price": round(broken_support * 0.997, 2),
+        "target_price": round(current_price + (current_price - broken_support * 0.997) * 2.5, 2),  # 2.5:1 R (#13)
+        "signals": signals,
+        "signal_hints": {
+            f"Failed breakdown below {broken_label} ({broken_support:.2f})": f"Price broke below {broken_label} then reversed sharply — sellers who bet on the breakdown are now trapped and must buy to exit, fueling the bounce",
+            f"Reclaim RVOL {rvol_reclaim:.1f}x": "Volume surge on the reclaim bar confirms real buying, not a low-volume drift back",
+        },
+        "session_window": window,
+        "session_window_label": window_cfg.get("label", window),
+        "intraday_vwap": round(intraday_vwap, 2),
+        "rsi_5m": rsi_5m,
+        "rvol": round(rvol_value, 2),
+        "vix": vix,
+        "dip_pct": dip_pct,
+        "side": "BUY",
+        "time_stop_minutes": 30,
+        "confidence_tier": "high" if score >= 80 else "medium",
+        "top_reasons": signals[:2],
+    }
+
+
+def _refine_entry_1min(ticker: str, signal: dict) -> dict:
+    """
+    Sharpen dip-buy entry using 1-min bars (#26).
+    Mean-reversion edge is sensitive to entry price — 0.05% improvement is meaningful
+    when the total target is 0.5–1.0%.  Entry moves DOWN only, never up.
+    """
+    try:
+        hist = yf.Ticker(ticker).history(period="1d", interval="1m", prepost=False)
+        if hist.empty or len(hist) < 3:
+            return {**signal, "entry_refined": False}
+        recent_lows = [float(hist.iloc[i]["Low"]) for i in range(-3, 0)]
+        best_low = min(recent_lows)
+        # Floor: never below 5-min bar's implied low (0.5% cushion)
+        floor = signal["entry_price"] * 0.995
+        refined = max(best_low, floor)
+        if refined < signal["entry_price"] - 0.01:
+            return {**signal, "entry_price": round(refined, 2), "entry_refined": True}
+    except Exception as exc:
+        logger.debug("1-min refinement failed %s: %s", ticker, exc)
+    return {**signal, "entry_refined": False}
 
 
 def check_vix_spike() -> dict | None:
@@ -510,8 +846,8 @@ def _get_no_signal_reason(price_data: dict, vix: float, now_et: datetime) -> str
     current_price = price_data.get("current_price", 0)
     day_open = price_data.get("day_open", current_price)
     if day_open and current_price:
-        dip_pct = (day_open - current_price) / day_open * 100
-        if dip_pct < thresholds["min_dip_pct"]:
+        atr_approx = current_price * 0.002  # rough fallback for diagnostic only
+        if (day_open - current_price) < atr_approx * thresholds["min_dip_atr"]:
             return "insufficient_dip"
 
     candles = price_data.get("intraday_history", [])
@@ -560,6 +896,8 @@ def _determine_scenario_key(
             return "buy_orb_breakout"
         elif stype == "vwap_reclaim":
             return "buy_vwap_reclaim"
+        elif stype == "failed_breakdown":
+            return "buy_vwap_reclaim"  # closest semantic match — reclaim after breach
         else:
             return "buy_dip_at_support"
 
@@ -569,13 +907,14 @@ def _determine_scenario_key(
     if no_signal_reasons:
         most_common = Counter(no_signal_reasons).most_common(1)[0][0]
         key_map = {
-            "outside_hours": "no_buy_outside_hours",
-            "vix_extreme":   "no_buy_vix_extreme",
-            "still_falling": "no_buy_still_falling",
+            "outside_hours":    "no_buy_outside_hours",
+            "vix_extreme":      "no_buy_vix_extreme",
+            "still_falling":    "no_buy_still_falling",
             "insufficient_dip": "no_buy_insufficient_dip",
             "rsi_not_oversold": "no_buy_rsi_not_oversold",
-            "lunch_drift":   "no_buy_lunch_drift",
-            "score_too_low": "no_buy_score_too_low",
+            "lunch_drift":      "no_buy_lunch_drift",
+            "score_too_low":    "no_buy_score_too_low",
+            "regime_trend_down": "no_buy_vix_extreme",  # closest semantic match
         }
         return key_map.get(most_common, "no_buy_score_too_low")
 
@@ -612,9 +951,13 @@ def scan_dip_opportunities(
     except Exception:
         vix_slope = 0.0
 
+    # Market regime — computed once, cached 60 s; gates all four signal types
+    regime_info = classify_regime(vix, vix_slope)
+
     dip_opportunities: list[dict] = []
     orb_opportunities: list[dict] = []
     vwap_opportunities: list[dict] = []
+    failed_breakdown_opportunities: list[dict] = []
     no_signal_reasons: list[str] = []
     price_cache: dict[str, dict] = {}
 
@@ -625,11 +968,15 @@ def scan_dip_opportunities(
                 continue
             price_cache[ticker] = result
 
-            dip = _score_etf(ticker, result, vix, now_et, vix_slope)
+            dip = _score_etf(ticker, result, vix, now_et, vix_slope, regime_info)
             if dip:
                 dip_opportunities.append(_add_pnl(dip, capital))
             else:
-                no_signal_reasons.append(_get_no_signal_reason(result, vix, now_et))
+                # Add regime gate reason if applicable
+                if regime_info.get("regime") == "trend_down":
+                    no_signal_reasons.append("regime_trend_down")
+                else:
+                    no_signal_reasons.append(_get_no_signal_reason(result, vix, now_et))
 
             orb = _detect_orb_breakout(ticker, result, vix, now_et)
             if orb:
@@ -639,20 +986,28 @@ def scan_dip_opportunities(
             if vwap:
                 vwap_opportunities.append(_add_pnl(vwap, capital))
 
+            fb = _detect_failed_breakdown(ticker, result, vix, now_et)
+            if fb:
+                failed_breakdown_opportunities.append(_add_pnl(fb, capital))
+
         except Exception as exc:
             logger.warning("dip_scanner: error scanning %s — %s", ticker, exc)
 
-    for lst in (dip_opportunities, orb_opportunities, vwap_opportunities):
+    for lst in (dip_opportunities, orb_opportunities, vwap_opportunities, failed_breakdown_opportunities):
         lst.sort(key=lambda x: x["score"], reverse=True)
 
     vix_spike = check_vix_spike()
     session_window = _get_session_window(now_et)
 
-    all_opps = dip_opportunities + orb_opportunities + vwap_opportunities
+    all_opps = dip_opportunities + orb_opportunities + vwap_opportunities + failed_breakdown_opportunities
     best = max(all_opps, key=lambda x: x["score"]) if all_opps else None
 
+    # 1-min entry refinement on best signal — improves slippage without extra scan cost (#26)
+    if best and best.get("signal_type") in ("dip_buy", "vwap_reclaim", "failed_breakdown"):
+        best = _refine_entry_1min(best["ticker"], best)
+
     scenario_key = _determine_scenario_key(
-        dip_opportunities, orb_opportunities, vwap_opportunities,
+        dip_opportunities, orb_opportunities, vwap_opportunities + failed_breakdown_opportunities,
         vix_spike, session_window, vix, no_signal_reasons,
     )
 
@@ -660,12 +1015,14 @@ def scan_dip_opportunities(
         "opportunities": dip_opportunities,
         "orb_opportunities": orb_opportunities,
         "vwap_opportunities": vwap_opportunities,
+        "failed_breakdown_opportunities": failed_breakdown_opportunities,
         "best": best,
         "vix_spike_prep": vix_spike,
         "scenario_key": scenario_key,
         "tickers_scanned": len(tickers),
         "session_window": session_window,
         "vix": round(vix, 2),
+        "regime": regime_info,
         "timestamp": now_et.isoformat(),
         "capital": capital,
     }
@@ -724,10 +1081,24 @@ def _backfill_ticker(ticker: str, days: int = 60) -> list[dict]:
             continue
 
         day_open = float(day_bars.iloc[0]["Open"])
-        fired_this_day = False  # one alert per day per ticker
+        # ATR approximation — 0.2% of open (same fallback as live scanner)
+        atr_approx = day_open * 0.002
+
+        # Track one signal per type per day (not one globally)
+        fired_this_day: set[str] = set()
+
+        # Pre-compute opening range (first 15 bars = 75 min) for ORB backfill
+        first_15 = [
+            {"close": float(r["Close"]), "high": float(r["High"]),
+             "low": float(r["Low"]), "volume": int(r["Volume"])}
+            for _, r in day_bars.iloc[:15].iterrows()
+        ]
+        orb_high = max(c["high"] for c in first_15) if first_15 else day_open
+        orb_low  = min(c["low"]  for c in first_15) if first_15 else day_open
+        orb_range = orb_high - orb_low
 
         for i in range(15, len(day_bars)):
-            if fired_this_day:
+            if len(fired_this_day) == 4:  # all signal types fired for today
                 break
 
             bar_time = day_bars.index[i]
@@ -742,86 +1113,121 @@ def _backfill_ticker(ticker: str, days: int = 60) -> list[dict]:
                 for _, r in day_bars.iloc[:i + 1].iterrows()
             ]
             current_price = candles_so_far[-1]["close"]
-
-            dip_pct = (day_open - current_price) / day_open * 100
-            if dip_pct < thresholds["min_dip_pct"]:
-                continue
-
             intraday_vwap = _compute_intraday_vwap(candles_so_far)
-            closes = [c["close"] for c in candles_so_far]
-            rsi_5m = _compute_rsi(closes)
-            if rsi_5m > thresholds["max_rsi"]:
-                continue
+            avg_vol = sum(c["volume"] for c in candles_so_far) / len(candles_so_far)
+            rvol_val = candles_so_far[-1]["volume"] / max(1, avg_vol)
 
-            recent_vols = [c["volume"] for c in candles_so_far[-6:]]
-            if len(recent_vols) < 4 or recent_vols[-1] >= recent_vols[-4]:
-                continue  # still falling
+            def _resolve(entry: float, target: float, stop: float, bar_idx: int) -> tuple[str, float, str, str | None]:
+                """Simulate outcome by walking future bars. Returns (status, outcome_price, resolved_by, five_min_dir)."""
+                future = day_bars.iloc[bar_idx + 1:]
+                status_r = "expired"
+                outcome_r = entry
+                resolved_r = "eod_close"
+                fmd = None
+                for j, (_, fb) in enumerate(future.iterrows()):
+                    fhigh = float(fb["High"])
+                    flow  = float(fb["Low"])
+                    fclose = float(fb["Close"])
+                    if j == 0:
+                        diff = (fclose - entry) / entry * 100
+                        fmd = "up" if diff > 0.05 else ("down" if diff < -0.05 else "flat")
+                    if fhigh >= target:
+                        return "win", target, "target_hit", fmd
+                    if flow <= stop:
+                        return "loss", stop, "stop_hit", fmd
+                    outcome_r = fclose
+                if status_r == "expired":
+                    status_r = "win" if outcome_r > entry else "loss"
+                return status_r, outcome_r, resolved_r, fmd
 
-            # Build mock price_data for scorer
-            mock_price_data = {
-                "current_price": current_price,
-                "day_open": day_open,
-                "intraday_history": candles_so_far,
-                "pivots": {"S1": s1, "S2": s2},
-                "volume_profile": {},
-                "rvol": {"value": candles_so_far[-1]["volume"] / max(1, sum(c["volume"] for c in candles_so_far) / len(candles_so_far))},
-            }
+            def _append(stype: str, entry: float, target: float, stop: float, score: int, sigs: list[str]) -> None:
+                status, outcome_price, resolved_by, fmd = _resolve(entry, target, stop, i)
+                pnl_pct = (outcome_price - entry) / entry * 100
+                alerts.append({
+                    "ticker": ticker,
+                    "signal_type": stype,
+                    "side": "BUY",
+                    "entry_price": round(entry, 2),
+                    "target_price": round(target, 2),
+                    "stop_price": round(stop, 2),
+                    "entry_time": bar_time.isoformat(),
+                    "score": score,
+                    "signals": sigs,
+                    "session_window": window,
+                    "vix_at_entry": day_vix,
+                    "capital_used": 1000.0,
+                    "source": "backtest",
+                    "status": status,
+                    "outcome_price": round(outcome_price, 2),
+                    "actual_pnl_pct": round(pnl_pct, 3),
+                    "actual_pnl_dollar": round(pnl_pct / 100 * 1000.0, 2),
+                    "resolved_by": resolved_by,
+                    "five_min_direction": fmd,
+                })
+                fired_this_day.add(stype)
 
-            opp = _score_etf(ticker, mock_price_data, day_vix, now_et)
-            if not opp:
-                continue
+            # ── Dip Buy ──────────────────────────────────────────────────────────
+            if "dip_buy" not in fired_this_day:
+                dip_dollars = day_open - current_price
+                if dip_dollars >= atr_approx * thresholds["min_dip_atr"]:
+                    closes = [c["close"] for c in candles_so_far]
+                    rsi_5m = _compute_rsi(closes)
+                    if rsi_5m <= thresholds["max_rsi"]:
+                        recent_vols = [c["volume"] for c in candles_so_far[-6:]]
+                        if len(recent_vols) >= 4 and recent_vols[-1] < recent_vols[-4]:
+                            mock_price_data = {
+                                "current_price": current_price,
+                                "day_open": day_open,
+                                "intraday_history": candles_so_far,
+                                "pivots": {"S1": s1, "S2": s2},
+                                "volume_profile": {},
+                                "rvol": {"value": rvol_val},
+                            }
+                            opp = _score_etf(ticker, mock_price_data, day_vix, now_et)
+                            if opp:
+                                _append(
+                                    "dip_buy",
+                                    current_price,
+                                    opp.get("target_price", round(current_price * 1.01, 2)),
+                                    opp.get("stop_price",   round(current_price * 0.995, 2)),
+                                    opp["score"],
+                                    opp["signals"],
+                                )
 
-            # Resolve outcome using remaining bars of the same day
-            entry = current_price
-            target = round(entry * 1.01, 2)
-            stop = round(entry * 0.995, 2)
-            status = "expired"
-            outcome_price = entry
-            resolved_by = "eod_close"
+            # ── ORB Breakout ─────────────────────────────────────────────────────
+            if "orb_breakout" not in fired_this_day and window in ("morning_trend", "lunch_drift", "power_hour"):
+                if current_price > orb_high * 1.001 and rvol_val > 1.3:
+                    risk = max(current_price - (orb_high - orb_range * 0.5), current_price * 0.003)
+                    stop  = round(current_price - risk, 2)
+                    target = round(current_price + max(risk * 3.0, orb_range * 1.5), 2)
+                    score = min(100, 65 + int((rvol_val - 1.3) * 15))
+                    _append("orb_breakout", current_price, target, stop, score,
+                            [f"ORB-15 breakout above {orb_high:.2f}", f"RVOL {rvol_val:.1f}x"])
 
-            future_bars = day_bars.iloc[i + 1:]
-            for _, fbar in future_bars.iterrows():
-                fhigh = float(fbar["High"])
-                flow = float(fbar["Low"])
-                fclose = float(fbar["Close"])
-                if fhigh >= target:
-                    status = "win"
-                    outcome_price = target
-                    resolved_by = "target_hit"
-                    break
-                if flow <= stop:
-                    status = "loss"
-                    outcome_price = stop
-                    resolved_by = "stop_hit"
-                    break
-                outcome_price = fclose  # track EOD
+            # ── VWAP Reclaim ─────────────────────────────────────────────────────
+            if "vwap_reclaim" not in fired_this_day and i >= 5 and window in ("morning_flush", "morning_trend", "power_hour"):
+                prev_candles = candles_so_far[:-1]
+                prev_vwap = _compute_intraday_vwap(prev_candles)
+                prev_close = prev_candles[-1]["close"] if prev_candles else current_price
+                if prev_close < prev_vwap and current_price > intraday_vwap and rvol_val > 1.5:
+                    stop  = round(intraday_vwap * 0.998, 2)
+                    risk  = current_price - stop
+                    target = round(current_price + risk * 1.5, 2)
+                    score = min(100, 65 + int((rvol_val - 1.5) * 12))
+                    _append("vwap_reclaim", current_price, target, stop, score,
+                            [f"VWAP reclaim ({intraday_vwap:.2f})", f"Reclaim RVOL {rvol_val:.1f}x"])
 
-            if status == "expired":
-                status = "win" if outcome_price > entry else "loss"
-                resolved_by = "eod_close"
-
-            pnl_pct = (outcome_price - entry) / entry * 100
-            pnl_dollar = pnl_pct / 100 * 1000.0  # backtest uses $1k default
-
-            alerts.append({
-                "ticker": ticker,
-                "entry_price": entry,
-                "target_price": target,
-                "stop_price": stop,
-                "entry_time": bar_time.isoformat(),
-                "score": opp["score"],
-                "signals": opp["signals"],
-                "session_window": opp["session_window"],
-                "vix_at_entry": day_vix,
-                "capital_used": 1000.0,
-                "source": "backtest",
-                "status": status,
-                "outcome_price": round(outcome_price, 2),
-                "actual_pnl_pct": round(pnl_pct, 3),
-                "actual_pnl_dollar": round(pnl_dollar, 2),
-                "resolved_by": resolved_by,
-            })
-
-            fired_this_day = True  # one alert per day per ticker
+            # ── Failed Breakdown ─────────────────────────────────────────────────
+            if "failed_breakdown" not in fired_this_day and i >= 6 and window in ("morning_trend", "power_hour"):
+                support = min(s1, s2, orb_low)
+                lows = [c["low"] for c in candles_so_far[-6:]]
+                # Price briefly pierced support then snapped back above it
+                if min(lows[:-1]) < support and current_price > support * 1.001 and rvol_val > 1.4:
+                    stop  = round(support * 0.997, 2)
+                    risk  = current_price - stop
+                    target = round(current_price + risk * 2.5, 2)
+                    score = min(100, 65 + int((rvol_val - 1.4) * 12))
+                    _append("failed_breakdown", current_price, target, stop, score,
+                            [f"Failed breakdown below {support:.2f}", f"Reclaim RVOL {rvol_val:.1f}x"])
 
     return alerts

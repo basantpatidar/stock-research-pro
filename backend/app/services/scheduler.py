@@ -84,6 +84,14 @@ async def _resolve_open_alerts():
                 except Exception:
                     pass
 
+            # Pre-fetch 1-min history for five_min_direction (#29) — one call per unique ticker
+            one_min_bars: dict[str, object] = {}
+            for ticker in tickers_needed:
+                try:
+                    one_min_bars[ticker] = yf.Ticker(ticker).history(period="2d", interval="1m", prepost=False)
+                except Exception:
+                    pass
+
             for row in rows:
                 price = prices.get(row.ticker, 0)
                 if not price:
@@ -107,6 +115,27 @@ async def _resolve_open_alerts():
                 row.outcome_time = now_utc
                 row.actual_pnl_pct = round((row.outcome_price - row.entry_price) / row.entry_price * 100, 3)
                 row.actual_pnl_dollar = round(row.actual_pnl_pct / 100 * (row.capital_used or 1000.0), 2)
+
+                # Forward 5-min bar direction (#29) — price 5 min after entry vs entry_price
+                if row.five_min_direction is None and row.entry_time:
+                    try:
+                        bars = one_min_bars.get(row.ticker)
+                        if bars is not None and not bars.empty:
+                            from datetime import timedelta
+                            target_ts = row.entry_time + timedelta(minutes=5)
+                            # Find closest bar at or after target_ts
+                            bars_after = bars[bars.index >= target_ts]
+                            if not bars_after.empty:
+                                fwd_close = float(bars_after.iloc[0]["Close"])
+                                diff_pct = (fwd_close - row.entry_price) / row.entry_price * 100
+                                if diff_pct > 0.05:
+                                    row.five_min_direction = "up"
+                                elif diff_pct < -0.05:
+                                    row.five_min_direction = "down"
+                                else:
+                                    row.five_min_direction = "flat"
+                    except Exception:
+                        pass
 
             await db.commit()
     except Exception as exc:

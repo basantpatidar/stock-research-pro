@@ -18,16 +18,20 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def get_url() -> str:
+def get_url(async_driver: bool = False) -> str:
     url = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://postgres:postgres@localhost:5432/stockresearch",
     )
-    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+    # Ensure the URL uses the right driver for each mode
+    base = url.replace("postgresql+asyncpg://", "postgresql://").replace("postgresql+psycopg2://", "postgresql://")
+    if async_driver:
+        return "postgresql+asyncpg://" + base.split("://", 1)[1]
+    return "postgresql+psycopg2://" + base.split("://", 1)[1]
 
 
 def run_migrations_offline() -> None:
-    url = get_url()
+    url = get_url(async_driver=False)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -50,7 +54,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    url = get_url()
+    url = get_url(async_driver=True)
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = url
 
