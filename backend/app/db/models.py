@@ -81,6 +81,7 @@ class ScannerAlert(Base):
     session_window: Mapped[str | None] = mapped_column(String(30), nullable=True)
     vix_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
     capital_used: Mapped[float] = mapped_column(Float, default=1000.0)
+    signal_type: Mapped[str | None] = mapped_column(String(30), nullable=True)   # dip_buy | orb_breakout | vwap_reclaim | failed_breakdown
     source: Mapped[str] = mapped_column(String(20), default="live")   # "live" | "backtest"
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open / win / loss / expired
     outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -88,6 +89,7 @@ class ScannerAlert(Base):
     actual_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     actual_pnl_dollar: Mapped[float | None] = mapped_column(Float, nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String(30), nullable=True)  # target_hit / stop_hit / eod_close
+    five_min_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)  # up / down / flat — price direction at entry+5min (#29)
 
 
 class StockDataCache(Base):
