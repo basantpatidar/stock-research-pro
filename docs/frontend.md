@@ -19,6 +19,7 @@
 | `ScreenerPage.tsx` | `/screener` | Filter builder + results + preset management |
 | `MacroPage.tsx` | `/macro` | Sector heatmap + geopolitical events + macro indicators + FRED Credit & Rates Dashboard |
 | `UsagePage.tsx` | `/usage` | Token usage chart (30d) + guard-rail limits table |
+| `DashboardPage.tsx` | `/dashboard` | Market pulse, top movers, sector rotation grid, Weekly P&L bar, Daily Target Trade Scanner (DipScannerCard + ScannerPerformanceCard) |
 
 **ResearchPage flow:**
 1. User enters ticker → `runSearch()` fires simultaneously:
@@ -67,6 +68,40 @@ Props: `title`, `tier: 1|2|3`, `estimatedTokens?`, `loading`, `error`, `onExpand
 **`EarningsQualityPanel.tsx`** — 4-model institutional earnings quality analysis: Piotroski F-Score, Beneish M-Score, Altman Z-Score, Accruals Ratio. Each metric shows a direct verdict badge + score + plain-English explanation.
 **`OptionsIntelligencePanel.tsx`** — Institutional-grade options signals: GEX, max pain, IV analysis, put/call skew, vol term structure. All computed from free yfinance data. Each metric shows verdict + signal.
 **`Tier3Panels.tsx`** — BullBearPanel, BacktesterPanel, CongressionalPanel, EarningsTranscriptPanel, PaperTradePanel
+
+### Daily Target Trade Scanner (`frontend/src/components/`)
+
+**`DipScannerCard.tsx`**
+Main scanner card on DashboardPage. Features:
+- Capital input (localStorage key `dts_capital`, default $1,000) + Tier 1/2 toggle
+- `SituationSummary` rendered between controls and opportunity card — idle shows "Ready to scan" (expanded), post-scan shows scenario-matched guidance (compact, collapsible)
+- VIX spike prep amber banner when `result.vix_spike_prep` is non-null
+- Opportunity card: signal-type badge (ORB Breakout / VWAP Reclaim; hidden for plain dip_buy), left-border color follows signal type, entry/target/stop grid, P&L row, signal chips with hover hints
+- "Explain this setup" button — disabled in saver mode, ~200 tokens via tier2 API
+- Other setups row: all signal types (dip_buy + orb + vwap) with type label + score chip
+
+**`ScannerPerformanceCard.tsx`**
+Analytics card on DashboardPage. Features:
+- Win rate, expected value/trade, current streak
+- SVG cumulative P&L line chart (chronological from analytics endpoint)
+- By-ETF and by-session-window mini breakdowns
+- Recent 20 alerts table with LIVE / BACKTEST source labels
+- "Seed 60-day history" button → `POST /dip-scanner/backfill`
+- "Gathering data" note shown until ≥ 30 resolved signals
+
+**`SituationSummary.tsx`**
+Props: `scenarioKey: string|null`, `compact?: boolean`
+Looks up `scenarioKey` in `scenarios.json`. Falls back to `"waiting"` for unknown keys.
+Renders: left-border + background tinted by scenario type, label badge (`BUY SIGNAL` / `STAND BY` / `PREPARE` / `SELL SIGNAL` / `HOLD`), headline, expandable body with summary, action, risk note.
+`compact=true`: body hidden by default, click headline to toggle.
+
+**`WeeklyTargetBar.tsx`**
+Placed above scanner grid on DashboardPage. Features:
+- Progress bar: `pnl / target × 100%`, color green (hit) / blue (positive) / red (negative)
+- Inline-editable weekly target (click dashed underline → input, localStorage key `dts_weekly_target`, default $150)
+- Wins / losses count, "TARGET HIT" badge when goal reached
+- Day-by-day P&L: Mon–Fri columns, green/red per day
+- Data from `GET /dip-scanner/weekly`
 
 ---
 

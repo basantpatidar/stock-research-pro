@@ -1,0 +1,209 @@
+{
+  "waiting": {
+    "type": "neutral",
+    "headline": "Ready to scan",
+    "summary": "Press 'Scan Now' or wait for the automatic scan every 5 minutes. The scanner checks SPY, QQQ, IWM, and DIA for intraday dip-buy setups, ORB breakouts, and VWAP reclaims during market hours (9:40 AM – 3:15 PM ET).",
+    "action": "No action needed — alerts fire automatically during market hours.",
+    "risk_note": "No position — no risk"
+  },
+
+  "market_closed": {
+    "type": "neutral",
+    "headline": "Market is closed right now",
+    "summary": "The US stock market trades from 9:30 AM to 4:00 PM ET. Outside these hours, prices shown are from the prior session close. Pre-market and after-hours data exists but has very low volume and wide bid-ask spreads — not suitable for this strategy.",
+    "action": "Check back during market hours. Use this time to review your weekly P&L and set your capital amount for tomorrow.",
+    "risk_note": "No risk — scanner only operates during market hours"
+  },
+
+  "no_buy_vix_extreme": {
+    "type": "no_buy",
+    "headline": "Extreme fear in the market — sitting this one out",
+    "summary": "VIX is above 35, meaning the market is in panic mode. When fear is this elevated, intraday dips on SPY and QQQ don't bounce within the same day — they often extend for 2 to 3 days before recovering. Entering here would mean holding through a much larger drawdown than planned.",
+    "action": "Stay in cash. Watch VIX — when it drops below 30 and starts stabilizing, the next dip buy will be very high probability. Patience here protects your capital.",
+    "risk_note": "Risk: VERY HIGH — losses could extend 2–5% before any recovery on extreme fear days"
+  },
+
+  "no_buy_outside_hours": {
+    "type": "neutral",
+    "headline": "Outside the active trading window",
+    "summary": "The scanner only signals between 9:40 AM and 3:15 PM ET. The first 10 minutes after open are excluded because bid-ask spreads are wide and price discovery is chaotic. After 3:15 PM, holding a day trade into the close introduces overnight gap risk that this strategy does not account for.",
+    "action": "No action during this window. If you want to hold overnight, that is a swing trade — a different strategy with different risk rules.",
+    "risk_note": "Risk: Moderate — wide spreads at open, gap risk near close"
+  },
+
+  "no_buy_still_falling": {
+    "type": "no_buy",
+    "headline": "Sellers still in control — wait for exhaustion",
+    "summary": "Volume is still rising on the down move, which means active selling pressure. Buying into rising sell volume is like stepping in front of a moving train. The pattern to wait for is a large volume spike followed by declining volume on subsequent candles — that means sellers are running out.",
+    "action": "Do nothing right now. Watch the volume bars on the 5-min chart. When you see a large red volume bar followed by a smaller one, that is the exhaustion signal. The scanner catches this automatically.",
+    "risk_note": "Risk: HIGH — no floor confirmed yet, further downside likely before reversal"
+  },
+
+  "no_buy_insufficient_dip": {
+    "type": "no_buy",
+    "headline": "Not enough of a pullback yet",
+    "summary": "The ETF hasn't pulled back far enough from the open to offer a worthwhile risk/reward entry. A dip of less than 0.3% doesn't give enough room for the recovery bounce to cover the target. We need a meaningful pullback so the upside potential clearly exceeds the risk.",
+    "action": "Wait for a deeper dip. If SPY or QQQ pulls back 0.5% or more from the open toward a support level like S1 or VWAP, that is when this setup starts getting interesting.",
+    "risk_note": "Risk: LOW-MEDIUM — insufficient reward for the risk at current levels"
+  },
+
+  "no_buy_rsi_not_oversold": {
+    "type": "no_buy",
+    "headline": "Price dipped but sellers aren't exhausted yet",
+    "summary": "The ETF is down from the open but the 5-minute RSI hasn't reached oversold territory. RSI below 35–40 on the 5-min chart signals that short-term selling has gone too far and a snap-back is likely. Without this confirmation, the dip could simply continue lower without bouncing.",
+    "action": "Keep watching. If price continues lower and RSI drops below 38, the setup becomes valid. Don't chase — let it come to the level where the math works.",
+    "risk_note": "Risk: MEDIUM — dip may not be complete, could extend further before reversing"
+  },
+
+  "no_buy_no_support": {
+    "type": "no_buy",
+    "headline": "No clear floor visible",
+    "summary": "The current price isn't near any identifiable support level — not VWAP, not S1 pivot, not the value area low. Without a floor to lean against, there's no logical place to put a stop loss, which means no defined risk. Trading without a defined stop is gambling, not a strategy.",
+    "action": "Wait for price to reach a known support level. S1 pivot, VWAP, and VAL are the three key floors. When price approaches one of those with oversold RSI and declining volume, that is your setup.",
+    "risk_note": "Risk: HIGH — no defined stop level means unlimited downside"
+  },
+
+  "no_buy_score_too_low": {
+    "type": "no_buy",
+    "headline": "Setup exists but not clean enough to act",
+    "summary": "Some positive signals are present but the overall score hasn't crossed the threshold for a high-confidence entry. This happens when conditions are mixed — a partial dip, moderate RSI, or volume that isn't quite confirming. Forcing a trade on a marginal setup is how small losses turn into big ones.",
+    "action": "Be patient. A score of 65 or higher is worth waiting for. If conditions improve over the next 10 to 15 minutes, the scanner will fire an alert automatically.",
+    "risk_note": "Risk: MEDIUM — marginal setups have lower win rates historically"
+  },
+
+  "no_buy_lunch_drift": {
+    "type": "no_buy",
+    "headline": "Lunch drift — weakest trading window of the day",
+    "summary": "12 PM to 2 PM ET is the quietest part of the day. Volume drops significantly, institutional traders are away from desks, and price tends to drift without direction. Mean reversion setups during this window have the lowest historical win rate — around 57% versus 80% during Power Hour.",
+    "action": "Check back after 2 PM when Power Hour begins. That is when institutional order flow resumes and intraday setups become significantly more reliable.",
+    "risk_note": "Risk: MEDIUM — lower win rate, unpredictable drift during lunch hours"
+  },
+
+  "no_buy_weekly_target_hit": {
+    "type": "no_buy",
+    "headline": "Weekly target already hit — protect your gains",
+    "summary": "You have already reached your weekly profit goal. Every additional trade from here is taking on risk you do not need to take. One bad trade can erase multiple winning days. Experienced traders know that stopping after hitting a weekly target is just as important as knowing when to enter.",
+    "action": "Step away from the scanner today. Come back Monday with a fresh start. The market will always be there.",
+    "risk_note": "Risk: Unnecessary — you have already won this week"
+  },
+
+  "buy_dip_at_support": {
+    "type": "buy",
+    "headline": "Dip at support — entry zone active",
+    "summary": "The ETF has pulled back to a key support level with oversold RSI on the 5-min chart and declining sell volume. This is the classic mean reversion setup — price has stretched too far from fair value, sellers are exhausted, and the probability of a bounce back to VWAP or higher is elevated. Broad market ETFs like SPY and QQQ have historically recovered from these levels within the same session more than 70% of the time.",
+    "action": "Buy at the displayed entry price. Place your stop at the stop price shown and your limit sell at the target. Set the orders and walk away — do not watch every tick.",
+    "risk_note": "Risk: LOW-MEDIUM — defined stop, 2:1 R:R minimum, high-probability mean reversion"
+  },
+
+  "buy_orb_breakout": {
+    "type": "buy",
+    "headline": "Opening range breakout — momentum confirmed",
+    "summary": "The ETF has broken above the first 15-minute trading range with above-average volume. This is a momentum trade, not a mean reversion play. The opening range sets the day's initial balance — when price breaks out with conviction and volume, institutional algorithms and momentum traders typically push it further in the same direction.",
+    "action": "Buy the breakout. This is trend-following, not buying a dip — you are going with momentum. Stop is at the bottom of the opening range. Target is 1.5x the range height above the breakout point.",
+    "risk_note": "Risk: LOW-MEDIUM — breakout confirmed by volume, defined stop at ORB low"
+  },
+
+  "buy_vwap_reclaim": {
+    "type": "buy",
+    "headline": "VWAP reclaim — institutions stepping in",
+    "summary": "Price dipped below the day's volume-weighted average price and just closed back above it with elevated volume. VWAP is the benchmark institutional traders use — when price reclaims VWAP with volume, it signals that buyers are willing to pay above the day's average price. This often leads to continuation higher toward the day's prior high.",
+    "action": "Buy the VWAP reclaim. Stop is just below the VWAP level — if price drops back below VWAP, the thesis is broken. Target is the prior session high or a 0.8% gain from entry.",
+    "risk_note": "Risk: LOW — tight stop just below VWAP, institutional-backed signal"
+  },
+
+  "buy_vix_spike_fade": {
+    "type": "buy",
+    "headline": "Fear peak fading — high-conviction bounce setup",
+    "summary": "VIX spiked hard intraday and is now starting to pull back. This pattern — a sharp fear spike followed by a fade — is one of the most reliable intraday reversal signals. When everyone panics at once and sells simultaneously, it creates the oversold condition. When fear subsides, the snapback can be sharp and fast.",
+    "action": "Enter carefully. Consider using a slightly smaller position size since volatility is elevated. Target is a recovery to VWAP or the prior support level. Keep your stop tighter than usual — below the recent swing low.",
+    "risk_note": "Risk: MEDIUM — VIX elevated means bigger swings both ways, size down slightly"
+  },
+
+  "prep_vix_spike": {
+    "type": "prep",
+    "headline": "VIX spiking — dip buy opportunity likely forming",
+    "summary": "VIX is surging intraday while SPY or QQQ is pulling back meaningfully. This is not yet an entry signal — it is a preparation signal. Fear spikes like this often create the oversold conditions that lead to sharp intraday bounces. The exhaustion point is usually when volume peaks and then starts declining.",
+    "action": "Get ready. Open your broker app. Have your order size calculated based on your capital. The scanner will fire the actual entry alert when RVOL peaks and RSI hits oversold territory — typically within the next 15 to 30 minutes after a VIX spike.",
+    "risk_note": "No risk yet — you are in observation mode, no position"
+  },
+
+  "prep_orb_forming": {
+    "type": "prep",
+    "headline": "Opening range forming — stand by",
+    "summary": "The first 15 minutes of trading set the opening range. This period has high volatility, wide spreads, and unpredictable moves as traders react to overnight news and gap openings. The scanner waits for the range to fully form before looking for breakout or reversal signals.",
+    "action": "Watch but do not trade yet. Note where SPY and QQQ open versus yesterday's close. A gap down is a potential fade setup. The scanner begins signaling at 9:40 AM.",
+    "risk_note": "Risk: HIGH if you trade now — wide spreads and chaotic price discovery in the first 10 minutes"
+  },
+
+  "prep_power_hour": {
+    "type": "prep",
+    "headline": "Power Hour starting — best window of the day",
+    "summary": "2 PM to 3:15 PM ET is historically the highest win-rate window for this strategy. Institutional portfolio managers close out intraday positions, rebalance, and execute large orders during this period. This creates more directional and predictable price action compared to the choppy midday session.",
+    "action": "Stay alert. If a setup has not fired yet today, this is the highest-probability window for one to appear. Keep the scanner open and be ready to act within a few minutes of an alert.",
+    "risk_note": "Risk: LOW-MEDIUM — best session for mean reversion, tightest spreads of the afternoon"
+  },
+
+  "sell_target_reached": {
+    "type": "sell",
+    "headline": "Target reached — take your profit now",
+    "summary": "The trade has hit the planned +1% target. This is exactly what the strategy is designed to do. Do not get greedy and hold for more — the plan was to exit at this level. The biggest mistake traders make is letting winners turn into losers by holding too long after the target is hit.",
+    "action": "Sell now. Take the profit. Close the position. Log it. The market will have another setup tomorrow. One clean win per day is the goal.",
+    "risk_note": "You have already won this trade — the only risk now is giving it back by staying in"
+  },
+
+  "sell_eod_approaching": {
+    "type": "sell",
+    "headline": "Market close approaching — consider exiting",
+    "summary": "It is past 3:15 PM ET. This is a day trade strategy — holding positions overnight introduces gap risk that is completely outside the rules. Anything can happen overnight: earnings, news, macro events. The risk of holding is now higher than the reward of waiting for a few more cents.",
+    "action": "If you are in a trade and it is profitable, sell and take it. If you are slightly below entry, weigh whether closing at a small known loss is better than the unknown risk of an overnight gap.",
+    "risk_note": "Risk: MEDIUM-HIGH — overnight gap risk is unquantifiable and outside this strategy's scope"
+  },
+
+  "sell_vix_spike_in_trade": {
+    "type": "sell",
+    "headline": "VIX spiking while you're in a trade — consider protecting gains",
+    "summary": "VIX is suddenly rising while you hold a position. A VIX spike during a trade means the market risk profile has changed since you entered. If you are profitable, locking in gains now makes sense. If you are flat or slightly down, this is a warning to watch your stop very carefully.",
+    "action": "If you are at or above your entry price, consider selling and taking the result. If you are below entry, honor your stop — do not move it lower because of the VIX spike.",
+    "risk_note": "Risk: Elevated — original thesis is under pressure, protect capital"
+  },
+
+  "sell_reversal_signal": {
+    "type": "sell",
+    "headline": "Reversal signal appearing — consider protecting gains",
+    "summary": "A bearish signal is forming on the short-term chart — this could be a shooting star candle, RVOL picking back up on the downside, or price failing to hold above VWAP again after reclaiming it. The original thesis is weakening. This does not mean the trade is lost, but the probability of reaching the target has decreased.",
+    "action": "If you are at breakeven or above, move your stop to breakeven to lock in a no-loss exit. If you are below entry, your original stop is still your guide — honor it.",
+    "risk_note": "Risk: Elevated — original setup thesis weakening, protect capital first"
+  },
+
+  "hold_recovering": {
+    "type": "hold",
+    "headline": "Trade in progress — recovering toward target",
+    "summary": "Price dipped after entry but is now moving back in the right direction. This is completely normal for mean reversion trades. The dip you bought does not always turn immediately — sometimes it takes 30 to 60 minutes to fully play out. As long as the stop has not been hit, the trade thesis is still intact.",
+    "action": "Hold. Do not add to the position and do not move the stop lower. Let the plan work. If it reaches breakeven, you can move the stop to breakeven to remove all risk.",
+    "risk_note": "Risk: Defined — your stop is set and active, max loss is known"
+  },
+
+  "hold_near_target": {
+    "type": "hold",
+    "headline": "Almost at target — patience pays",
+    "summary": "Price is within 0.2% of your target. This is not the time to get nervous and exit early. The market moves in small waves — it may dip slightly before reaching your target, or it may shoot right through it. Exiting 80% of the way to your goal locks in less than your planned reward.",
+    "action": "Hold. If you haven't placed a limit sell order at your target price, do it now. Let the order do its job without watching every tick.",
+    "risk_note": "Risk: Low — close to a winning trade, stop is well below current price"
+  },
+
+  "hold_stop_not_hit": {
+    "type": "hold",
+    "headline": "Within normal drawdown — hold the plan",
+    "summary": "Price is below entry but has not hit the stop loss. Every trade experiences some drawdown before working — this is normal. The stop exists precisely for this situation — to define the maximum you are willing to lose if the trade fails. As long as price is above your stop, the trade is within its expected range.",
+    "action": "Do not panic-sell before the stop is hit. Exiting valid setups early because of discomfort is the fastest way to turn a sound strategy into a losing one. Trust the stop level you set.",
+    "risk_note": "Risk: Defined by your stop — exactly as planned when you entered"
+  },
+
+  "hold_power_hour_coming": {
+    "type": "hold",
+    "headline": "Power Hour starting — best recovery window",
+    "summary": "It is approaching 2 PM ET. If you are in a trade that hasn't reached its target yet, Power Hour is the session most likely to provide the directional push needed. Institutional order flow picks up, spreads tighten, and price tends to move more decisively. Many morning trades that drift during lunch finally resolve during this window.",
+    "action": "Hold through Power Hour unless your stop is hit. Set a reminder to exit by 3:15 PM if the target hasn't been reached.",
+    "risk_note": "Risk: Defined — stop is set, and Power Hour historically favors mean reversion completion"
+  }
+}

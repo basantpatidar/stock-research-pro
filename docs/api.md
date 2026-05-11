@@ -124,6 +124,85 @@ Response: { "tool", "estimated_tokens": 5000, "estimated_cost_usd": 0.003, "cach
 
 ---
 
+<!-- SEC:DIP_SCANNER_ROUTES -->
+## Dip Scanner Routes (prefix `/dip-scanner`)
+
+### Manual scan
+`POST /dip-scanner/scan`
+```json
+Request:  { "tiers": [1], "capital": 1000.0, "vix": null }
+Response: {
+  "opportunities": [...],          // dip-buy setups, score >= 65
+  "orb_opportunities": [...],      // ORB breakout setups
+  "vwap_opportunities": [...],     // VWAP reclaim setups
+  "best": <Opportunity | null>,    // highest-score across all types
+  "vix_spike_prep": <VixSpikePrep | null>,
+  "scenario_key": "buy_dip_at_support",
+  "tickers_scanned": 4,
+  "session_window": "power_hour",
+  "vix": 18.4,
+  "timestamp": "2026-05-08T14:32:00Z",
+  "capital": 1000.0
+}
+```
+Each `Opportunity` has: `ticker`, `signal_type` ("dip_buy"|"orb_breakout"|"vwap_reclaim"),
+`score` (0–100), `entry_price`, `target_price`, `stop_price`, `signals[]`, `signal_hints{}`,
+`session_window`, `session_window_label`, `intraday_vwap`, `rsi_5m`, `rvol`, `vix`,
+`dip_pct`, `shares`, `expected_profit_dollar`, `max_risk_dollar`, `risk_reward_ratio`, `capital_used`.
+
+Zero LLM tokens. Saves all opportunities as open `ScannerAlert` records in DB.
+
+### Configuration reference
+`GET /dip-scanner/config`
+```json
+Response: { "etf_tiers": {1: ["SPY","QQQ","IWM","DIA"], 2: [...]},
+            "session_windows": {...}, "default_capital": 1000,
+            "score_threshold": 65, "trading_hours_et": {"open":"9:40 AM","close":"3:15 PM"} }
+```
+
+### Analytics (win/loss history)
+`GET /dip-scanner/analytics`
+```json
+Response: {
+  "total_signals", "wins", "losses", "win_rate_pct",
+  "avg_win_pct", "avg_loss_pct",
+  "expected_value_pct", "expected_value_dollar",
+  "current_streak": { "type": "win", "count": 3 },
+  "data_sources": ["live","backtest"],
+  "live_signals": 12, "backtest_signals": 240,
+  "by_ticker": { "SPY": { "signals", "wins", "losses", "win_rate_pct", "avg_pnl_pct" } },
+  "by_window": { "power_hour": { "signals", "wins", "losses", "win_rate_pct", "label" } },
+  "recent_alerts": [...],         // last 20 resolved alerts
+  "cumulative_pnl": [...]         // chronological series for chart
+}
+```
+Only returns resolved (win/loss) alerts — open alerts excluded.
+
+### Weekly P&L
+`GET /dip-scanner/weekly`
+```json
+Response: {
+  "week_start": "2026-05-05",
+  "total_pnl_dollar": 87.50,
+  "wins": 3, "losses": 1, "trade_count": 4,
+  "by_day": { "Mon": 45.00, "Tue": -12.50, "Wed": 55.00 },
+  "best_day": "Wed", "worst_day": "Tue"
+}
+```
+Filters `source == "live"` only. Resets each Monday.
+
+### Historical backfill (run once)
+`POST /dip-scanner/backfill`
+```json
+Request:  { "tiers": [1], "days": 60 }
+Response: { "status": "started", "tickers": [...], "days": 60, "message": "..." }
+```
+Runs in background via `BackgroundTasks`. Replays exact scanner logic over 60 days of
+5-min yfinance data. Skips if backtest records already exist (`source == "backtest"`).
+Delete those records to re-run.
+
+---
+
 <!-- SEC:USAGE_ROUTES -->
 ## Usage Routes
 
@@ -162,4 +241,6 @@ Endpoint: `WS /alerts/ws?api_key=...`
 Client: `useWebSocket.ts` hook — persistent connection mounted in `App.tsx`.
 Auto-reconnect every 5 s on disconnect. Ping/pong keepalive every 20 s.
 
-Message types: `connected`, `heartbeat`, `pong`, `watchlist_alert`, `screener_alert`
+Message types: `connected`, `heartbeat`, `pong`, `watchlist_alert`, `screener_alert`, `dip_buy_alert`
+
+`dip_buy_alert` payload: `{ ticker, signal_type, score, entry_price, target_price, stop_price, session_window_label, scenario_key }`
