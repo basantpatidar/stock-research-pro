@@ -1,7 +1,120 @@
+import logging
+from datetime import datetime
+
+import yfinance as yf
 from langchain_core.tools import tool
 from app.tools._yf_client import get_ticker
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+# ── Market-regime gate for dip scanner ────────────────────────────────────────
+# classify_regime() is NOT a LangGraph tool — imported directly by dip_scanner.py.
+
+_regime_cache: dict = {}
+_cache_ts: datetime | None = None
+_CACHE_TTL_SECONDS = 60
+
+
+def _ema(values: list[float], period: int) -> float:
+    if not values:
+        return 0.0
+    k = 2 / (period + 1)
+    ema = values[0]
+    for v in values[1:]:
+        ema = v * k + ema * (1 - k)
+    return ema
+
+
+def classify_regime(vix: float, vix_slope: float) -> dict:
+    """
+    Classify current market regime from SPY daily data + VIX history.
+    Cached 60 s — safe to call per ticker inside a scan loop.
+
+    Returns dict keys:
+      regime          — "mean_revert" | "chop" | "trend_up" | "trend_down"
+      reason          — human-readable explanation
+      spy_above_ema   — bool
+      vix_5d_change_pct
+      spy_vs_ema_pct
+      range_vs_atr    — today's SPY range / 20-day ATR (>1.5 = expanding vol)
+    """
+    global _regime_cache, _cache_ts
+
+    now = datetime.now()
+    if _cache_ts and (now - _cache_ts).total_seconds() < _CACHE_TTL_SECONDS and _regime_cache:
+        return _regime_cache
+
+    result: dict = {
+        "regime": "mean_revert",
+        "reason": "Default (data unavailable) — full scoring active",
+        "spy_above_ema": True,
+        "vix_5d_change_pct": 0.0,
+        "spy_vs_ema_pct": 0.0,
+        "range_vs_atr": 1.0,
+    }
+
+    try:
+        spy_daily = yf.Ticker("SPY").history(period="30d", interval="1d")
+        vix_daily  = yf.Ticker("^VIX").history(period="10d", interval="1d")
+
+        if spy_daily.empty or len(spy_daily) < 5:
+            return result
+
+        spy_closes = [float(r["Close"]) for _, r in spy_daily.iterrows()]
+        spy_highs  = [float(r["High"])  for _, r in spy_daily.iterrows()]
+        spy_lows   = [float(r["Low"])   for _, r in spy_daily.iterrows()]
+
+        spy_ema_20  = _ema(spy_closes, 20)
+        spy_current = spy_closes[-1]
+        spy_above_ema  = spy_current > spy_ema_20
+        spy_vs_ema_pct = (spy_current - spy_ema_20) / spy_ema_20 * 100 if spy_ema_20 else 0.0
+
+        vix_5d_change_pct = 0.0
+        if not vix_daily.empty and len(vix_daily) >= 5:
+            vix_5d_ago = float(vix_daily.iloc[-5]["Close"])
+            if vix_5d_ago:
+                vix_5d_change_pct = (float(vix_daily.iloc[-1]["Close"]) - vix_5d_ago) / vix_5d_ago * 100
+
+        daily_ranges = [h - l for h, l in zip(spy_highs, spy_lows)]
+        atr_20 = sum(daily_ranges[-20:]) / min(len(daily_ranges), 20) if daily_ranges else 0
+        today_range = float(spy_daily.iloc[-1]["High"]) - float(spy_daily.iloc[-1]["Low"])
+        range_vs_atr = today_range / atr_20 if atr_20 > 0 else 1.0
+        expanding_vol = range_vs_atr > 1.5
+
+        result.update({
+            "spy_above_ema":     spy_above_ema,
+            "vix_5d_change_pct": round(vix_5d_change_pct, 1),
+            "spy_vs_ema_pct":    round(spy_vs_ema_pct, 2),
+            "range_vs_atr":      round(range_vs_atr, 2),
+        })
+
+        if vix_5d_change_pct > 15:
+            result["regime"] = "trend_down"
+            result["reason"] = f"VIX +{vix_5d_change_pct:.0f}% in 5 days — fear expansion, knife-catch risk"
+        elif vix_slope > 0.04 and vix > 22:
+            result["regime"] = "trend_down"
+            result["reason"] = f"VIX rising {vix_slope*100:.1f}%/30min + elevated ({vix:.0f}) — vol accelerating"
+        elif expanding_vol and not spy_above_ema:
+            result["regime"] = "trend_down"
+            result["reason"] = f"SPY range {range_vs_atr:.1f}× ATR + below 20 EMA — trend continuation risk"
+        elif expanding_vol and spy_above_ema:
+            result["regime"] = "trend_up"
+            result["reason"] = f"SPY range {range_vs_atr:.1f}× ATR + above 20 EMA — uptrend with momentum"
+        elif spy_above_ema:
+            result["regime"] = "mean_revert"
+            result["reason"] = f"SPY +{spy_vs_ema_pct:.1f}% above 20 EMA, normal vol — mean reversion active"
+        else:
+            result["regime"] = "chop"
+            result["reason"] = f"SPY {spy_vs_ema_pct:.1f}% below 20 EMA, normal vol — range-bound, bounces likely"
+
+    except Exception as exc:
+        logger.warning("regime classifier: %s", exc)
+
+    _regime_cache = result
+    _cache_ts = now
+    return result
 
 
 def _hmm_regime(returns: pd.Series) -> dict:
