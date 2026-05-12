@@ -132,33 +132,35 @@ Response: { "tool", "estimated_tokens": 5000, "estimated_cost_usd": 0.003, "cach
 ```json
 Request:  { "tiers": [1], "capital": 1000.0, "vix": null }
 Response: {
-  "opportunities": [...],          // dip-buy setups, score >= 65
-  "orb_opportunities": [...],      // ORB breakout setups
-  "vwap_opportunities": [...],     // VWAP reclaim setups
-  "best": <Opportunity | null>,    // highest-score across all types
+  "opportunities": [...],                 // dip-buy setups, score >= 72
+  "orb_opportunities": [...],             // ORB breakout setups
+  "vwap_opportunities": [...],            // VWAP reclaim setups
+  "failed_breakdown_opportunities": [...],// trapped-shorts setups
+  "best": <Opportunity | null>,           // highest-score across all types (entry-refined for dip-class)
   "vix_spike_prep": <VixSpikePrep | null>,
+  "regime": { "regime": "chop|trend_up|trend_down|mean_revert", "reason": "..." },
   "scenario_key": "buy_dip_at_support",
-  "tickers_scanned": 4,
+  "tickers_scanned": 2,
   "session_window": "power_hour",
   "vix": 18.4,
   "timestamp": "2026-05-08T14:32:00Z",
   "capital": 1000.0
 }
 ```
-Each `Opportunity` has: `ticker`, `signal_type` ("dip_buy"|"orb_breakout"|"vwap_reclaim"),
-`score` (0–100), `entry_price`, `target_price`, `stop_price`, `signals[]`, `signal_hints{}`,
-`session_window`, `session_window_label`, `intraday_vwap`, `rsi_5m`, `rvol`, `vix`,
-`dip_pct`, `shares`, `expected_profit_dollar`, `max_risk_dollar`, `risk_reward_ratio`, `capital_used`.
+Each `Opportunity` carries the full payload documented in features.md SEC:DIP_SCANNER (including `signal_type`, `confidence_tier`, `atr_5m`, `time_stop_minutes`, `entry_refined`, `top_reasons`, `invalidation`).
 
-Zero LLM tokens. Saves all opportunities as open `ScannerAlert` records in DB.
+Zero LLM tokens. Persists all opportunities as `ScannerAlert` rows via `_save_alert`, which enforces a 15-min per-ticker dedup gate (live source only — see features.md).
 
 ### Configuration reference
 `GET /dip-scanner/config`
 ```json
-Response: { "etf_tiers": {1: ["SPY","QQQ","IWM","DIA"], 2: [...]},
+Response: { "etf_tiers": {1: ["SPY","QQQ"], 2: ["XLK"]},
             "session_windows": {...}, "default_capital": 1000,
-            "score_threshold": 65, "trading_hours_et": {"open":"9:40 AM","close":"3:15 PM"} }
+            "score_threshold": 65,    // legacy: actual fire threshold is 72; 65-71 logged as near-miss
+            "trading_hours_et": {"regular_open":"9:40 AM","regular_close":"4:00 PM",
+                                  "pre_market":"4:00 AM","after_hours_close":"8:00 PM"} }
 ```
+Note: `score_threshold` field is the historical near-miss boundary, not the fire threshold (72). See `_log_near_miss()` in `dip_scanner.py`.
 
 ### Analytics (win/loss history)
 `GET /dip-scanner/analytics`
@@ -170,13 +172,72 @@ Response: {
   "current_streak": { "type": "win", "count": 3 },
   "data_sources": ["live","backtest"],
   "live_signals": 12, "backtest_signals": 240,
-  "by_ticker": { "SPY": { "signals", "wins", "losses", "win_rate_pct", "avg_pnl_pct" } },
-  "by_window": { "power_hour": { "signals", "wins", "losses", "win_rate_pct", "label" } },
+  "by_ticker":             { "SPY": { "signals", "wins", "losses", "win_rate_pct", "avg_pnl_pct" } },
+  "by_window":             { "power_hour": { "signals", "wins", "losses", "win_rate_pct", "label" } },
+  "by_signal_type":        { "dip_buy": { "signals", "wins", "losses", "win_rate_pct", "avg_pnl_pct" } },
+  "by_signal_type_summary":{ "dip_buy": { "win_rate", "ev_dollar" } },
+  "by_score_band":         { "72-79": {...}, "80-89": {...}, "90+": {...} },
+  "five_min_accuracy":     { "up_correct_pct", "flat_pct", "down_correct_pct" },
   "recent_alerts": [...],         // last 20 resolved alerts
   "cumulative_pnl": [...]         // chronological series for chart
 }
 ```
 Only returns resolved (win/loss) alerts — open alerts excluded.
+
+### Similar past setups (reference cases)
+`GET /dip-scanner/similar?ticker=QQQ&session=morning_trend&signal_type=dip_buy&limit=4`
+```json
+Response: {
+  "ticker": "QQQ", "session": "morning_trend", "signal_type": "dip_buy",
+  "setups": [
+    { "entry_time", "entry_price", "outcome_price", "status",
+      "actual_pnl_pct", "actual_pnl_dollar", "score", "resolved_by" }
+  ]
+}
+```
+Returns up to `limit` closed signals (status != "open") matching the cell, newest first. Powers the "Similar past setups" mini-cards on each scanner card.
+
+### Ticker history
+`GET /dip-scanner/ticker-history/{ticker}?limit=30`
+```json
+Response: {
+  "ticker": "QQQ", "count": 12,
+  "signals": [
+    { "id", "signal_type", "side": "BUY", "entry_time", "session_window",
+      "score", "entry_price", "target_price", "stop_price",
+      "status", "outcome_price", "actual_pnl_pct", "actual_pnl_dollar",
+      "resolved_by", "five_min_direction" }
+  ]
+}
+```
+All past `scanner_alerts` for one ticker, newest first. Powers the `TickerHistoryModal` (click ticker name in scanner card).
+
+### AI signal analysis (~500 LLM tokens)
+`POST /dip-scanner/analyze`
+```json
+Request:  {
+  "ticker", "signal_type", "score", "confidence_tier?",
+  "session_window_label", "entry_price", "target_price", "stop_price",
+  "risk_reward_ratio", "atr_5m?", "rsi_5m", "rvol", "vix", "dip_pct",
+  "signals[]", "top_reasons?[]"
+}
+Response: {
+  "ticker", "verdict": "FAVORABLE|MIXED|UNFAVORABLE",
+  "plain_english": "...",
+  "key_risk":      "...",
+  "watch_for":     "...",
+  "history_count": 12,
+  "win_rate_pct":  66.7,
+  "tokens_used":   500   // 0 if LLM failed and rule-based fallback fired
+}
+```
+Click-triggered ("What does this mean?" in pro view). Pulls last 30 closed signals for `(ticker, signal_type)` to ground the prompt with historical win rate / avg win / avg loss. Result clears on next scan. Blocked in saver mode.
+
+### Intraday chart data
+`GET /dip-scanner/chart/{ticker}` — 1-day 5-min OHLC bars (with pre/after-market) for the scanner card chart.
+```json
+Response: { "ticker": "QQQ", "bars": [{ "time", "open", "high", "low", "close" }] }
+```
 
 ### Weekly P&L
 `GET /dip-scanner/weekly`
@@ -189,17 +250,15 @@ Response: {
   "best_day": "Wed", "worst_day": "Tue"
 }
 ```
-Filters `source == "live"` only. Resets each Monday.
+Filters `source == "live"` only. Resets each Monday (ISO week).
 
-### Historical backfill (run once)
+### Historical backfill (run once or after scoring changes)
 `POST /dip-scanner/backfill`
 ```json
 Request:  { "tiers": [1], "days": 60 }
 Response: { "status": "started", "tickers": [...], "days": 60, "message": "..." }
 ```
-Runs in background via `BackgroundTasks`. Replays exact scanner logic over 60 days of
-5-min yfinance data. Skips if backtest records already exist (`source == "backtest"`).
-Delete those records to re-run.
+Runs in background via `BackgroundTasks`. **Destructive**: clears all existing `source == "backtest"` rows before replaying scanner logic — so re-runs always reflect the latest scoring rules. Replays over the last N days of 5-min yfinance data; outcomes simulated by walking forward bars (target_hit / stop_hit / eod_close).
 
 ---
 
