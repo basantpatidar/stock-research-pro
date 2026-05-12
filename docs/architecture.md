@@ -264,6 +264,17 @@ StockDataCache    # ticker, tool, result (JSON), cached_at, expires_at
                   # Key: (ticker, tool) — one row per ticker+tool combination
                   # Redis-first: short TTL tools (< 1 day) checked in Redis before DB
                   # DB fallback: long TTL tools (≥ 1 day) stored only in DB
+
+ScannerAlert      # Daily Target Trade Scanner — every fired signal + its outcome
+                  # id (UUID PK), ticker, signal_type, side, session_window
+                  # entry_price, target_price, stop_price, entry_time (timestamptz)
+                  # score, signals (JSONB), vix_at_entry, capital_used
+                  # source ("live" | "backtest")
+                  # status ("open" | "win" | "loss" | "expired")
+                  # outcome_price, outcome_time, actual_pnl_pct, actual_pnl_dollar
+                  # resolved_by ("target_hit" | "stop_hit" | "time_stop" | "eod_close")
+                  # five_min_direction ("up" | "down" | "flat" | NULL — direction at entry+5min)
+                  # See docs/features.md SEC:DIP_SCANNER for full lifecycle and gates.
 ```
 
 **Planned additions (not yet built):**
