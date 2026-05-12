@@ -144,53 +144,147 @@ Both watchlist and screener jobs share the same `_yf_client.py` rate limiter. Di
 <!-- SEC:DIP_SCANNER -->
 ## Daily Target Trade Scanner
 
-**Goal:** One intraday trade per day on broad-market ETFs, targeting 1% profit on configurable capital (default $1,000). Zero LLM tokens throughout.
+**Goal:** One intraday trade per day on broad-market ETFs, targeting 1% profit on configurable capital (default $1,000). Zero LLM tokens for scoring; ~500 tokens only when user clicks "What does this mean?" on a fired signal.
+
+**Code:** `backend/app/tools/dip_scanner.py` (scoring), `backend/app/api/dip_scanner.py` (routes + persistence + dedup), `backend/app/services/scheduler.py` (5-min scan + outcome resolver), `backend/app/tools/regime.py` (market regime gate).
 
 ### ETF Tiers
 ```
-Tier 1: SPY, QQQ, IWM, DIA   (default)
-Tier 2: XLK, XLF, XLV, GLD  (sector ETFs)
+Tier 1: SPY, QQQ      (default — broad market, highest liquidity)
+Tier 2: XLK           (data-driven cull — IWM/DIA/XLF/XLV/TLT removed for sub-50% win rates)
 ```
-Both tiers can be enabled simultaneously.
+Both tiers can be enabled simultaneously via `tiers: [1, 2]`. Background job uses Tier 1 only.
+
+### Market Regime Gate (`classify_regime`)
+Computed once per scan (60s cache), gates all four signal types. Inputs: SPY 20-EMA position, VIX 5-day change, range-vs-ATR.
+
+| Regime | Effect on signals |
+|---|---|
+| `trend_up` | dip_buy requires `RSI < 30` (stricter — only deep oversold in uptrends) |
+| `trend_down` | `dip_buy` blocked entirely (no catching falling knives) |
+| `chop` / `mean_revert` | All signal types active with normal thresholds |
+
+UI shows a regime badge; blocking banner appears when regime suppresses dip_buy.
 
 ### Signal Types
 
-| Signal | Trigger | Entry | Target | Stop |
+| Signal | Trigger | R:R | Time stop | Notes |
 |---|---|---|---|---|
-| `dip_buy` | Dip ≥ VIX-adjusted threshold, RSI-5m oversold, declining RVOL, at support | Market price | Entry × 1.01 | Entry × 0.995 |
-| `orb_breakout` | Price above ORB-15 high with RVOL ≥ 1.5x | Market price | ORB high + 1.5× range | ORB low × 0.999 |
-| `vwap_reclaim` | Price was below VWAP 2+ candles, closes back above VWAP, RVOL > 1.2x | Market price | Entry × 1.008 | VWAP × 0.998 |
-| `vix_spike_prep` | VIX up >8% intraday AND SPY down 0.5–2% | — preparation alert only — | | |
+| `dip_buy` | Dip ≥ VIX-adjusted ATR multiple, RSI-5m oversold, declining RVOL, at S1/S2/VAL/VWAP | ATR-based, see below | 25 min | The original setup; mean reversion |
+| `orb_breakout` | Price above ORB-15 high with RVOL ≥ 1.5× | 3:1 | 60 min | Trend trades; widest time window |
+| `vwap_reclaim` | Price was below VWAP 2+ candles, closes back above, RVOL > 1.2× | 1.5:1 | 20 min | Reclaim fast or fail |
+| `failed_breakdown` | Price broke a swing low then closed back above (trapped shorts) | 2.5:1 | 30 min | Asymmetric — trapped shorts cover hard |
+| `vix_spike_prep` | VIX up >8% intraday AND SPY down 0.5–2% | — preparation alert, no entry — | — | Banner only |
+
+`scan_dip_opportunities()` scores all candidates per ticker; `best` = highest score across types.
+Best signal entry is refined to `min(last 3×1-min lows)` with -0.5% floor (`_refine_entry_1min` — only for dip_buy/vwap_reclaim/failed_breakdown).
+
+### ATR-Based Stops & Targets
+At signal generation time, computed from 5-min Wilder ATR-14 (`_get_atr_5m`, 30-min cache):
+```
+target = entry + max(1.0 × ATR, entry × 0.004)   capped at entry × 1.015 (+1.5%)
+stop   = entry − max(0.5 × ATR, entry × 0.0025)  floored at entry × 0.975 (−2.5%)
+```
+Per-signal-type R multipliers (in scorer): dip_buy 2:1 baseline, ORB 3:1, VWAP 1.5:1, failed_breakdown 2.5:1.
+Payload includes `atr_5m`, `atr_adjusted` (bool — fell back to fixed % if ATR unavailable).
 
 ### Session Windows
 
-| Window | Hours (ET) | Score Delta |
-|---|---|---|
-| `morning_trend` | 9:40–11:30 AM | +0 |
-| `morning_flush` | 9:40–10:30 AM (VIX > 20) | +5 |
-| `lunch_drift` | 11:30 AM–2:00 PM | −5 |
-| `power_hour` | 2:00–3:15 PM | +10 |
-| `pre_market` / `closed` | Outside hours | Skip (no signal) |
+| Window | Hours (ET) | Score Δ | Notes |
+|---|---|---|---|
+| `morning_flush` | 9:40–10:30 AM | +5 | |
+| `morning_trend` | 10:30 AM–12 PM | 0 | |
+| `lunch_drift` | 12–2 PM | −5 **+ hard block**: score < 80 → skip | 0% backtest win rate without the block |
+| `power_hour` | 2–4 PM | +10 | Extends to market close |
+| `pre_market` | 4–9:30 AM | −10 | Extended hours warning |
+| `after_hours` | 4–8 PM | −10 | Extended hours warning |
+| `closed` | 8 PM–4 AM | skip | No signal |
 
-### VIX-Adjusted Entry Thresholds (dip_buy only)
+### VIX → ATR Multiples (dip_buy only)
 
-| VIX | Min dip from open |
-|---|---|
-| < 18 | 0.3% |
-| 18–25 | 0.6% |
-| 25–35 | 1.0% |
-| > 35 | Skip |
+| VIX | Min dip (× ATR) | Max RSI | Min RVOL |
+|---|---|---|---|
+| < 18 | 0.4 | 42 | 0.8× |
+| 18–25 | 0.7 | 38 | 1.2× |
+| 25–35 | 1.1 | 33 | 1.5× |
+| > 35 | skip | — | — |
+
+RVOL must also be **declining** (last bar < bar −4) — sellers exhausting, not still in panic.
 
 ### Scoring
-Base score 50. Deltas applied per signal confirmation:
-`rsi_oversold` +15, `vwap_below` +10, `support_nearby` +8, `hammer_candle` +7,
-`rvol_declining` +7, `vix_low` +5, `session_window` ±5–10.
-Fire threshold: **score ≥ 65**.
+Base score 50. Fire threshold: **score ≥ 72** (raised from 65 on 2026-05-10 after analytics review). `lunch_drift` requires ≥ 80.
+
+| Signal | Points | Notes |
+|---|---|---|
+| Price within 0.10×ATR of nearest support (S1/S2/VAL/VWAP) | +15 | ATR-scaled (was fixed 0.2%) |
+| Price within 0.20×ATR of nearest support | +10 | |
+| Price within 0.35×ATR of nearest support | +5 | |
+| Price > 0.35×ATR from any support | −5 | |
+| RSI < 30 | +15 | |
+| RSI 30–35 | +12 | |
+| RSI 35–max_rsi | +8 | |
+| RVOL ≥ 1.5× declining | +10 | |
+| RVOL 1.0–1.5× declining | +6 | |
+| Price below intraday VWAP | +10 | |
+| Price > 0.5% above VWAP | −5 | |
+| Hammer candle (lower wick >65%, upper-third close, vol ≥ 1.5× avg) | +5 | Reduced from +15 — tiebreaker only |
+| VIX 18–35, slope < −2% (vol crush) | +12 | Falling VIX = mean-reversion ideal |
+| VIX 18–35, slope −2% to +2% (stable) | +5 | |
+| VIX 18–35, slope > +2% (vol expanding) | −10 | Rising fear blocks most signals |
+| Capitulation candle (extreme down move + extreme volume) | −15 | Don't catch the panic, wait for the bounce |
+| 30-min trend aligned with signal | +5 / +5 / −10 | Aligned / neutral / counter-trend |
+| CVD (cumulative volume delta) bullish | +8 / +5 / −5 | Strong bullish / mild bullish / bearish |
+| Session delta | ±0 to ±10 | See session windows table |
+| Confidence tier | label only | very_high (≥85), high (75–84), medium (72–74) |
+
+Signals scoring 65–71 (passed pattern checks but below fire threshold) are logged to `local_debugging/near_miss_log.jsonl` via `_log_near_miss()` for EOD threshold-tuning analysis.
+
+### Time Stop Enforcement
+Scheduler resolver (`_resolve_open_alerts` in `services/scheduler.py`) fires before EOD close. Per-signal-type minutes from `TIME_STOP_MINUTES` dict (mirrors values dip_scanner attaches at signal creation):
+
+```python
+TIME_STOP_MINUTES = {
+    "dip_buy":          25,
+    "orb_breakout":     60,
+    "vwap_reclaim":     20,
+    "failed_breakdown": 30,
+}
+```
+
+When `now_et - entry_time >= time_stop_minutes` and neither target nor stop hit: exit at current market price, set `resolved_by = "time_stop"`. Frees capital from dead-money trades that would otherwise drift to ~breakeven by EOD.
+
+### Per-Ticker Dedup
+`api/dip_scanner.py:_save_alert` checks for any prior live alert on the same ticker within `DEDUP_WINDOW_MINUTES = 15` and skips insertion if found. Suppresses correlated back-to-back fires (e.g., XLF dip_buy fired twice 12 min apart on 2026-05-08 — both lost).
+**Backtest source is exempt** — replays need to record every resolved signal for accurate analytics.
+
+### Forward 5-Min Direction (`five_min_direction`)
+Resolver computes direction at entry+5min for every closed row: `"up"` (>+0.05%), `"down"` (<−0.05%), or `"flat"`. Helper `_compute_fmd()` tz-normalizes the yfinance 1-min index to ET before comparison and returns specific failure reasons (logged at debug level instead of swallowed).
+Resolver also opportunistically backfills closed rows from the last 7 days where `five_min_direction IS NULL`. Used by analytics: "5-Min Accuracy" metric in ScannerPerformanceCard.
 
 ### Capital Sizing
-`shares = floor(capital / entry_price)`, `capital_used = shares × entry_price`.
-Expected profit: `shares × (target − entry)`. Max risk: `shares × (entry − stop)`.
-R:R displayed in card — minimum 1.5:1 required to fire alert.
+`whole_shares = floor(capital / entry_price)`. Broker stop-loss requires whole shares.
+`actual_profit = whole_shares × (target − entry)`. `actual_risk = whole_shares × (entry − stop)`.
+If `whole_shares = 0`, card shows "Capital too low" warning.
+
+### Signal Payload Fields
+Every fired signal returns:
+```
+ticker, signal_type, side ("BUY"), score, confidence_tier,
+entry_price, target_price, stop_price, entry_refined (1-min adjusted, dip-class only),
+shares (whole number), expected_profit_dollar, max_risk_dollar, risk_reward_ratio,
+session_window, session_window_label,
+intraday_vwap, rsi_5m, rvol, vix, dip_pct,
+atr_5m, atr_adjusted,
+time_stop_minutes (per signal_type),
+signals[], signal_hints{}, top_reasons[] (filtered for simple view),
+invalidation: { price_close_below, vix_above, rvol_resurge_above }
+```
+`invalidation` = structural thesis controls (different from stop-loss P&L control).
+`price_close_below` = nearest support × 0.998. `vix_above` = current VIX × 1.10.
+
+### Whitelist Scaffold
+`WHITELIST_CELLS` in `dip_scanner.py` — set of `(ticker, session)` tuples with historically positive EV.
+`ENABLE_WHITELIST = False` by default. Enable once n ≥ 5 resolved trades per cell. Current best cells from backtest: QQQ (all sessions), SPY morning_trend / morning_flush.
 
 ### Scenario Guidance System
 `frontend/src/data/scenarios.json` — 30 hardcoded plain-English situation descriptions.
@@ -202,22 +296,16 @@ Scenarios covered: `waiting`, `market_closed`, `no_buy_vix_extreme`, `no_buy_sti
 `no_buy_insufficient_dip`, `no_buy_rsi_not_oversold`, `no_buy_score_too_low`,
 `no_buy_lunch_drift`, `no_buy_weekly_target_hit`, `buy_dip_at_support`, `buy_orb_breakout`,
 `buy_vwap_reclaim`, `buy_vix_spike_fade`, `prep_vix_spike`, `prep_power_hour`,
-`sell_target_reached`, `sell_eod_approaching`, `hold_recovering`, `hold_near_target`,
-and more.
+`sell_target_reached`, `sell_eod_approaching`, `hold_recovering`, `hold_near_target`, and more.
 
 ### Database Model
-`ScannerAlert` in `backend/app/db/models.py`:
-```
-id (UUID), ticker, entry/target/stop prices, entry_time, score,
-signals (JSONB), session_window, vix_at_entry, capital_used,
-source ("live"|"backtest"), status ("open"|"win"|"loss"|"expired"),
-outcome_price, outcome_time, actual_pnl_pct, actual_pnl_dollar, resolved_by
-```
+See `docs/architecture.md` SEC:DB_MODELS for the full `ScannerAlert` schema (includes `signal_type`, `five_min_direction`, `resolved_by`, etc.).
 
 ### Historical Backfill
-`POST /dip-scanner/backfill` replays scanner logic over 60 days of 5-min yfinance data.
-Outcomes simulated: target hit within session = "win", stop hit = "loss", EOD close = "expired".
-Run once after setup to seed analytics — skips automatically if backtest records exist.
+`POST /dip-scanner/backfill` replays scanner logic over the last N days (default 60) of 5-min yfinance data. Outcomes simulated: target hit within session = "win", stop hit = "loss", EOD close = "win"/"loss" by sign of (close − entry). Backfill is **destructive** for backtest rows — clears existing `source = "backtest"` rows before re-seeding so re-runs always reflect the latest scoring logic.
+
+### AI Signal Analysis (LLM, ~500 tokens, opt-in)
+`POST /dip-scanner/analyze` is the only LLM-touching scanner path. Click-triggered from "What does this mean?" button in pro view; result clears on each new scan. Pulls last 30 closed signals for `(ticker, signal_type)` to build a structured prompt with historical win rate / avg win / avg loss, then returns `{ verdict (FAVORABLE/MIXED/UNFAVORABLE), plain_english, key_risk, watch_for }`. Falls back to a rule-based response if LLM call fails. Blocked in saver mode.
 
 ---
 
