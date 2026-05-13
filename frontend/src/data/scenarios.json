@@ -23,6 +23,14 @@
     "risk_note": "Risk: VERY HIGH — losses could extend 2–5% before any recovery on extreme fear days"
   },
 
+  "no_buy_regime_trend_down": {
+    "type": "no_buy",
+    "headline": "Market regime is trend-down — dip buying paused",
+    "summary": "Backtest data shows dip-buy signals lose money on trend-down days. The regime classifier has flagged today as one of those days — typically because VIX has climbed >15% over the past 5 sessions, vol is expanding while SPY sits below its 20-day EMA, or VIX is rising fast intraday from already-elevated levels. On trend-down days the next 5-minute candle is more likely to extend the drop than to reverse — knife-catch territory. ORB breakouts, VWAP reclaims, and failed-breakdown signals remain active because they are momentum/reversal patterns rather than mean-reversion bets.",
+    "action": "Skip dip-buys today. If a setup is forming on a stock you watch, wait for one of the three other signal types to confirm — those work in this regime. Or flip on Loose Gates to see what would have qualified, but don't trade those entries with full size.",
+    "risk_note": "Risk: HIGH — historical EV is negative for dip buys on trend-down regime days"
+  },
+
   "no_buy_outside_hours": {
     "type": "neutral",
     "headline": "Outside the active trading window",
