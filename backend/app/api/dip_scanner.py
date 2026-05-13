@@ -41,7 +41,36 @@ def _get_tickers(tiers: list[int]) -> list[str]:
     return list(dict.fromkeys(tickers))  # deduplicate, preserve order
 
 
+DEDUP_WINDOW_MINUTES = 15
+
+
 async def _save_alert(db: AsyncSession, opp: dict) -> None:
+    """Persist a live scanner opportunity. Suppresses near-duplicates per ticker
+    within DEDUP_WINDOW_MINUTES — prevents correlated risk from back-to-back
+    fires on the same name (e.g., XLF firing twice 12 min apart on 2026-05-08).
+    Backtest rows skip this gate (source != 'live').
+    """
+    entry_ts = datetime.fromisoformat(opp.get("entry_time", datetime.now(timezone.utc).isoformat()))
+    source = opp.get("source", "live")
+
+    if source == "live":
+        cutoff = entry_ts - timedelta(minutes=DEDUP_WINDOW_MINUTES)
+        existing = await db.execute(
+            select(ScannerAlert.id).where(
+                and_(
+                    ScannerAlert.ticker == opp["ticker"],
+                    ScannerAlert.source == "live",
+                    ScannerAlert.entry_time >= cutoff,
+                )
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            logger.info(
+                "dedup-skip: %s within %dmin of prior alert",
+                opp["ticker"], DEDUP_WINDOW_MINUTES,
+            )
+            return
+
     alert = ScannerAlert(
         id=uuid.uuid4(),
         ticker=opp["ticker"],
@@ -49,13 +78,13 @@ async def _save_alert(db: AsyncSession, opp: dict) -> None:
         entry_price=opp["entry_price"],
         target_price=opp["target_price"],
         stop_price=opp["stop_price"],
-        entry_time=datetime.fromisoformat(opp.get("entry_time", datetime.now(timezone.utc).isoformat())),
+        entry_time=entry_ts,
         score=opp.get("score"),
         signals=opp.get("signals"),
         session_window=opp.get("session_window"),
         vix_at_entry=opp.get("vix"),
         capital_used=opp.get("capital_used", DEFAULT_CAPITAL),
-        source=opp.get("source", "live"),
+        source=source,
         status=opp.get("status", "open"),
         outcome_price=opp.get("outcome_price"),
         actual_pnl_pct=opp.get("actual_pnl_pct"),
