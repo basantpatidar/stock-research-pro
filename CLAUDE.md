@@ -17,41 +17,45 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Topic | File | Grep anchor |
 |---|---|---|
-| Tech stack + LLM providers | docs/architecture.md | `SEC:STACK` |
-| LLM factory / provider swap | docs/architecture.md | `SEC:LLM_FACTORY` |
-| Key architectural decisions | docs/architecture.md | `SEC:DECISIONS` |
-| Full request lifecycle + token saving gates | docs/architecture.md | `SEC:TOKEN_FLOW` |
-| Per-tool cache TTLs (Redis vs DB) | docs/architecture.md | `SEC:CACHE` |
-| Database models | docs/architecture.md | `SEC:DB_MODELS` |
-| Project directory map | docs/architecture.md | `SEC:DIR_MAP` |
+| Tech stack + LLM providers | docs/reference/architecture.md | `SEC:STACK` |
+| LLM factory / provider swap | docs/reference/architecture.md | `SEC:LLM_FACTORY` |
+| Key architectural decisions | docs/reference/architecture.md | `SEC:DECISIONS` |
+| Full request lifecycle + token saving gates | docs/reference/architecture.md | `SEC:TOKEN_FLOW` |
+| Per-tool cache TTLs (Redis vs DB) | docs/reference/architecture.md | `SEC:CACHE` |
+| Database models | docs/reference/architecture.md | `SEC:DB_MODELS` |
+| Project directory map | docs/reference/architecture.md | `SEC:DIR_MAP` |
 | Feature roadmap + sprint order | plan.md | `SEC:PRIORITY` |
 | Locked architectural decisions | plan.md | `SEC:DECISIONS` |
 | UI page layout | plan.md | `SEC:UI_PAGES` |
-| V1 API routes | docs/api.md | `SEC:V1_ROUTES` |
-| V2 tiered routes | docs/api.md | `SEC:V2_ROUTES` |
-| Dip scanner routes (scan, weekly, analytics, backfill) | docs/api.md | `SEC:DIP_SCANNER_ROUTES` |
-| Usage / guard-rail routes | docs/api.md | `SEC:USAGE_ROUTES` |
-| Auth pattern | docs/api.md | `SEC:AUTH` |
-| V1 tool catalog (20 tools) | docs/tools.md | `SEC:V1_TOOLS` |
-| V2 new tools (6 tools) | docs/tools.md | `SEC:V2_TOOLS` |
-| Tool conventions + add guide | docs/tools.md | `SEC:TOOL_CONVENTIONS` |
-| Frontend pages | docs/frontend.md | `SEC:PAGES` |
-| Key components | docs/frontend.md | `SEC:COMPONENTS` |
-| Zustand store shape | docs/frontend.md | `SEC:STORE` |
-| Execution modes (saver/normal/deep) | docs/features.md | `SEC:EXEC_MODES` |
-| Feature tiers (T1/T2/T3) | docs/features.md | `SEC:TIERS` |
-| Token consumption estimates | docs/features.md | `SEC:TOKEN_ESTIMATES` |
-| Guard rails system | docs/features.md | `SEC:GUARD_RAILS` |
-| Usage tracking (usage.json) | docs/features.md | `SEC:USAGE_TRACKING` |
-| Background jobs (APScheduler) | docs/features.md | `SEC:BACKGROUND_JOBS` |
-| Daily Target Trade Scanner (signals, scoring, scenarios, backfill) | docs/features.md | `SEC:DIP_SCANNER` |
-| Signal convergence score | docs/features.md | `SEC:CONVERGENCE` |
-| Dev commands (make up etc.) | docs/dev.md | `SEC:COMMANDS` |
-| Environment variables | docs/dev.md | `SEC:ENV_VARS` |
-| Testing conventions | docs/dev.md | `SEC:TESTING` |
-| Adding a new feature checklist | docs/dev.md | `SEC:ADD_FEATURE` |
+| V1 API routes | docs/reference/api.md | `SEC:V1_ROUTES` |
+| V2 tiered routes | docs/reference/api.md | `SEC:V2_ROUTES` |
+| Dip scanner routes (scan, weekly, analytics, backfill) | docs/reference/api.md | `SEC:DIP_SCANNER_ROUTES` |
+| Usage / guard-rail routes | docs/reference/api.md | `SEC:USAGE_ROUTES` |
+| Auth pattern | docs/reference/api.md | `SEC:AUTH` |
+| V1 tool catalog (20 tools) | docs/reference/tools.md | `SEC:V1_TOOLS` |
+| V2 new tools (6 tools) | docs/reference/tools.md | `SEC:V2_TOOLS` |
+| Tool conventions + add guide | docs/reference/tools.md | `SEC:TOOL_CONVENTIONS` |
+| Frontend pages | docs/reference/frontend.md | `SEC:PAGES` |
+| Key components | docs/reference/frontend.md | `SEC:COMPONENTS` |
+| Zustand store shape | docs/reference/frontend.md | `SEC:STORE` |
+| Execution modes (saver/normal/deep) | docs/reference/features.md | `SEC:EXEC_MODES` |
+| Feature tiers (T1/T2/T3) | docs/reference/features.md | `SEC:TIERS` |
+| Token consumption estimates | docs/reference/features.md | `SEC:TOKEN_ESTIMATES` |
+| Guard rails system | docs/reference/features.md | `SEC:GUARD_RAILS` |
+| Usage tracking (usage.json) | docs/reference/features.md | `SEC:USAGE_TRACKING` |
+| Background jobs (APScheduler) | docs/reference/features.md | `SEC:BACKGROUND_JOBS` |
+| Daily Target Trade Scanner (signals, scoring, scenarios, backfill) | docs/reference/features.md | `SEC:DIP_SCANNER` |
+| Signal convergence score | docs/reference/features.md | `SEC:CONVERGENCE` |
+| Dev commands (make up etc.) | docs/development/dev.md | `SEC:COMMANDS` |
+| Environment variables | docs/development/dev.md | `SEC:ENV_VARS` |
+| Testing conventions | docs/development/dev.md | `SEC:TESTING` |
+| Adding a new feature checklist | docs/development/dev.md | `SEC:ADD_FEATURE` |
+| Deployment strategy | docs/development/deployment_strategy.md | `SEC:DEPLOY` |
 | Operating rules (docs discipline, git workflow, code conventions, TZ) | docs/rules.md | `SEC:DOCS` / `SEC:GIT` / `SEC:CODE` / `SEC:TIMEZONE` |
 | Known doc debt (stale sections, missing entries) | docs/rules.md | `SEC:DOC_DEBT` |
+| Scanner improvement backlog (Opus review, 30 ideas, priority ranked) | local_debugging/opus_scanner_ideas.md | read directly — no anchor needed |
+| Scanner sprint notes + signal type design | local_debugging/dip-scanner-sprint.md | read directly |
+| Uncommitted changes staging log (commit tomorrow) | local_debugging/plus_plan.md | read directly |
 
 ---
 
@@ -72,7 +76,23 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-12 | New Market Context First (MCF) Funnel Scanner added alongside Dip Scanner. Separate `/mcf` dashboard. Uses 3-layer checking logic with SPY/QQQ/IWM/DIA to predict entries with ~1% targets. DB caching implemented to avoid `yfinance` rate limits. |
 | 2026-05-12 | Docs sweep: rewrote SEC:DIP_SCANNER (features.md) for current scanner reality — 4 signal types (incl. failed_breakdown), ATR-based stops/targets, regime gate, time stop, dedup, fmd backfill, near-miss logging, AI signal analysis; SEC:DIP_SCANNER_ROUTES (api.md) adds /similar /ticker-history /analyze /chart routes; SEC:DB_MODELS (architecture.md) adds full ScannerAlert schema with signal_type + five_min_direction + resolved_by; new docs/rules.md codifies operating rules (docs discipline, git workflow, code conventions, TZ) + tracks known doc debt; CLAUDE.md gains Critical Rule #8 referencing rules.md |
+| 2026-05-11 | Scanner reliability batch: eod_dump.py converts entry_time to ET in SELECT (fixes time_et display bug — DB always stored correct timestamptz, only the dump was rendering UTC); backend container TZ=America/New_York for ET-stamped logs/APScheduler/naive datetimes (DB stays timestamptz); resolver gains _compute_fmd() with tz-normalized index + diagnostic logging + 7-day backfill of null five_min_direction across closed rows; 15-min per-ticker dedup in api/dip_scanner.py:_save_alert (suppresses correlated back-to-back live alerts; backtest exempt); time_stop enforcement in resolver per signal_type (dip_buy 25 / orb_breakout 60 / vwap_reclaim 20 / failed_breakdown 30 min) — frees capital from dead-money trades that drift to ~breakeven by EOD |
+| 2026-05-10 | EOD analysis tooling: eod_dump.py queries DB → writes local_debugging/eod_signals/YYYY-MM-DD.json (signals/near-misses/score-bands/vs-60day/analysis_prompts); _log_near_miss() in dip_scanner.py logs score 65-71 signals to near_miss_log.jsonl; make eod + make eod-date targets |
+| 2026-05-10 | Data-driven ETF filter: ETF_TIERS cut to SPY+QQQ (tier1) + XLK (tier2) — IWM/DIA/XLF/XLV/TLT removed based on <50% win rates; score threshold raised 65→72; analytics endpoint adds by_signal_type_summary (win rate+EV per signal type) and by_score_band (72-79/80-89/90+) for ongoing tuning; ScannerPerformanceCard shows both new tables |
+| 2026-05-09 | AI signal analysis: POST /dip-scanner/analyze — queries DB win/loss history, builds structured prompt, calls LLM; returns verdict+plain_english+key_risk+watch_for; "What does this mean?" button in pro view; result clears on each new scan; blocked in saver mode |
+| 2026-05-09 | Ticker history + order labels: GET /dip-scanner/ticker-history/{ticker}; side:"BUY" on all 4 signal types; TickerHistoryModal (click ticker name); "Other setups" mini-cards with Buy Limit/Sell Limit/Stop Loss grid; BUY badge + order-label relabeling throughout |
+| 2026-05-09 | Manual trade log (batch 12): ManualTradeLog.tsx — log actual trades (ticker+P&L$+note), ISO-week scoped localStorage, shares dts_weekly_target with WeeklyTargetBar, progress bar + TARGET HIT badge; rendered below WeeklyTargetBar on Dashboard |
+| 2026-05-08 | Data integrity fixes (batch 11): backfill KeyError min_dip_pct→min_dip_atr; backfill uses ATR stop/target from scorer; signal_type+five_min_direction added to backfill dict+ORM; live scan saves all 4 signal types (was only saving dip_buy) |
+| 2026-05-08 | Scanner Opus batch 10 (#10,#18,#23,#24,#25,#29): GLD→TLT in ETF_TIERS; live distance-to-entry in entry cell; TERM_HINTS glossary+TermTip on VIX/ATR/dip labels; first-time onboarding modal (localStorage gate); Paper Trade button (localStorage, no DB); five_min_direction column+migration+resolver+analytics; 5-Min Accuracy metric in ScannerPerformanceCard |
+| 2026-05-08 | Scanner Opus batch 9 (#14,#17,#28): MISSED badge (10s polling, price>entry+0.2×ATR); /dip-scanner/similar endpoint (last N closed signals per ticker/session/signal_type cell); by_signal_type analytics breakdown; SignalHeatmap in ScannerPerformanceCard (EV-colored cells); signal_type column + Alembic migration c7d3e4f5a6b7 |
+| 2026-05-08 | Scanner Opus batch 7+8 (#13,#26): ORB 3:1 R, VWAP reclaim 1.5:1, failed breakdown 2.5:1; _refine_entry_1min() adjusts best signal entry to min of last 3×1-min lows (floored at −0.5%); entry_refined field in payload |
+| 2026-05-08 | Scanner Opus batch 6 (#1,#11): _get_atr_5m() Wilder ATR-14 on 5-min bars (30-min cache); VIX thresholds → ATR multiples (0.4/0.7/1.1×ATR); support proximity → 0.10/0.20/0.35×ATR; stops entry−max(0.5×ATR,0.25%), targets entry+max(1.0×ATR,0.4%); atr_5m+atr_adjusted in payload |
+| 2026-05-08 | Market regime gate (Opus #2): classify_regime() in regime.py (SPY 20-EMA + VIX 5d change + range-vs-ATR); trend_down blocks dip_buy, trend_up requires RSI<30; regime badge + blocking banner in DipScannerCard |
+| 2026-05-08 | Scanner UX batch (Opus #12,#15,#22,#19): time_stop_minutes per signal type; ENTER NOW/READY state badge; pre-trade checklist modal (3 confirmations before Robinhood link); simple/pro view toggle (scannerView in Zustand); confidence tier very_high/high/medium replaces numeric score in simple view; top_reasons filtered in simple Why line |
+| 2026-05-08 | Scanner signal intelligence (Opus #5,#7,#8,#9): capitulation penalty -15; 30-min trend alignment ±5/−10; CVD +8/+5/−5 from 5-min bars; failed_breakdown signal type (trapped shorts) |
+| 2026-05-08 | Scanner quality sprint (Opus ideas #3,#4,#6,#16,#21,#30): hammer weight +15→+5 with stricter volume+wick definition; VIX slope scoring replaces VIX level (rising VIX = -10, falling = +12); hard lunch block score<80; WHITELIST_CELLS scaffold (disabled, enable at n≥5/cell); invalidation field in signal payload (price_close_below/vix_above/rvol_resurge); frontend "Risk $X → Make $Y" as primary P&L; invalidation line below chart |
 | 2026-05-08 | Market Intelligence Layer (branch `feature/market-intelligence-layer`): ORB breakout + VWAP reclaim + VIX spike prep detectors in dip_scanner.py; GET /dip-scanner/weekly endpoint; 30-scenario scenarios.json; SituationSummary + WeeklyTargetBar components; DipScannerCard wired with scenario guidance, signal-type badges, VIX spike banner; DashboardPage adds WeeklyTargetBar above scanner grid |
 | 2026-05-08 | Daily Target Trade Scanner (branch `feature/daily-target-scanner`): ScannerAlert DB model + migration; dip_scanner.py tool (VWAP/RSI scoring, VIX-adjusted thresholds, 60-day backfill); /dip-scanner/scan + analytics + backfill + config endpoints; DipScannerCard + ScannerPerformanceCard; 5-min background scan + outcome resolver scheduler jobs; dip_buy_alert WebSocket type |
 | 2026-05-03 | Sprint 25: News Catalyst Quality Scorer — _classify_catalyst()/_catalyst_strength() in news.py (12 categories, HIGH/MEDIUM/LOW strength); catalyst_type+catalyst_strength fields on NewsItem; NewsPanel.tsx shows catalyst badge + strength pill |

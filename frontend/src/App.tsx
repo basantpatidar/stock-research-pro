@@ -9,11 +9,13 @@ import { ScreenerPage } from "./pages/ScreenerPage"
 import { MacroPage } from "./pages/MacroPage"
 import { UsagePage } from "./pages/UsagePage"
 import { DashboardPage } from "./pages/DashboardPage"
+import { McfDashboardPage } from "./pages/McfDashboardPage"
 import { T } from "./theme"
 
 const NAV_ITEMS = [
   { to: "/",           label: "Research" },
   { to: "/dashboard",  label: "Dashboard" },
+  { to: "/mcf",        label: "MCF Dashboard" },
   { to: "/watchlist",  label: "Watchlist" },
   { to: "/screener",   label: "Screener" },
   { to: "/macro",      label: "Macro" },
@@ -120,6 +122,7 @@ function AppShell() {
         <Routes>
           <Route path="/"           element={<ResearchPage />} />
           <Route path="/dashboard"  element={<DashboardPage />} />
+          <Route path="/mcf"        element={<McfDashboardPage />} />
           <Route path="/watchlist"  element={<WatchlistPage />} />
           <Route path="/screener"   element={<ScreenerPage />} />
           <Route path="/macro"      element={<MacroPage />} />
