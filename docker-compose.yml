@@ -10,6 +10,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/stockresearch
       - REDIS_URL=redis://redis:6379
       - LOG_DIR=/app/local_debugging
+      - TZ=America/New_York
     env_file:
       - .env
     depends_on:

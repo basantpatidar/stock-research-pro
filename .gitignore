@@ -61,3 +61,17 @@ local_debugging
 settings.local.json
 
 backend/tests
+
+# ── Planning / personal notes ────────────────────────────────────────────────
+# Project docs that help developers understand the codebase live in docs/ and
+# stay tracked (architecture.md, features.md, api.md, tools.md, frontend.md,
+# dev.md). Personal planning — sprint notes, critiques, proposals, strategy
+# brainstorms, ideas, todos — stays local. Drop them in local_debugging/ (above)
+# or use one of the suffixes below.
+ideas.md
+todo.md
+docs/*-sprint.md
+docs/*_critique*.md
+docs/*_proposal*.md
+docs/*_philosophy*.md
+docs/*_strategy*.md
