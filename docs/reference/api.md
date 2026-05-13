@@ -3,6 +3,7 @@
 # SEC:AUTH          API key pattern
 # SEC:V1_ROUTES     Original research, watchlist, screener, alerts, macro
 # SEC:V2_ROUTES     Tiered research routes (tier1/tier2/tier3/estimate)
+# SEC:MCF_ROUTES    Market Context First (MCF) scanner
 # SEC:USAGE_ROUTES  Usage tracking routes
 # SEC:REALTIME      SSE stream + WebSocket
 

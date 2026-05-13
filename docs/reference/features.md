@@ -299,7 +299,7 @@ Scenarios covered: `waiting`, `market_closed`, `no_buy_vix_extreme`, `no_buy_sti
 `sell_target_reached`, `sell_eod_approaching`, `hold_recovering`, `hold_near_target`, and more.
 
 ### Database Model
-See `docs/architecture.md` SEC:DB_MODELS for the full `ScannerAlert` schema (includes `signal_type`, `five_min_direction`, `resolved_by`, etc.).
+See `docs/reference/architecture.md` SEC:DB_MODELS for the full `ScannerAlert` schema (includes `signal_type`, `five_min_direction`, `resolved_by`, etc.).
 
 ### Historical Backfill
 `POST /dip-scanner/backfill` replays scanner logic over the last N days (default 60) of 5-min yfinance data. Outcomes simulated: target hit within session = "win", stop hit = "loss", EOD close = "win"/"loss" by sign of (close − entry). Backfill is **destructive** for backtest rows — clears existing `source = "backtest"` rows before re-seeding so re-runs always reflect the latest scoring logic.
