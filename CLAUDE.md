@@ -50,6 +50,8 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Environment variables | docs/dev.md | `SEC:ENV_VARS` |
 | Testing conventions | docs/dev.md | `SEC:TESTING` |
 | Adding a new feature checklist | docs/dev.md | `SEC:ADD_FEATURE` |
+| Operating rules (docs discipline, git workflow, code conventions, TZ) | docs/rules.md | `SEC:DOCS` / `SEC:GIT` / `SEC:CODE` / `SEC:TIMEZONE` |
+| Known doc debt (stale sections, missing entries) | docs/rules.md | `SEC:DOC_DEBT` |
 
 ---
 
@@ -62,6 +64,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 5. **Every change** → update the relevant `docs/` file + add a line to Recent Changes below
 6. **Guard rail limits** live only in `backend/app/services/usage/limits.py` — edit nowhere else
 7. **Reading docs** → NEVER read a full `docs/*.md` file. Use the nav map above to find the right file, `grep -n "SEC:ANCHOR" docs/file.md` to get the line, then `Read` with `offset`+`limit` for that section only. Full reads waste ~2k tokens per file.
+8. **All other operating rules** live in `docs/rules.md` — branching, commits, PR cadence, no AI attribution, TZ convention, etc. Read it before any non-trivial change. Add new rules there as they emerge.
 
 ---
 
@@ -69,6 +72,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-12 | Docs sweep: rewrote SEC:DIP_SCANNER (features.md) for current scanner reality — 4 signal types (incl. failed_breakdown), ATR-based stops/targets, regime gate, time stop, dedup, fmd backfill, near-miss logging, AI signal analysis; SEC:DIP_SCANNER_ROUTES (api.md) adds /similar /ticker-history /analyze /chart routes; SEC:DB_MODELS (architecture.md) adds full ScannerAlert schema with signal_type + five_min_direction + resolved_by; new docs/rules.md codifies operating rules (docs discipline, git workflow, code conventions, TZ) + tracks known doc debt; CLAUDE.md gains Critical Rule #8 referencing rules.md |
 | 2026-05-11 | Scanner reliability batch: eod_dump.py converts entry_time to ET in SELECT (fixes time_et display bug — DB always stored correct timestamptz, only the dump was rendering UTC) and now honors DATABASE_URL env var; backend container TZ=America/New_York for ET-stamped logs/APScheduler/naive datetimes (DB stays timestamptz); resolver gains _compute_fmd() with tz-normalized index + diagnostic logging + 7-day backfill of null five_min_direction across closed rows; 15-min per-ticker dedup in api/dip_scanner.py:_save_alert (suppresses correlated back-to-back live alerts; backtest exempt); time_stop enforcement in resolver per signal_type (dip_buy 25 / orb_breakout 60 / vwap_reclaim 20 / failed_breakdown 30 min) — frees capital from dead-money trades that drift to ~breakeven by EOD |
 | 2026-05-08 | Market Intelligence Layer (branch `feature/market-intelligence-layer`): ORB breakout + VWAP reclaim + VIX spike prep detectors in dip_scanner.py; GET /dip-scanner/weekly endpoint; 30-scenario scenarios.json; SituationSummary + WeeklyTargetBar components; DipScannerCard wired with scenario guidance, signal-type badges, VIX spike banner; DashboardPage adds WeeklyTargetBar above scanner grid |
 | 2026-05-08 | Daily Target Trade Scanner (branch `feature/daily-target-scanner`): ScannerAlert DB model + migration; dip_scanner.py tool (VWAP/RSI scoring, VIX-adjusted thresholds, 60-day backfill); /dip-scanner/scan + analytics + backfill + config endpoints; DipScannerCard + ScannerPerformanceCard; 5-min background scan + outcome resolver scheduler jobs; dip_buy_alert WebSocket type |
