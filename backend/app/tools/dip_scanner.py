@@ -235,17 +235,26 @@ def _get_session_window(now_et: datetime) -> str:
     return "closed"
 
 
-def _vix_thresholds(vix: float) -> dict | None:
+def _vix_thresholds(vix: float, loose: bool = False) -> dict | None:
     """ATR-normalised entry thresholds per VIX level. None = skip (extreme crash).
     min_dip_atr: minimum dip size as a multiple of the ETF's 5-min ATR-14.
-    This replaces fixed % values — automatically tighter for DIA, wider for IWM."""
+    This replaces fixed % values — automatically tighter for DIA, wider for IWM.
+    loose=True relaxes all three gates ~20-30% — for diagnostic/exploration scans only."""
     if vix < 18:
-        return {"min_dip_atr": 0.4, "max_rsi": 42, "min_rvol": 0.8}
+        base = {"min_dip_atr": 0.4, "max_rsi": 42, "min_rvol": 0.8}
     elif vix <= 25:
-        return {"min_dip_atr": 0.7, "max_rsi": 38, "min_rvol": 1.2}
+        base = {"min_dip_atr": 0.7, "max_rsi": 38, "min_rvol": 1.2}
     elif vix <= 35:
-        return {"min_dip_atr": 1.1, "max_rsi": 33, "min_rvol": 1.5}
-    return None
+        base = {"min_dip_atr": 1.1, "max_rsi": 33, "min_rvol": 1.5}
+    else:
+        return None
+    if loose:
+        return {
+            "min_dip_atr": base["min_dip_atr"] * 0.75,
+            "max_rsi":     base["max_rsi"] + 5,
+            "min_rvol":    base["min_rvol"] * 0.85,
+        }
+    return base
 
 
 def _score_etf(
@@ -255,8 +264,12 @@ def _score_etf(
     now_et: datetime,
     vix_slope: float = 0.0,
     regime_info: dict | None = None,
+    loose: bool = False,
 ) -> dict | None:
-    """Score one ETF for dip-buy. Returns opportunity dict or None if conditions not met."""
+    """Score one ETF for dip-buy. Returns opportunity dict or None if conditions not met.
+    loose=True bypasses regime gate + RVOL-declining gate, relaxes VIX thresholds, and
+    lowers score thresholds (72→65, lunch 80→72). Diagnostic mode — do NOT trade these
+    entries with full size; the gates exist because they raise win rate."""
     candles = price_data.get("intraday_history", [])
     if len(candles) < 15:
         return None
@@ -278,10 +291,10 @@ def _score_etf(
 
     # ── Market-regime gate (#2) ────────────────────────────────────────────────
     regime = (regime_info or {}).get("regime", "mean_revert")
-    if regime == "trend_down":
+    if regime == "trend_down" and not loose:
         return None  # dip buying has negative EV on trend-down days
 
-    thresholds = _vix_thresholds(vix)
+    thresholds = _vix_thresholds(vix, loose=loose)
     if thresholds is None:
         return None  # extreme crash day
 
@@ -309,9 +322,10 @@ def _score_etf(
         return None
 
     # Require RVOL to be declining — sellers exhausting, not still in panic mode
+    # Loose mode bypasses this — most common single blocker on knife-falling days
     recent_vols = [c.get("volume", 0) for c in candles[-6:]]
     rvol_declining = len(recent_vols) >= 4 and recent_vols[-1] < recent_vols[-4]
-    if not rvol_declining:
+    if not rvol_declining and not loose:
         return None
 
     # ── Scoring ────────────────────────────────────────────────────────────────
@@ -448,13 +462,15 @@ def _score_etf(
     if not top_reasons:
         top_reasons = signals[:2]
 
-    if score < 72:
-        if score >= 65:  # near-miss: passed pattern checks, just below threshold
+    score_threshold = 65 if loose else 72
+    if score < score_threshold:
+        if score >= 65 and not loose:  # near-miss: passed pattern checks, just below threshold
             _log_near_miss(ticker, score, signals, current_price, window)
         return None
 
     # Hard lunch block — backtest 0% win rate; -5 penalty alone is insufficient
-    if window == "lunch_drift" and score < 80:
+    lunch_min = 72 if loose else 80
+    if window == "lunch_drift" and score < lunch_min:
         return None
 
     entry_price = current_price
@@ -500,6 +516,7 @@ def _score_etf(
         "top_reasons": top_reasons,
         "atr_5m": round(atr_5m, 4),
         "atr_adjusted": atr_adjusted,
+        "loose_mode": loose,
     }
 
 
@@ -523,8 +540,9 @@ def _add_pnl(opp: dict, capital: float) -> dict:
 
 # ── Additional signal detectors ───────────────────────────────────────────────
 
-def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: datetime) -> dict | None:
-    """ORB-15 breakout: price broke above opening range high with volume confirmation."""
+def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: datetime, loose: bool = False) -> dict | None:
+    """ORB-15 breakout: price broke above opening range high with volume confirmation.
+    loose=True lowers the RVOL gate from 1.5x → 1.2x (diagnostic mode)."""
     window = _get_session_window(now_et)
     # ORB breakout only valid after the range is set — not during morning_flush itself
     if window not in ("morning_trend", "lunch_drift", "power_hour"):
@@ -550,7 +568,8 @@ def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: date
 
     rvol_data = price_data.get("rvol") or {}
     rvol_value = rvol_data.get("value", 1.0) if isinstance(rvol_data, dict) else 1.0
-    if rvol_value < 1.5:
+    rvol_min = 1.2 if loose else 1.5
+    if rvol_value < rvol_min:
         return None
 
     score = 72
@@ -595,11 +614,13 @@ def _detect_orb_breakout(ticker: str, price_data: dict, vix: float, now_et: date
         "orb_range": round(orb_range, 2),
         "confidence_tier": "high" if min(score, 100) >= 80 else "medium",
         "top_reasons": signals[:2],
+        "loose_mode": loose,
     }
 
 
-def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: datetime) -> dict | None:
-    """VWAP reclaim: price was below VWAP for 2+ candles, last candle closed back above."""
+def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: datetime, loose: bool = False) -> dict | None:
+    """VWAP reclaim: price was below VWAP for 2+ candles, last candle closed back above.
+    loose=True lowers the reclaim-RVOL gate from 1.2x → 1.0x (diagnostic mode)."""
     window = _get_session_window(now_et)
     window_cfg = SESSION_WINDOWS.get(window, {})
     if window_cfg.get("score_delta") is None:
@@ -626,7 +647,8 @@ def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: date
     avg_vol = sum(c.get("volume", 0) for c in candles) / len(candles) if candles else 1
     reclaim_vol = candles[-1].get("volume", 0)
     rvol_reclaim = reclaim_vol / avg_vol if avg_vol > 0 else 1.0
-    if rvol_reclaim < 1.2:
+    rvol_min = 1.0 if loose else 1.2
+    if rvol_reclaim < rvol_min:
         return None
 
     score = 68
@@ -669,12 +691,14 @@ def _detect_vwap_reclaim(ticker: str, price_data: dict, vix: float, now_et: date
         "time_stop_minutes": 20,  # VWAP reclaims fail fast if they fail at all
         "confidence_tier": "high" if min(score, 100) >= 80 else "medium",
         "top_reasons": signals[:2],
+        "loose_mode": loose,
     }
 
 
-def _detect_failed_breakdown(ticker: str, price_data: dict, vix: float, now_et: datetime) -> dict | None:
+def _detect_failed_breakdown(ticker: str, price_data: dict, vix: float, now_et: datetime, loose: bool = False) -> dict | None:
     """Failed breakdown: price briefly broke below a key support then snapped back above it.
-    Trapped shorts must cover → strong mean-reversion setup."""
+    Trapped shorts must cover → strong mean-reversion setup.
+    loose=True lowers the reclaim-RVOL gate from 1.2x → 1.0x (diagnostic mode)."""
     window = _get_session_window(now_et)
     window_cfg = SESSION_WINDOWS.get(window, {})
     if window_cfg.get("score_delta") is None:
@@ -716,7 +740,8 @@ def _detect_failed_breakdown(ticker: str, price_data: dict, vix: float, now_et: 
     avg_vol = sum(c.get("volume", 0) for c in candles) / len(candles) if candles else 1
     reclaim_vol = candles[-1].get("volume", 0)
     rvol_reclaim = reclaim_vol / avg_vol if avg_vol > 0 else 1.0
-    if rvol_reclaim < 1.2:
+    rvol_min = 1.0 if loose else 1.2
+    if rvol_reclaim < rvol_min:
         return None
 
     score = 74
@@ -775,6 +800,7 @@ def _detect_failed_breakdown(ticker: str, price_data: dict, vix: float, now_et: 
         "time_stop_minutes": 30,
         "confidence_tier": "high" if score >= 80 else "medium",
         "top_reasons": signals[:2],
+        "loose_mode": loose,
     }
 
 
@@ -914,7 +940,7 @@ def _determine_scenario_key(
             "rsi_not_oversold": "no_buy_rsi_not_oversold",
             "lunch_drift":      "no_buy_lunch_drift",
             "score_too_low":    "no_buy_score_too_low",
-            "regime_trend_down": "no_buy_vix_extreme",  # closest semantic match
+            "regime_trend_down": "no_buy_regime_trend_down",
         }
         return key_map.get(most_common, "no_buy_score_too_low")
 
@@ -927,8 +953,12 @@ def scan_dip_opportunities(
     tickers: list[str],
     capital: float = 1000.0,
     vix: float | None = None,
+    loose: bool = False,
 ) -> dict:
-    """Scan ETFs for dip-buy, ORB breakout, and VWAP reclaim opportunities. Zero LLM."""
+    """Scan ETFs for dip-buy, ORB breakout, and VWAP reclaim opportunities. Zero LLM.
+    loose=True relaxes all gate thresholds ~20-30% and bypasses the regime/RVOL-declining
+    blocks. Diagnostic mode — results not persisted, used to see what would have qualified
+    on a quiet day. Win rates not validated for this profile."""
     from app.tools.price import get_price
 
     now_et = datetime.now(ET_TZ)
@@ -968,25 +998,25 @@ def scan_dip_opportunities(
                 continue
             price_cache[ticker] = result
 
-            dip = _score_etf(ticker, result, vix, now_et, vix_slope, regime_info)
+            dip = _score_etf(ticker, result, vix, now_et, vix_slope, regime_info, loose=loose)
             if dip:
                 dip_opportunities.append(_add_pnl(dip, capital))
             else:
-                # Add regime gate reason if applicable
-                if regime_info.get("regime") == "trend_down":
+                # Add regime gate reason if applicable (only fires in strict mode)
+                if regime_info.get("regime") == "trend_down" and not loose:
                     no_signal_reasons.append("regime_trend_down")
                 else:
                     no_signal_reasons.append(_get_no_signal_reason(result, vix, now_et))
 
-            orb = _detect_orb_breakout(ticker, result, vix, now_et)
+            orb = _detect_orb_breakout(ticker, result, vix, now_et, loose=loose)
             if orb:
                 orb_opportunities.append(_add_pnl(orb, capital))
 
-            vwap = _detect_vwap_reclaim(ticker, result, vix, now_et)
+            vwap = _detect_vwap_reclaim(ticker, result, vix, now_et, loose=loose)
             if vwap:
                 vwap_opportunities.append(_add_pnl(vwap, capital))
 
-            fb = _detect_failed_breakdown(ticker, result, vix, now_et)
+            fb = _detect_failed_breakdown(ticker, result, vix, now_et, loose=loose)
             if fb:
                 failed_breakdown_opportunities.append(_add_pnl(fb, capital))
 
@@ -1025,6 +1055,7 @@ def scan_dip_opportunities(
         "regime": regime_info,
         "timestamp": now_et.isoformat(),
         "capital": capital,
+        "loose_gates_active": loose,
     }
 
 

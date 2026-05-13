@@ -173,6 +173,7 @@ interface ScanResult {
   regime?: RegimeInfo
   timestamp: string
   capital: number
+  loose_gates_active?: boolean
 }
 
 const SESSION_COLORS: Record<string, string> = {
@@ -603,6 +604,7 @@ export function DipScannerCard() {
     return saved ? parseFloat(saved) : DEFAULT_CAPITAL
   })
   const [tiers, setTiers] = useState<number[]>([1])
+  const [looseGates, setLooseGates] = useState<boolean>(() => localStorage.getItem("dts_loose_gates") === "1")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [expandedSignals, setExpandedSignals] = useState(false)
@@ -669,6 +671,14 @@ export function DipScannerCard() {
     localStorage.setItem(STORAGE_KEY, String(val))
   }
 
+  const toggleLooseGates = () => {
+    setLooseGates(prev => {
+      const next = !prev
+      localStorage.setItem("dts_loose_gates", next ? "1" : "0")
+      return next
+    })
+  }
+
   const scan = useCallback(async () => {
     setLoading(true)
     setResult(null)
@@ -678,6 +688,7 @@ export function DipScannerCard() {
         tiers,
         capital,
         vix: null,
+        loose_gates: looseGates,
       })
       const data: ScanResult = res.data
       setResult(data)
@@ -711,7 +722,7 @@ export function DipScannerCard() {
     } finally {
       setLoading(false)
     }
-  }, [tiers, capital])
+  }, [tiers, capital, looseGates])
 
   const analyzeSetup = async (opp: Opportunity) => {
     if (execMode === "saver") return
@@ -885,6 +896,19 @@ export function DipScannerCard() {
               Tier {t}
             </button>
           ))}
+          <button
+            onClick={toggleLooseGates}
+            title="Relaxes regime gate, RVOL-declining gate, and score threshold ~25%. Diagnostic only — results NOT saved to analytics. Use to see what would have qualified on a quiet day; do not trade these entries with full size."
+            style={{
+              fontSize: 11, padding: "4px 10px", marginLeft: 6,
+              background: looseGates ? T.amber : T.surface2,
+              color: looseGates ? "#1a1a1a" : T.text2,
+              border: `1px solid ${looseGates ? T.amber : T.border}`,
+              borderRadius: 5, cursor: "pointer", fontWeight: looseGates ? 600 : 400,
+            }}
+          >
+            Loose Gates {looseGates ? "ON" : "OFF"}
+          </button>
         </div>
         {result && (
           <div style={{ fontSize: 11, color: T.text3, marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
@@ -893,6 +917,29 @@ export function DipScannerCard() {
           </div>
         )}
       </div>
+
+      {/* Loose-gates banner — only when scan was run with loose mode */}
+      {result?.loose_gates_active && (
+        <div style={{
+          background: "rgba(245,158,11,0.12)",
+          border: `1px solid ${T.amber}66`,
+          borderLeft: `3px solid ${T.amber}`,
+          borderRadius: 8, padding: "9px 14px", marginBottom: 10,
+          display: "flex", alignItems: "flex-start", gap: 10,
+        }}>
+          <span style={{ fontSize: 15, flexShrink: 0 }}>⚠</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.amber, marginBottom: 2 }}>
+              Loose Gates active — diagnostic only
+            </div>
+            <div style={{ fontSize: 11, color: T.text2, lineHeight: 1.5 }}>
+              Thresholds relaxed ~25%, regime + RVOL-declining gates bypassed.
+              Results <b>not saved</b> to analytics. Win rates not validated for this profile —
+              do not trade these with full size.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Situation summary — always shown after first scan or as idle state */}
       {!loading && (
