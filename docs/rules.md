@@ -19,12 +19,12 @@ CLAUDE.md links here from its Critical Rules section.
 ### Rule 1 — Every code change updates the relevant `docs/` file in the same commit / PR
 **Why:** Docs that drift become noise. The user has called out twice this week that docs are stale; the cost is real (LLMs read stale docs and recommend wrong things; new contributors get false mental models).
 **How to apply:**
-- A new tool → `docs/tools.md` SEC:V1_TOOLS or SEC:V2_TOOLS row added in the same commit
-- A new API route → `docs/api.md` under the matching SEC: anchor in the same commit
-- A new frontend page → `docs/frontend.md` SEC:PAGES
-- A new DB column / model → `docs/architecture.md` SEC:DB_MODELS
-- A new env var → `docs/dev.md` SEC:ENV_VARS
-- A new feature gate / guard rail / scoring rule → `docs/features.md` under the relevant section
+- A new tool → `docs/reference/tools.md` SEC:V1_TOOLS or SEC:V2_TOOLS row added in the same commit
+- A new API route → `docs/reference/api.md` under the matching SEC: anchor in the same commit
+- A new frontend page → `docs/reference/frontend.md` SEC:PAGES
+- A new DB column / model → `docs/reference/architecture.md` SEC:DB_MODELS
+- A new env var → `docs/development/dev.md` SEC:ENV_VARS
+- A new feature gate / guard rail / scoring rule → `docs/reference/features.md` under the relevant section
 - A new operating rule → this file (`docs/rules.md`) under the right SEC
 
 ### Rule 2 — Always add a row to CLAUDE.md "Recent Changes" for any user-visible change
@@ -60,9 +60,19 @@ CLAUDE.md links here from its Critical Rules section.
 **Why:** A naïve `git add CLAUDE.md` sweeps in 4 days of accumulated edits that belong on other branches.
 **How to apply:** Backup the file → `git checkout HEAD -- file` → re-apply only the in-scope change → commit → restore the backup. The other accumulated edits stay in the working tree for their proper branches.
 
-### Rule 9 — Never push or open PRs without explicit ask (unless Rule 5 implies it)
-**Why:** Push is shared-state; force-push and PR creation are visible to others. Authorization is bounded.
-**How to apply:** "Commit" means commit; "push" or "open PR" requires its own go-ahead, except when Rule 5's per-sprint cadence already implies it (and even then, flag what you're about to do in chat first).
+### Rule 9 — Never commit, push, or open PRs without explicit ask
+**Why:** Even committing changes local history; what looks "obviously ready" to the agent may be staged-but-not-final to the user. Push and PR creation also publish shared state. The cost of pausing to ask is low; the cost of an unwanted commit (or a premature push) is real.
+**How to apply:** After completing a logical chunk of work, prompt the user with "do you want me to commit these changes?" before staging. Do NOT bundle the commit step into the same response as the work — surface it as its own decision. Push and PR creation each need their own go-ahead, even if the user just authorized a commit.
+
+### Rule 14 — Daily commit cap: random between 5 and 10; defer overflow to `push_plan.md`
+**Why:** GitHub contribution graph optics. Bunching 30 commits into one day then going dark for a week looks bursty and inactive on the public profile. Spreading the same work across 4–5 days keeps the graph consistently green and signals continuous activity to anyone visiting the profile (recruiters, collaborators).
+**How to apply:**
+- Pick a daily target *randomly* between 5 and 10 commits — don't always aim for 10 (predictable patterns also look artificial). Some days 6, some 8, some 10.
+- Track today's count: `git log --since=midnight --oneline | wc -l`.
+- Once today's random target is hit, stop committing — even if more work is ready and reviewed locally.
+- Record overflow in `local_debugging/push_plan.md` under "Deferred to next day": file paths + one-line description per item. The point of the queue is to *feed future days* — never let a workday go to zero commits when the queue has content.
+- On a slow day with no fresh work, pull from the queue rather than the queue being a dumping ground that grows forever.
+- Don't artificially inflate by splitting one logical change into many tiny commits — atomic commits per concern (Rule 7) still applies. The cap is about pacing across days, not fragmenting within a day.
 
 ---
 
@@ -104,13 +114,13 @@ These are gaps surfaced during the 2026-05-12 docs audit. Address opportunistica
 
 | Doc | Gap | Owner / when |
 |---|---|---|
-| `docs/tools.md` SEC:V1_TOOLS | Catalog says "24 tools" but ~15 newer ones missing: `canslim`, `dividend`, `edgar_fundamentals`, `edgar_risk_factors`, `economic_calendar`, `fear_greed`, `gap_scanner`, `guru_tracker`, `market_breadth`, `moat`, `patterns`, `pretrade_score`, `regime`, `seasonality`, `smart_money`, `valuation`, `volatility_forecast` | Next sprint that touches any of these tools |
-| `docs/frontend.md` SEC:PAGES | Missing `DashboardPage`, recent scanner card revamps, `ManualTradeLog` | Next frontend sprint |
-| `docs/frontend.md` SEC:COMPONENTS | Missing `TickerHistoryModal`, scanner pretrade-checklist modal, `WeeklyTargetBar`, `SituationSummary`, scenario guidance, etc. | Same |
-| `docs/architecture.md` SEC:DIR_MAP | May be stale — last verified 2026-05-02 | Quick scan once per month |
-| `docs/dev.md` SEC:ENV_VARS | Missing newer env vars (TZ, USAGE_FILE, NEAR_MISS_LOG, possibly others) | Add when touched |
-| `docs/dev.md` SEC:ADD_FEATURE | Doesn't mention `docs/rules.md` — should reference Rule 1 (docs in same commit) | Quick add |
-| `docs/api.md` SEC:USAGE_ROUTES | Verify reflects current `/usage/` shape | Quick scan |
+| `docs/reference/tools.md` SEC:V1_TOOLS | Catalog says "24 tools" but ~15 newer ones missing: `canslim`, `dividend`, `edgar_fundamentals`, `edgar_risk_factors`, `economic_calendar`, `fear_greed`, `gap_scanner`, `guru_tracker`, `market_breadth`, `moat`, `patterns`, `pretrade_score`, `regime`, `seasonality`, `smart_money`, `valuation`, `volatility_forecast` | Next sprint that touches any of these tools |
+| `docs/reference/frontend.md` SEC:PAGES | Missing `DashboardPage`, recent scanner card revamps, `ManualTradeLog` | Next frontend sprint |
+| `docs/reference/frontend.md` SEC:COMPONENTS | Missing `TickerHistoryModal`, scanner pretrade-checklist modal, `WeeklyTargetBar`, `SituationSummary`, scenario guidance, etc. | Same |
+| `docs/reference/architecture.md` SEC:DIR_MAP | May be stale — last verified 2026-05-02 | Quick scan once per month |
+| `docs/development/dev.md` SEC:ENV_VARS | Missing newer env vars (TZ, USAGE_FILE, NEAR_MISS_LOG, possibly others) | Add when touched |
+| `docs/development/dev.md` SEC:ADD_FEATURE | Doesn't mention `docs/rules.md` — should reference Rule 1 (docs in same commit) | Quick add |
+| `docs/reference/api.md` SEC:USAGE_ROUTES | Verify reflects current `/usage/` shape | Quick scan |
 
 ---
 
