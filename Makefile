@@ -1,4 +1,4 @@
-.PHONY: help up down logs backend frontend test lint fmt migrate shell clean
+.PHONY: help up down logs backend frontend test lint fmt migrate shell clean eod
 
 # ── Default ───────────────────────────────────────────────────────────────────
 help:
@@ -18,6 +18,8 @@ help:
 	@echo "  make migration   Generate new migration (MSG='description')"
 	@echo "  make shell       Open Python shell with app context"
 	@echo "  make clean       Remove cache + test artifacts"
+	@echo "  make eod         Dump today's scanner signals to local_debugging/eod_signals/"
+	@echo "  make eod-date    Dump a specific day  (DATE=2026-05-09 make eod-date)"
 	@echo ""
 
 # ── Docker ────────────────────────────────────────────────────────────────────
@@ -41,6 +43,12 @@ logs-backend:
 
 tail-log:
 	tail -f local_debugging/app.log
+
+eod:
+	python local_debugging/eod_dump.py
+
+eod-date:
+	python local_debugging/eod_dump.py --date $(DATE)
 
 # ── Local dev (no Docker) ─────────────────────────────────────────────────────
 backend:
