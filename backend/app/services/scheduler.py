@@ -52,6 +52,71 @@ async def _run_dip_scan():
         logger.warning("dip_scan job error: %s", exc)
 
 
+async def _run_mcf_scan(force: bool = False):
+    """Fire MCF (Market Context First) funnel scan every 5 min."""
+    import pytz
+    from datetime import datetime, timedelta, timezone
+    from app.tools.mcf_scanner import scan_mcf_opportunities
+    from app.db.database import get_db_direct
+    from app.services.data_cache import set_stock_cache
+    from app.db.models import ScannerAlert
+    import uuid
+
+    # Run check
+    et_tz = pytz.timezone("America/New_York")
+    now_et = datetime.now(et_tz)
+    hm = now_et.hour * 60 + now_et.minute
+    if not force and (hm < 9 * 60 + 30 or hm >= 16 * 60):
+        return  # outside trading hours
+        
+    try:
+        # 1. Generate scan
+        result = scan_mcf_opportunities(capital=1000.0)
+        
+        # 2. Extract State (Weather + Tide)
+        state_data = {
+            "timestamp": result["timestamp"],
+            "weather": result["weather"],
+            "tide": result["tide"],
+        }
+        
+        # 3. Save to Cache and DB
+        async for db in get_db_direct():
+            # Cache the state so frontend can fetch it quickly
+            await set_stock_cache(
+                db=db,
+                ticker="MCF",
+                data_type="state",
+                data=state_data,
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+            )
+            
+            # Save any new alerts
+            opps = result.get("opportunities", [])
+            for opp in opps:
+                alert = ScannerAlert(
+                    id=uuid.uuid4(),
+                    ticker=opp["ticker"],
+                    signal_type="mcf_dip_buy",
+                    entry_price=opp["entry_price"],
+                    target_price=opp["target_price"],
+                    stop_price=opp["stop_price"],
+                    entry_time=datetime.fromisoformat(result["timestamp"]),
+                    score=opp.get("score", 90),
+                    signals=opp.get("signals", []),
+                    capital_used=opp.get("capital_used", 1000.0),
+                    source="live",
+                    status="open",
+                )
+                db.add(alert)
+                logger.info("mcf_scan: fired alert %s", opp["ticker"])
+            
+            if opps:
+                await db.commit()
+                
+    except Exception as exc:
+        logger.warning("mcf_scan job error: %s", exc)
+
 def _compute_fmd(bars, entry_time, entry_price: float) -> tuple[str | None, str]:
     """Forward 5-min direction. Returns (fmd, reason). fmd is None if can't compute.
 
@@ -282,6 +347,16 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=5),
         id="resolve_alerts",
         name="Resolve open scanner alerts",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+
+    # MCF scanner — every 5 min
+    scheduler.add_job(
+        _run_mcf_scan,
+        trigger=IntervalTrigger(minutes=5),
+        id="mcf_scan",
+        name="MCF funnel scanner",
         replace_existing=True,
         misfire_grace_time=60,
     )
