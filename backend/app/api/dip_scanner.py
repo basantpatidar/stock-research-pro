@@ -24,6 +24,7 @@ class ScanRequest(BaseModel):
     tiers: list[int] = [1]
     capital: float = DEFAULT_CAPITAL
     vix: float | None = None
+    loose_gates: bool = False  # diagnostic mode — relaxes thresholds, skips persistence
 
 
 class BackfillRequest(BaseModel):
@@ -73,25 +74,29 @@ async def scan(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    """Manual scan trigger. Returns best opportunity across selected ETF tiers."""
+    """Manual scan trigger. Returns best opportunity across selected ETF tiers.
+    Loose-gates results are NOT persisted — they would contaminate win/loss analytics
+    since they were generated under relaxed thresholds with unvalidated win rates."""
     tickers = _get_tickers(request.tiers)
     result = await asyncio.to_thread(
-        scan_dip_opportunities, tickers, request.capital, request.vix
+        scan_dip_opportunities, tickers, request.capital, request.vix, request.loose_gates
     )
 
-    # Persist all opportunity types as open live alerts — not just dip_buy
-    all_live_opps = [
-        *result.get("opportunities", []),
-        *result.get("orb_opportunities", []),
-        *result.get("vwap_opportunities", []),
-        *result.get("failed_breakdown_opportunities", []),
-    ]
-    for opp in all_live_opps:
-        try:
-            opp["entry_time"] = result["timestamp"]
-            await _save_alert(db, opp)
-        except Exception as exc:
-            logger.warning("failed to save alert for %s: %s", opp.get("ticker"), exc)
+    # Persist all opportunity types as open live alerts — not just dip_buy.
+    # Skip persistence for loose-gates scans to keep analytics clean.
+    if not request.loose_gates:
+        all_live_opps = [
+            *result.get("opportunities", []),
+            *result.get("orb_opportunities", []),
+            *result.get("vwap_opportunities", []),
+            *result.get("failed_breakdown_opportunities", []),
+        ]
+        for opp in all_live_opps:
+            try:
+                opp["entry_time"] = result["timestamp"]
+                await _save_alert(db, opp)
+            except Exception as exc:
+                logger.warning("failed to save alert for %s: %s", opp.get("ticker"), exc)
 
     return result
 
