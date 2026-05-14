@@ -50,6 +50,10 @@ class AccountInfo(BaseModel):
     cash: float
     buying_power: float
     equity: float
+    # Previous trading day's close equity — used by the daily-loss cap to
+    # compute today's P&L (`equity - last_equity`). Optional because not
+    # every broker exposes it; cap falls back to "skip" when None.
+    last_equity: float | None = None
     daytrade_count: int
 
 

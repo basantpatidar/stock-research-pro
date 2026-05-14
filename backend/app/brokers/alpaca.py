@@ -97,12 +97,14 @@ class AlpacaBroker(BaseBroker):
             acct = self._client.get_account()
         except Exception as exc:
             raise BrokerUnreachable(f"alpaca get_account failed: {exc}") from exc
+        last_equity = getattr(acct, "last_equity", None)
         return AccountInfo(
             broker=self.name,
             mode=self.mode,
             cash=float(acct.cash),
             buying_power=float(acct.buying_power),
             equity=float(acct.equity),
+            last_equity=float(last_equity) if last_equity is not None else None,
             daytrade_count=int(getattr(acct, "daytrade_count", 0) or 0),
         )
 
