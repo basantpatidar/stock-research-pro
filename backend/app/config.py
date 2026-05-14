@@ -49,6 +49,25 @@ class Settings(BaseSettings):
     screener_interval_minutes: int = Field(default=15)
     watchlist_alert_interval_minutes: int = Field(default=5)
 
+    # Broker — paper trading first, flip to "live" after pre-live checklist
+    # (see docs/trading.md SEC:RISK). Paper and live use *different* API keys
+    # on Alpaca; rotating the mode without rotating the key returns 403.
+    broker: str = Field(default="alpaca", description="alpaca (only supported provider for now)")
+    broker_mode: str = Field(default="paper", description="paper | live")
+    alpaca_api_key: str = Field(default="")
+    alpaca_api_secret: str = Field(default="")
+    alpaca_base_url: str = Field(default="", description="optional override; auto-resolved from broker_mode if blank")
+
+    # Trade risk caps — enforced server-side at the API layer (see
+    # services/trading/limits.py once Phase 2 lands). Frontend cannot bypass.
+    trade_max_order_dollars: float = Field(default=2000.0)
+    trade_max_position_dollars: float = Field(default=5000.0)
+    trade_daily_loss_cap_dollars: float = Field(default=-200.0)
+    trade_daily_order_count_cap: int = Field(default=20)
+    # Auto-trade — off until Phase 3 sign-off, even then gated per signal type
+    auto_trade_enabled: bool = Field(default=False)
+    auto_trade_signal_types: str = Field(default="", description="comma-separated allowlist; empty = none")
+
     # Logging
     log_dir: str = Field(default="./local_debugging")
 
