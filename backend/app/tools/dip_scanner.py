@@ -32,13 +32,61 @@ _NEAR_MISS_LOG = Path(
     os.getenv("NEAR_MISS_LOG", str(Path(__file__).resolve().parents[3] / "local_debugging" / "near_miss_log.jsonl"))
 )
 
-def _log_near_miss(ticker: str, score: int, signals: list, price: float, window: str) -> None:
-    """Append one near-miss entry to the JSONL log. Silent on any failure."""
+# In-memory dedup set — (date, ticker, window, time_et, score) → already-logged.
+# Prevents the same intraday candle being logged twice when the scanner re-runs
+# (e.g. backtest replay after a live run on the same day). Seeded from disk on
+# first use so dedup survives process restarts within the same trading day.
+_near_miss_seen: set[tuple[str, str, str, str, int]] | None = None
+
+
+def _load_near_miss_seen() -> set[tuple[str, str, str, str, int]]:
+    seen: set[tuple[str, str, str, str, int]] = set()
+    if not _NEAR_MISS_LOG.exists():
+        return seen
     try:
+        for line in _NEAR_MISS_LOG.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+                seen.add((e["date"], e["ticker"], e["window"], e["time_et"], int(e["score"])))
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+    except OSError:
+        pass
+    return seen
+
+
+def _log_near_miss(
+    ticker: str,
+    score: int,
+    signals: list,
+    price: float,
+    window: str,
+    now_et: datetime | None = None,
+) -> None:
+    """Append one near-miss entry to the JSONL log. Silent on any failure.
+
+    ``now_et`` is the bar timestamp of the signal — pass it from the caller so
+    backtest entries record the actual intraday moment, not the wall-clock time
+    the backtest ran. Falls back to ``datetime.now(ET)`` for live calls that
+    don't thread the bar time through.
+    """
+    global _near_miss_seen
+    try:
+        ts = now_et or datetime.now(tz=pytz.timezone("America/New_York"))
+        date_str = ts.date().isoformat()
+        time_str = ts.strftime("%H:%M")
+        key = (date_str, ticker, window, time_str, score)
+
+        if _near_miss_seen is None:
+            _near_miss_seen = _load_near_miss_seen()
+        if key in _near_miss_seen:
+            return
+        _near_miss_seen.add(key)
+
         _NEAR_MISS_LOG.parent.mkdir(parents=True, exist_ok=True)
         entry = {
-            "date":    datetime.now(tz=pytz.timezone("America/New_York")).date().isoformat(),
-            "time_et": datetime.now(tz=pytz.timezone("America/New_York")).strftime("%H:%M"),
+            "date":    date_str,
+            "time_et": time_str,
             "ticker":  ticker,
             "score":   score,
             "window":  window,
@@ -465,7 +513,7 @@ def _score_etf(
     score_threshold = 65 if loose else 72
     if score < score_threshold:
         if score >= 65 and not loose:  # near-miss: passed pattern checks, just below threshold
-            _log_near_miss(ticker, score, signals, current_price, window)
+            _log_near_miss(ticker, score, signals, current_price, window, now_et=now_et)
         return None
 
     # Hard lunch block — backtest 0% win rate; -5 penalty alone is insufficient
