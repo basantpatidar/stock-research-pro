@@ -237,7 +237,10 @@ Base score 50. Fire threshold: **score ≥ 72** (raised from 65 on 2026-05-10 af
 | Session delta | ±0 to ±10 | See session windows table |
 | Confidence tier | label only | very_high (≥85), high (75–84), medium (72–74) |
 
-Signals scoring 65–71 (passed pattern checks but below fire threshold) are logged to `local_debugging/near_miss_log.jsonl` via `_log_near_miss()` for EOD threshold-tuning analysis.
+Signals scoring 65–71 (passed pattern checks but below fire threshold) are logged to `local_debugging/near_miss_log.jsonl` via `_log_near_miss()` for EOD threshold-tuning analysis. Each entry is stamped with the bar's intraday timestamp (not wall-clock time of the scan) and deduped on `(date, ticker, window, time_et, score)` so repeated scans of the same candle — live + standalone backtest, or two backtest replays — don't inflate the log.
+
+### Scanner Heartbeat
+`services/scheduler.py:_run_dip_scan` appends one record per tick to `local_debugging/scanner_heartbeat.jsonl` (path overridable via `SCANNER_HEARTBEAT_LOG`). Fields: `ts_utc`, `ts_et`, `status` (`ok` / `error` / `skipped_closed`), `window`, `tickers`, `candidates` (count across all four signal types), `best_ticker`, `best_score`, `duration_ms`, `error`. Append-only; rotation is intentionally not implemented (file is gitignored debug data, low volume — ~78 ticks per trading day). The EOD report reads this to distinguish "scanner ran but found nothing" from "scanner did not run today" and surfaces the diagnostic as its own analysis prompt.
 
 ### Time Stop Enforcement
 Scheduler resolver (`_resolve_open_alerts` in `services/scheduler.py`) fires before EOD close. Per-signal-type minutes from `TIME_STOP_MINUTES` dict (mirrors values dip_scanner attaches at signal creation):
@@ -303,6 +306,8 @@ See `docs/reference/architecture.md` SEC:DB_MODELS for the full `ScannerAlert` s
 
 ### Historical Backfill
 `POST /dip-scanner/backfill` replays scanner logic over the last N days (default 60) of 5-min yfinance data. Outcomes simulated: target hit within session = "win", stop hit = "loss", EOD close = "win"/"loss" by sign of (close − entry). Backfill is **destructive** for backtest rows — clears existing `source = "backtest"` rows before re-seeding so re-runs always reflect the latest scoring logic.
+
+Backtest rows are gated on the same score floor as live: `score ≥ 72`, plus `≥ 80` in `lunch_drift`. The gate lives inside the backtest's `_append` closure so it applies uniformly to all four signal types — without it, ORB/VWAP/Failed-Breakdown paths (which compute scores starting at 65 and don't route through `_score_etf`) would persist alerts the live scanner would have rejected, polluting the 60-day win-rate baseline.
 
 ### AI Signal Analysis (LLM, ~500 tokens, opt-in)
 `POST /dip-scanner/analyze` is the only LLM-touching scanner path. Click-triggered from "What does this mean?" button in pro view; result clears on each new scan. Pulls last 30 closed signals for `(ticker, signal_type)` to build a structured prompt with historical win rate / avg win / avg loss, then returns `{ verdict (FAVORABLE/MIXED/UNFAVORABLE), plain_english, key_risk, watch_for }`. Falls back to a rule-based response if LLM call fails. Blocked in saver mode.

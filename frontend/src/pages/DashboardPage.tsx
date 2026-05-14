@@ -4,6 +4,7 @@ import { T } from "../theme"
 import { DipScannerCard } from "../components/DipScannerCard"
 import { ScannerPerformanceCard } from "../components/ScannerPerformanceCard"
 import { WeeklyTargetBar } from "../components/WeeklyTargetBar"
+import { ManualTradeLog } from "../components/ManualTradeLog"
 
 type Period = "1D" | "1W" | "1M" | "3M"
 
@@ -208,8 +209,11 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Weekly P&L Target */}
+      {/* Weekly P&L Target — scanner signals (automated) */}
       <WeeklyTargetBar />
+
+      {/* Manual trade log — actual trades taken (user-entered) */}
+      <ManualTradeLog />
 
       {/* Daily Target Trade Scanner */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>

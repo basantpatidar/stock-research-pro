@@ -1,4 +1,10 @@
+import json
 import logging
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from app.config import get_settings
@@ -6,12 +12,31 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
+# Heartbeat log — append-only proof-of-life for the dip scanner job. EOD report
+# reads this to distinguish "scanner ran but found nothing" from "scanner did
+# not run today" (the 2026-05-13 failure mode).
+_HEARTBEAT_LOG = Path(
+    os.getenv(
+        "SCANNER_HEARTBEAT_LOG",
+        str(Path(__file__).resolve().parents[3] / "local_debugging" / "scanner_heartbeat.jsonl"),
+    )
+)
+
+
+def _write_heartbeat(record: dict) -> None:
+    try:
+        _HEARTBEAT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with _HEARTBEAT_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except Exception:
+        pass  # never let logging affect the scanner
+
+
 # ── Dip scanner background jobs ───────────────────────────────────────────────
 
 async def _run_dip_scan():
     """Fire dip-buy alerts every 5 min during market hours. Zero LLM calls."""
     import pytz
-    from datetime import datetime
     from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _get_session_window, SESSION_WINDOWS
     from app.api.alerts import broadcast
 
@@ -19,9 +44,18 @@ async def _run_dip_scan():
     now_et = datetime.now(et_tz)
     window = _get_session_window(now_et)
     if SESSION_WINDOWS.get(window, {}).get("score_delta") is None:
-        return  # outside trading hours — silent skip
+        _write_heartbeat({
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "ts_et":  now_et.isoformat(),
+            "status": "skipped_closed",
+            "window": window,
+        })
+        return  # outside trading hours — heartbeat still recorded
 
     tickers = ETF_TIERS[1]  # Tier 1 only for background job
+    t0 = time.monotonic()
+    result: dict = {}
+    error: str | None = None
     try:
         result = scan_dip_opportunities(tickers, capital=1000.0)
         best = result.get("best")
@@ -49,7 +83,28 @@ async def _run_dip_scan():
                 best["ticker"], best["score"], best.get("session_window"),
             )
     except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
         logger.warning("dip_scan job error: %s", exc)
+
+    best = result.get("best") if isinstance(result, dict) else None
+    candidates = (
+        len(result.get("opportunities", []))
+        + len(result.get("orb_opportunities", []))
+        + len(result.get("vwap_opportunities", []))
+        + len(result.get("failed_breakdown_opportunities", []))
+    ) if isinstance(result, dict) else 0
+    _write_heartbeat({
+        "ts_utc":       datetime.now(timezone.utc).isoformat(),
+        "ts_et":        now_et.isoformat(),
+        "status":       "error" if error else "ok",
+        "window":       window,
+        "tickers":      tickers,
+        "candidates":   candidates,
+        "best_ticker":  best.get("ticker") if best else None,
+        "best_score":   best.get("score")  if best else None,
+        "duration_ms":  int((time.monotonic() - t0) * 1000),
+        "error":        error,
+    })
 
 
 async def _run_mcf_scan(force: bool = False):
@@ -117,13 +172,64 @@ async def _run_mcf_scan(force: bool = False):
     except Exception as exc:
         logger.warning("mcf_scan job error: %s", exc)
 
+def _compute_fmd(bars, entry_time, entry_price: float) -> tuple[str | None, str]:
+    """Forward 5-min direction. Returns (fmd, reason). fmd is None if can't compute.
+
+    yfinance's 1-min DatetimeIndex is tz-aware (America/New_York). entry_time
+    from the DB is tz-aware UTC. Pandas comparison auto-aligns tz, but the
+    bars-index may also be tz-naive in some yfinance versions — normalize.
+    """
+    from datetime import timedelta
+    import pandas as pd
+
+    if bars is None:
+        return None, "no_history"
+    if bars.empty:
+        return None, "empty_history"
+    if entry_time is None:
+        return None, "no_entry_time"
+
+    target_ts = entry_time + timedelta(minutes=5)
+
+    # Normalize tz: if bars.index is naive, assume ET; then convert target_ts to that tz
+    idx = bars.index
+    try:
+        if getattr(idx, "tz", None) is None:
+            idx = idx.tz_localize("America/New_York")
+        # target_ts is tz-aware (timestamptz from DB) — pandas handles cross-tz compare,
+        # but be explicit to avoid version quirks.
+        target_ts_pd = pd.Timestamp(target_ts).tz_convert(idx.tz)
+    except Exception as exc:
+        return None, f"tz_normalize_failed:{exc}"
+
+    bars_after = bars.loc[idx >= target_ts_pd]
+    if bars_after.empty:
+        return None, "no_bars_after_target"
+
+    try:
+        fwd_close = float(bars_after.iloc[0]["Close"])
+    except Exception as exc:
+        return None, f"bar_read_failed:{exc}"
+
+    diff_pct = (fwd_close - entry_price) / entry_price * 100
+    if diff_pct > 0.05:
+        return "up", "ok"
+    if diff_pct < -0.05:
+        return "down", "ok"
+    return "flat", "ok"
+
 
 async def _resolve_open_alerts():
-    """Check open scanner alerts every 5 min and resolve target/stop/EOD."""
+    """Check open scanner alerts every 5 min and resolve target/stop/EOD.
+
+    Also opportunistically backfills five_min_direction for closed rows in the
+    last 7 days that still have null fmd (e.g., live dip_buy resolutions where
+    the original yfinance fetch failed).
+    """
     import pytz
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     import yfinance as yf
-    from sqlalchemy import select
+    from sqlalchemy import select, or_, and_
     from app.db.database import get_db_direct
     from app.db.models import ScannerAlert
 
@@ -131,38 +237,70 @@ async def _resolve_open_alerts():
     now_et = datetime.now(et_tz)
     now_utc = datetime.now(timezone.utc)
     eod_cutoff = now_et.hour * 60 + now_et.minute >= 15 * 60 + 45  # 3:45 PM ET
+    fmd_backfill_horizon = now_utc - timedelta(days=7)
+
+    # Time stops by signal_type — mirror values set in dip_scanner.py at signal
+    # creation. Frees capital from dead-money trades that would otherwise drift
+    # to ~breakeven by EOD (the dominant 2026-05-08 dip_buy failure mode).
+    TIME_STOP_MINUTES = {
+        "dip_buy":          25,
+        "orb_breakout":     60,
+        "vwap_reclaim":     20,
+        "failed_breakdown": 30,
+    }
 
     try:
         async for db in get_db_direct():
             rows = (await db.execute(
-                select(ScannerAlert).where(ScannerAlert.status == "open")
+                select(ScannerAlert).where(
+                    or_(
+                        ScannerAlert.status == "open",
+                        and_(
+                            ScannerAlert.five_min_direction.is_(None),
+                            ScannerAlert.entry_time >= fmd_backfill_horizon,
+                            ScannerAlert.status.in_(("win", "loss")),
+                        ),
+                    )
+                )
             )).scalars().all()
 
             if not rows:
                 return
 
+            open_rows = [r for r in rows if r.status == "open"]
+            fmd_rows  = [r for r in rows if r.five_min_direction is None]
+
             tickers_needed = list({r.ticker for r in rows})
             prices: dict[str, float] = {}
-            for ticker in tickers_needed:
-                try:
-                    info = yf.Ticker(ticker).fast_info
-                    prices[ticker] = float(info.get("lastPrice") or info.get("regularMarketPrice") or 0)
-                except Exception:
-                    pass
+            if open_rows:
+                for ticker in {r.ticker for r in open_rows}:
+                    try:
+                        info = yf.Ticker(ticker).fast_info
+                        prices[ticker] = float(info.get("lastPrice") or info.get("regularMarketPrice") or 0)
+                    except Exception as exc:
+                        logger.debug("fast_info failed for %s: %s", ticker, exc)
 
-            # Pre-fetch 1-min history for five_min_direction (#29) — one call per unique ticker
+            # 1-min history per unique ticker — needed for fmd computation.
+            # period="8d" covers the 7-day backfill horizon (yfinance hard-caps 1m at 8d).
             one_min_bars: dict[str, object] = {}
-            for ticker in tickers_needed:
-                try:
-                    one_min_bars[ticker] = yf.Ticker(ticker).history(period="2d", interval="1m", prepost=False)
-                except Exception:
-                    pass
+            if fmd_rows:
+                for ticker in {r.ticker for r in fmd_rows}:
+                    try:
+                        bars = yf.Ticker(ticker).history(period="8d", interval="1m", prepost=False)
+                        if bars is None or bars.empty:
+                            logger.info("fmd-backfill: no 1m bars for %s", ticker)
+                        one_min_bars[ticker] = bars
+                    except Exception as exc:
+                        logger.warning("fmd-backfill: history fetch failed for %s: %s", ticker, exc)
+                        one_min_bars[ticker] = None
 
-            for row in rows:
+            # Resolve open positions
+            for row in open_rows:
                 price = prices.get(row.ticker, 0)
                 if not price:
                     continue
 
+                # Target / stop checked first — they describe the intended exit.
                 if price >= row.target_price:
                     row.status = "win"
                     row.outcome_price = row.target_price
@@ -171,37 +309,40 @@ async def _resolve_open_alerts():
                     row.status = "loss"
                     row.outcome_price = row.stop_price
                     row.resolved_by = "stop_hit"
-                elif eod_cutoff:
-                    row.status = "win" if price > row.entry_price else "loss"
-                    row.outcome_price = price
-                    row.resolved_by = "eod_close"
                 else:
-                    continue
+                    # Time stop — fire before EOD so the row resolves while the
+                    # market is still open (capital frees for next setup).
+                    time_stop_min = TIME_STOP_MINUTES.get(row.signal_type or "dip_buy", 25)
+                    age_min = (now_utc - row.entry_time).total_seconds() / 60 if row.entry_time else 0
+                    if age_min >= time_stop_min and not eod_cutoff:
+                        row.status = "win" if price > row.entry_price else "loss"
+                        row.outcome_price = price
+                        row.resolved_by = "time_stop"
+                    elif eod_cutoff:
+                        row.status = "win" if price > row.entry_price else "loss"
+                        row.outcome_price = price
+                        row.resolved_by = "eod_close"
+                    else:
+                        continue
 
                 row.outcome_time = now_utc
                 row.actual_pnl_pct = round((row.outcome_price - row.entry_price) / row.entry_price * 100, 3)
                 row.actual_pnl_dollar = round(row.actual_pnl_pct / 100 * (row.capital_used or 1000.0), 2)
 
-                # Forward 5-min bar direction (#29) — price 5 min after entry vs entry_price
-                if row.five_min_direction is None and row.entry_time:
-                    try:
-                        bars = one_min_bars.get(row.ticker)
-                        if bars is not None and not bars.empty:
-                            from datetime import timedelta
-                            target_ts = row.entry_time + timedelta(minutes=5)
-                            # Find closest bar at or after target_ts
-                            bars_after = bars[bars.index >= target_ts]
-                            if not bars_after.empty:
-                                fwd_close = float(bars_after.iloc[0]["Close"])
-                                diff_pct = (fwd_close - row.entry_price) / row.entry_price * 100
-                                if diff_pct > 0.05:
-                                    row.five_min_direction = "up"
-                                elif diff_pct < -0.05:
-                                    row.five_min_direction = "down"
-                                else:
-                                    row.five_min_direction = "flat"
-                    except Exception:
-                        pass
+            # Compute / backfill fmd for any row missing it (covers freshly-resolved
+            # opens AND historical closed rows within the 7-day horizon)
+            for row in fmd_rows:
+                if row.five_min_direction is not None:
+                    continue  # may have been set by another path
+                bars = one_min_bars.get(row.ticker)
+                fmd, reason = _compute_fmd(bars, row.entry_time, row.entry_price)
+                if fmd is not None:
+                    row.five_min_direction = fmd
+                else:
+                    logger.debug(
+                        "fmd skip ticker=%s entry=%s reason=%s",
+                        row.ticker, row.entry_time, reason,
+                    )
 
             await db.commit()
     except Exception as exc:

@@ -42,6 +42,10 @@ interface StoreState {
   // WebSocket connection
   wsConnected: boolean
   setWsConnected: (v: boolean) => void
+
+  // Scanner view mode
+  scannerView: "simple" | "pro" | "guide"
+  setScannerView: (v: "simple" | "pro" | "guide") => void
 }
 
 export const useStore = create<StoreState>()(
@@ -82,6 +86,9 @@ export const useStore = create<StoreState>()(
 
       wsConnected: false,
       setWsConnected: (v) => set({ wsConnected: v }),
+
+      scannerView: "simple",
+      setScannerView: (v) => set({ scannerView: v }),
     }),
     {
       name: "srp-settings",
@@ -89,6 +96,7 @@ export const useStore = create<StoreState>()(
         mode: state.mode,
         execMode: state.execMode,
         lastTicker: state.lastTicker,
+        scannerView: state.scannerView,
       }),
     }
   )
