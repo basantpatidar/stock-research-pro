@@ -15,6 +15,7 @@ from app.api import research_v2, usage
 from app.api import gap_scanner
 from app.api import dip_scanner
 from app.api import mcf_scanner
+from app.api import broker
 
 settings = get_settings()
 
@@ -110,6 +111,7 @@ app.include_router(macro.router)
 app.include_router(gap_scanner.router)
 app.include_router(dip_scanner.router)
 app.include_router(mcf_scanner.router)
+app.include_router(broker.router)
 
 
 @app.get("/health")
