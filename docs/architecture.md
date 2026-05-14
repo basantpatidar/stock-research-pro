@@ -275,6 +275,20 @@ ScannerAlert      # Daily Target Trade Scanner — every fired signal + its outc
                   # resolved_by ("target_hit" | "stop_hit" | "time_stop" | "eod_close")
                   # five_min_direction ("up" | "down" | "flat" | NULL — direction at entry+5min)
                   # See docs/features.md SEC:DIP_SCANNER for full lifecycle and gates.
+
+BrokerOrder       # Local snapshot of every order we submit (paper or live).
+                  # id (UUID PK), broker ("alpaca"), broker_order_id (nullable until accepted)
+                  # mode ("paper" | "live" — frozen at submission for audit)
+                  # symbol, side ("buy"|"sell"), qty, order_type, limit_price,
+                  # stop_price, take_profit_price, time_in_force
+                  # status (new|accepted|partially_filled|filled|canceled|rejected|expired)
+                  # filled_qty, filled_avg_price, submitted_at, filled_at,
+                  # canceled_at, rejected_reason
+                  # source ("manual" | "scanner_alert"), scanner_alert_id (FK-style link)
+                  # client_order_id (UUID — UNIQUE, idempotency for retries)
+                  # Broker is authoritative for fill state; this row is
+                  # authoritative for the fact we submitted the order at all.
+                  # See docs/trading.md SEC:DATA_MODEL.
 ```
 
 **Planned additions (not yet built):**
