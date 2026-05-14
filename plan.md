@@ -220,11 +220,14 @@ The day trader's morning starting point. Opens to this page by default when mode
 ### Next Up (from todo.md + backlog)
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
+| **TRADE-1** | Trading foundation — broker factory + Alpaca client + `/broker/account` + `BrokerOrder` model. See `docs/trading.md` SEC:PHASES. | Both | Medium | 0 |
+| **TRADE-2** | Manual paper trading — portfolio page, order ticket modal, scanner card "Trade this signal" button | Both | High | 0 |
+| **TRADE-3** | Auto-trade behind flag — scanner→order wiring, daily-loss cap enforcement, live-mode confirmation flow | Day trader | High | 0 |
 | **26** | Sentiment Divergence Signal | Both | Low | 0 |
 | **27** | Portfolio risk page (multi-stock exposure) | Both | Medium | 0 |
 | **28** | Expand screener beyond 30 hardcoded tickers | Both | Low | 0 |
 | **29** | Frontend usage bars in nav (% used inline) | Both | Low | 0 |
-| **30** | Paper trade journal persistence (PostgreSQL) | Both | Medium | 0 |
+| **30** | ~~Paper trade journal persistence~~ — superseded by TRADE-1 (broker integration replaces the journal concept) | Both | — | — |
 
 ---
 
