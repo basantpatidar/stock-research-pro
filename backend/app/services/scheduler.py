@@ -1,4 +1,10 @@
+import json
 import logging
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from app.config import get_settings
@@ -6,12 +12,31 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
+# Heartbeat log — append-only proof-of-life for the dip scanner job. EOD report
+# reads this to distinguish "scanner ran but found nothing" from "scanner did
+# not run today" (the 2026-05-13 failure mode).
+_HEARTBEAT_LOG = Path(
+    os.getenv(
+        "SCANNER_HEARTBEAT_LOG",
+        str(Path(__file__).resolve().parents[3] / "local_debugging" / "scanner_heartbeat.jsonl"),
+    )
+)
+
+
+def _write_heartbeat(record: dict) -> None:
+    try:
+        _HEARTBEAT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with _HEARTBEAT_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except Exception:
+        pass  # never let logging affect the scanner
+
+
 # ── Dip scanner background jobs ───────────────────────────────────────────────
 
 async def _run_dip_scan():
     """Fire dip-buy alerts every 5 min during market hours. Zero LLM calls."""
     import pytz
-    from datetime import datetime
     from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _get_session_window, SESSION_WINDOWS
     from app.api.alerts import broadcast
 
@@ -19,9 +44,18 @@ async def _run_dip_scan():
     now_et = datetime.now(et_tz)
     window = _get_session_window(now_et)
     if SESSION_WINDOWS.get(window, {}).get("score_delta") is None:
-        return  # outside trading hours — silent skip
+        _write_heartbeat({
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "ts_et":  now_et.isoformat(),
+            "status": "skipped_closed",
+            "window": window,
+        })
+        return  # outside trading hours — heartbeat still recorded
 
     tickers = ETF_TIERS[1]  # Tier 1 only for background job
+    t0 = time.monotonic()
+    result: dict = {}
+    error: str | None = None
     try:
         result = scan_dip_opportunities(tickers, capital=1000.0)
         best = result.get("best")
@@ -49,7 +83,28 @@ async def _run_dip_scan():
                 best["ticker"], best["score"], best.get("session_window"),
             )
     except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
         logger.warning("dip_scan job error: %s", exc)
+
+    best = result.get("best") if isinstance(result, dict) else None
+    candidates = (
+        len(result.get("opportunities", []))
+        + len(result.get("orb_opportunities", []))
+        + len(result.get("vwap_opportunities", []))
+        + len(result.get("failed_breakdown_opportunities", []))
+    ) if isinstance(result, dict) else 0
+    _write_heartbeat({
+        "ts_utc":       datetime.now(timezone.utc).isoformat(),
+        "ts_et":        now_et.isoformat(),
+        "status":       "error" if error else "ok",
+        "window":       window,
+        "tickers":      tickers,
+        "candidates":   candidates,
+        "best_ticker":  best.get("ticker") if best else None,
+        "best_score":   best.get("score")  if best else None,
+        "duration_ms":  int((time.monotonic() - t0) * 1000),
+        "error":        error,
+    })
 
 
 async def _run_mcf_scan(force: bool = False):
