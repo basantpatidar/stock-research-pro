@@ -1172,6 +1172,13 @@ def _backfill_ticker(ticker: str, days: int = 60) -> list[dict]:
                 return status_r, outcome_r, resolved_r, fmd
 
             def _append(stype: str, entry: float, target: float, stop: float, score: int, sigs: list[str]) -> None:
+                # Mirror live gates: backtest must persist only signals the live scanner
+                # would fire. ORB/VWAP/Failed-Breakdown previously bypassed both checks
+                # because they don't route through _score_etf.
+                if score < 72:
+                    return
+                if window == "lunch_drift" and score < 80:
+                    return
                 status, outcome_price, resolved_by, fmd = _resolve(entry, target, stop, i)
                 pnl_pct = (outcome_price - entry) / entry * 100
                 alerts.append({
