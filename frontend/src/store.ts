@@ -1,6 +1,9 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { WatchlistItem, Alert, TradeMode, SSEEvent, ExecMode } from "./types/index"
+import type {
+  WatchlistItem, Alert, TradeMode, SSEEvent, ExecMode,
+  BrokerAccount, BrokerPosition, BrokerOrder,
+} from "./types/index"
 
 interface StoreState {
   // Trade mode
@@ -46,6 +49,16 @@ interface StoreState {
   // Scanner view mode
   scannerView: "simple" | "pro" | "guide"
   setScannerView: (v: "simple" | "pro" | "guide") => void
+
+  // Broker / trading
+  brokerAccount: BrokerAccount | null
+  brokerStatus: "ok" | "unreachable" | "misconfigured" | "unknown"
+  positions: BrokerPosition[]
+  openOrders: BrokerOrder[]
+  setBrokerAccount: (a: BrokerAccount | null) => void
+  setBrokerStatus: (s: "ok" | "unreachable" | "misconfigured" | "unknown") => void
+  setPositions: (p: BrokerPosition[]) => void
+  setOpenOrders: (o: BrokerOrder[]) => void
 }
 
 export const useStore = create<StoreState>()(
@@ -89,6 +102,15 @@ export const useStore = create<StoreState>()(
 
       scannerView: "simple",
       setScannerView: (v) => set({ scannerView: v }),
+
+      brokerAccount: null,
+      brokerStatus: "unknown",
+      positions: [],
+      openOrders: [],
+      setBrokerAccount: (brokerAccount) => set({ brokerAccount }),
+      setBrokerStatus: (brokerStatus) => set({ brokerStatus }),
+      setPositions: (positions) => set({ positions }),
+      setOpenOrders: (openOrders) => set({ openOrders }),
     }),
     {
       name: "srp-settings",

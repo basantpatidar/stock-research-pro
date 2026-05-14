@@ -3,6 +3,93 @@
 export type TradeMode = "day_trade" | "long_term" | "both"
 export type ExecMode  = "saver" | "normal" | "deep"
 
+// ── Broker / trading types ────────────────────────────────────────────────────
+// Mirror of backend/app/brokers/base.py DTOs. Keep these in lockstep.
+
+export type BrokerMode = "paper" | "live"
+export type OrderSide = "buy" | "sell"
+export type OrderType = "market" | "limit" | "stop" | "stop_limit"
+export type TimeInForce = "day" | "gtc" | "ioc" | "fok"
+export type OrderStatus =
+  | "new" | "accepted" | "partially_filled" | "filled"
+  | "canceled" | "rejected" | "expired"
+
+export interface BrokerAccount {
+  broker: string
+  mode: BrokerMode
+  cash: number
+  buying_power: number
+  equity: number
+  last_equity: number | null
+  daytrade_count: number
+}
+
+export interface BrokerPosition {
+  symbol: string
+  qty: number
+  avg_entry_price: number
+  current_price: number
+  market_value: number
+  unrealized_pl: number
+  unrealized_pl_pct: number
+}
+
+export interface BrokerOrder {
+  broker_order_id: string
+  client_order_id: string | null
+  symbol: string
+  side: OrderSide
+  qty: number
+  order_type: OrderType
+  limit_price: number | null
+  stop_price: number | null
+  take_profit_price: number | null
+  time_in_force: TimeInForce
+  status: OrderStatus
+  filled_qty: number
+  filled_avg_price: number | null
+  submitted_at: string
+  filled_at: string | null
+  canceled_at: string | null
+  rejected_reason: string | null
+}
+
+export interface PlaceOrderBody {
+  symbol: string
+  side: OrderSide
+  qty: number
+  order_type: OrderType
+  limit_price?: number | null
+  stop_price?: number | null
+  take_profit_price?: number | null
+  time_in_force?: TimeInForce
+  client_order_id: string
+  source?: "manual" | "scanner_alert"
+  scanner_alert_id?: string | null
+  confirm_token?: string | null
+}
+
+export interface BrokerClock {
+  is_open: boolean
+  broker: string
+  mode: BrokerMode
+}
+
+export interface CapRejection {
+  error: string  // backend code, e.g. "max_order_dollars_exceeded"
+  limit_dollars?: number
+  attempted_dollars?: number
+  limit?: number
+  today_count?: number
+  current_position_dollars?: number
+  attempted_add_dollars?: number
+  cap_dollars?: number
+  day_pnl_dollars?: number
+  expected?: string  // for confirm_token_mismatch
+  message?: string
+  hint?: string
+}
+
 // ── V2 tiered API types ───────────────────────────────────────────────────────
 
 export interface NewsResult {
