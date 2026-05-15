@@ -1,5 +1,8 @@
 # docs/api.md — All HTTP endpoints, request/response shapes, auth
 # Sections: grep -n "SEC:" docs/api.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:AUTH          API key pattern
 # SEC:V1_ROUTES     Original research, watchlist, screener, alerts, macro
 # SEC:V2_ROUTES     Tiered research routes (tier1/tier2/tier3/estimate)
@@ -54,8 +57,11 @@ Upgrade path: replace body of `verify_api_key()` in `auth.py` — all routes use
 
 Screener filter body:
 ```json
-{ "min_market_cap_b": 100, "min_volume": 1000000, "min_price_drop_pct": 10.0, "sector": "all", "max_pe": 0 }
+{ "min_market_cap_b": 100, "min_volume": 1000000, "min_price_drop_pct": 10.0,
+  "sector": "all", "max_pe": 0,
+  "universe": "sp500", "limit": 50 }
 ```
+`universe` selects which ticker pool to screen: `sp500` (~150 large+mid-cap across 11 sectors, default), `nasdaq100` (~40 tech/growth), `etfs` (~24 broad + sector + factor), `mega` (~18 $200B+ for fast scans), `legacy` (the original hardcoded 30). `limit` caps how many tickers from the pool are fetched per run (default 50, hard-capped at 150 to keep API latency under ~30 s). Defined in `backend/app/tools/universe.py`.
 
 ### Alerts
 | Method | Path | Description |
@@ -269,9 +275,13 @@ Runs in background via `BackgroundTasks`. **Destructive**: clears all existing `
 
 `GET /usage/today`
 ```json
-Response: { "tokens_today", "tokens_today_pct", "api_calls_today",
+Response: { "tokens_today": 12500, "tokens_today_pct": 25.0,
+            "token_daily_limit": 50000,
+            "api_calls_today": 87, "api_calls_today_pct": 17.4,
+            "api_calls_daily_limit": 500,
             "tickers_today": ["AAPL","META"], "warning": null }
 ```
+`token_daily_limit` and `api_calls_daily_limit` are echoed in every response so the frontend can render usage pills without a separate config fetch. `warning` populates at 75%/90% on either metric.
 
 `GET /usage/history`
 ```json
@@ -318,6 +328,17 @@ Risk-cap rejection returns HTTP 422 with `{ "error": "max_order_dollars_exceeded
 `GET /broker/orders/{order_id}` — single lookup. `DELETE /broker/orders/{order_id}` — best-effort cancel.
 
 `GET /broker/clock` — Phase 2. Mirrors broker's market clock so the UI doesn't compute open/close locally.
+
+`GET /broker/auto-trade/status` — Phase 3
+```json
+Response: { "enabled": false, "allowlist": ["orb_breakout"], "poll_seconds": 30,
+            "orders_today": 4, "daily_order_cap": 50,
+            "scanner_signals_today": 7, "scanner_daily_signal_cap": 50,
+            "scanner_halted": false,
+            "last_auto_order_at": "2026-05-14T13:42:00-04:00",
+            "last_auto_order_symbol": "SPY" }
+```
+Snapshot of the auto-trade subscriber state for the `/portfolio` status banner. Pure DB read — no broker round-trip. `enabled` mirrors `AUTO_TRADE_ENABLED`; `allowlist` is the parsed `AUTO_TRADE_SIGNAL_TYPES` env var. `scanner_halted` is true once today's `scanner_alerts` count hits `SCANNER_DAILY_SIGNAL_CAP` — at that point the dip + MCF scanners skip remaining ticks for the day. Manual orders count toward `orders_today` alongside auto orders.
 
 ---
 

@@ -1,5 +1,8 @@
 # docs/dev.md — Commands, env vars, testing conventions, adding features
 # Sections: grep -n "SEC:" docs/dev.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:COMMANDS      make / docker commands
 # SEC:ENV_VARS      All environment variables with defaults
 # SEC:TESTING       Testing conventions and patterns
@@ -105,7 +108,28 @@ API_CALLS_DAILY_LIMIT=500
 API_CALLS_PER_MINUTE_LIMIT=30
 TICKERS_DAILY_LIMIT=50
 TICKERS_PER_HOUR_LIMIT=10
+
+# Broker / paper-trading (see docs/trading.md SEC:PHASES; paper only — live not on roadmap)
+BROKER=alpaca                       # only supported provider for now
+BROKER_MODE=paper                   # paper | live (live exists in code but is not a scheduled rollout)
+ALPACA_API_KEY=
+ALPACA_API_SECRET=
+ALPACA_BASE_URL=                    # blank — alpaca-py auto-resolves from BROKER_MODE
+
+# Trade risk caps (server-side, non-bypassable — see services/trading/limits.py)
+TRADE_MAX_ORDER_DOLLARS=2000
+TRADE_MAX_POSITION_DOLLARS=5000
+TRADE_DAILY_LOSS_CAP_DOLLARS=-200
+TRADE_DAILY_ORDER_COUNT_CAP=50      # bumped 20 → 50 on 2026-05-14; 51st rejected
+
+# Auto-paper-trade subscriber (Phase 3 validation harness)
+AUTO_TRADE_ENABLED=false            # opt-in flag — flipping to true does nothing without an allowlist
+AUTO_TRADE_SIGNAL_TYPES=            # comma-separated, e.g. orb_breakout,failed_breakdown; empty = no fires
+AUTO_TRADE_POLL_SECONDS=30          # subscriber tick rate
+SCANNER_DAILY_SIGNAL_CAP=50         # dip + MCF scanners halt for the day once today's scanner_alerts hits this
 ```
+
+**Inline comment trap (Docker Compose):** the `env_file` parser does NOT strip inline `# ...` comments — `KEY=val   # note` is loaded as the literal value `val   # note`. Always put comments on their own line **above** the variable. This bit us on 2026-05-14 when `ALPACA_BASE_URL=   # optional override` silently loaded the comment as the URL.
 
 ---
 

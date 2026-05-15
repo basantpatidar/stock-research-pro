@@ -2,6 +2,8 @@
 # Read this file first (~100 lines). Then grep docs/ for specifics.
 # Workflow: grep -n "SEC:" docs/<file>.md → pick a line → read from there.
 
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 ---
 
 ## Project Identity
@@ -54,8 +56,9 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Operating rules (docs discipline, git workflow, code conventions, TZ) | docs/rules.md | `SEC:DOCS` / `SEC:GIT` / `SEC:CODE` / `SEC:TIMEZONE` |
 | Known doc debt (stale sections, missing entries) | docs/rules.md | `SEC:DOC_DEBT` |
 | Order execution — broker factory, paper/live, phases, risk gates | docs/trading.md | `SEC:GOALS` / `SEC:PHASES` / `SEC:ARCH` / `SEC:RISK` |
-| Broker API routes (account, orders, positions, clock) | docs/api.md | `SEC:BROKER_ROUTES` |
-| Portfolio page + OrderTicketModal + BrokerStatusBadge | docs/frontend.md | `SEC:PORTFOLIO_PAGE` |
+| Broker API routes (account, orders, positions, clock, auto-trade status) | docs/api.md | `SEC:BROKER_ROUTES` |
+| Portfolio page + OrderTicketModal + BrokerStatusBadge + risk panel + auto-trade banner | docs/frontend.md | `SEC:PORTFOLIO_PAGE` |
+| Auto-paper-trade subscriber (Phase 3 validation harness) | docs/features.md | `SEC:AUTO_PAPER_TRADE` |
 | Scanner improvement backlog (Opus review, 30 ideas, priority ranked) | local_debugging/opus_scanner_ideas.md | read directly — no anchor needed |
 | Scanner sprint notes + signal type design | local_debugging/dip-scanner-sprint.md | read directly |
 | Uncommitted changes staging log (commit tomorrow) | local_debugging/plus_plan.md | read directly |
@@ -79,6 +82,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-14 | Phase 3 auto-paper-trade + frontend sprint batch (uncommitted, staged in `local_debugging/push_plan.md` for tomorrow's push). New `services/trading/auto_trade.py` subscriber converts allowlisted `scanner_alerts` into bracket paper orders through the same risk caps the manual route uses, idempotent on `client_order_id="auto-{alert.id}"`. Scanner halt: dip + MCF scanners skip ticks once today's `scanner_alerts` ≥ `SCANNER_DAILY_SIGNAL_CAP=50`. New env: `AUTO_TRADE_ENABLED` (off by default), `AUTO_TRADE_SIGNAL_TYPES` (allowlist), `AUTO_TRADE_POLL_SECONDS=30`. `TRADE_DAILY_ORDER_COUNT_CAP` bumped 20 → 50. New `GET /broker/auto-trade/status` endpoint feeds an inline banner on `/portfolio`. New `<PortfolioRiskPanel>` shows total exposure, concentration warnings, max loss if all stops hit. `+ New Order` button on `/portfolio` (closes the Phase 2 hole — modal was rendered but had no trigger). Live usage pills (tokens + api %) in top nav, polled every 30s from `/usage/today`. Screener universe expanded 30 → 142 across 5 named pools (`backend/app/tools/universe.py`). `PreTradeScorecard` gains a plain-English summary line. `eod_dump.py` extended to surface `broker_orders` + alert↔order coverage + slippage. `docs/trading.md` SEC:PHASES restored to 3 phases — **live trading explicitly removed from the roadmap** (code path exists in `BROKER_MODE=live` but no sprint planned). `.env`/`.env.example` reformatted so all comments live above their variables (Docker Compose env_file parser doesn't strip inline `#`). |
 | 2026-05-14 | Trading Phase 2 shipped: server-side risk caps (`services/trading/limits.py` — per-order $, per-position $, daily order count, daily realised loss via `account.equity - account.last_equity`), full `/broker/*` route set (POST orders with cap enforcement + idempotent client_order_id, GET positions/orders/clock, DELETE cancel), `BrokerOrder` rows persisted *before* the broker call so a mid-flight failure still leaves evidence of intent. Frontend: `/portfolio` page (account header + positions + open orders + fills, polls every 10s), `OrderTicketModal` (buy/sell with bracket + live-mode typed confirmation + cap-rejection copy mapping), `BrokerStatusBadge` in top nav, and a `Trade Signal →` button on `DipScannerCard` that pre-fills the modal from scanner entry/stop/target. |
 | 2026-05-14 | New `docs/trading.md` plans broker integration (paper trading first, live after sign-off). Provider-agnostic via `BROKER` + `BROKER_MODE` env vars mirroring the LLM factory shape; Alpaca implementation first. Three phases: foundation (factory + smoke route + DB model), manual paper trading (portfolio page + order ticket), auto-trade behind feature flag. Risk caps (`TRADE_MAX_ORDER_DOLLARS` etc.) defined as their own service alongside `services/usage/limits.py`. |
 | 2026-05-14 | Scanner data-quality batch (`fix/scanner-data-quality`): backtest `_append` now applies the live score gate (≥72, ≥80 in lunch_drift) — previously ORB/VWAP/Failed-Breakdown paths persisted sub-72 signals, polluting the 60-day baseline; near-miss writer stamps the bar's intraday timestamp (was using `datetime.now()`, producing all-16:01 entries on backtest replays) and dedups on (date, ticker, window, time, score); new heartbeat log (`scanner_heartbeat.jsonl`, configurable via `SCANNER_HEARTBEAT_LOG`) records each scan tick with status / candidates / duration so EOD can distinguish a stalled scanner from a quiet market — wired into `eod_dump.py` analysis prompts. |

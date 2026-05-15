@@ -1,5 +1,8 @@
 # docs/frontend.md — Pages, components, Zustand store, hooks, key types
 # Sections: grep -n "SEC:" docs/frontend.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:PAGES       Page components and their responsibilities
 # SEC:COMPONENTS  Key shared + research components
 # SEC:PORTFOLIO_PAGE  Portfolio page + order ticket modal + broker status badge
@@ -60,6 +63,9 @@ Props: `title`, `tier: 1|2|3`, `estimatedTokens?`, `loading`, `error`, `onExpand
 
 **`ModeToggle.tsx`** — Day Trade / Long Term / Both toggle
 
+**Top-nav usage pills** (inline in `App.tsx`, not a separate component)
+Two live pills in the top-right of the nav showing `% tokens` and `% api` today, polled from `GET /usage/today` every 30 s. Colour tiers: green <50%, amber 50–79%, red ≥80% (matches backend `warning` thresholds). Hidden when count is zero so the nav stays clean before any usage accumulates. Hover tooltip shows the raw `count / limit`. Replaced the older `tokenCount`-from-store derivation so the pill reflects what's *actually* counted against the daily cap, not what the frontend session has locally accumulated.
+
 ### Research (`frontend/src/components/research/`)
 
 **`PriceChart.tsx`** — Recharts area chart from `tier1.price.price_history`. Props: `data: PriceData`, `defaultPeriod?: Period` (default `"1d"`). On multi-day periods, overlays volume profile reference lines: VPOC (amber dashed), VAH (green dashed), VAL (red dashed) from `tier1.price.volume_profile`. Intraday (1d) uses 5-min candles with pre/after-market data; VP overlay hidden for intraday.
@@ -112,20 +118,26 @@ Placed above scanner grid on DashboardPage. Features:
 <!-- SEC:PORTFOLIO_PAGE -->
 ## Portfolio Page + Trading Components
 
-The `/portfolio` page, `OrderTicketModal`, and `BrokerStatusBadge` together
-implement Phase 2 of the broker integration (see `docs/trading.md` SEC:PHASES).
-Phase 1 was the backend factory + smoke route; Phase 3 is auto-trade behind
-a feature flag.
+The `/portfolio` page, `OrderTicketModal`, `BrokerStatusBadge`,
+`AutoTradePanel`, and `PortfolioRiskPanel` together implement Phases 2 + 3
+of the broker integration (see `docs/trading.md` SEC:PHASES). Phase 1 was
+the backend factory + smoke route; Phase 3 layers auto-paper-trade onto
+the manual trading UI behind a feature flag. **Live trading is not on the
+roadmap** — the `BROKER_MODE=live` path exists in code but no sprint is
+planned for it.
 
 ### `pages/PortfolioPage.tsx`
 Layout, top to bottom:
-1. **Header** — page title, mode pill (`PAPER` amber / `LIVE` red), manual refresh button.
-2. **Account stat strip** — equity, buying power, cash, day P&L (`account.equity - account.last_equity`).
-3. **Open positions table** — symbol, qty, avg entry, current price, market value, unrealized P&L $/%. Inline `[Close]` button → opens `OrderTicketModal` pre-filled as a sell at current qty.
-4. **Open orders table** — symbol, side (color-coded), qty, type, limit, status, submitted_at. Inline `[Cancel]` button → `DELETE /broker/orders/{id}`.
-5. **Recent fills table** — last 50 filled orders, read-only.
+1. **Header** — page title, mode pill (`PAPER` amber / `LIVE` red), `+ New Order` button (opens blank `OrderTicketModal`; disabled when `brokerStatus !== 'ok'`), manual refresh button.
+2. **Auto-trade status banner** (`AutoTradePanel`) — Phase 3. Reads `GET /broker/auto-trade/status` and shows: enabled state, allowlist, orders today / cap, signals today / cap, scanner-halted flag, last auto order. Colour: grey when off, amber when enabled-with-empty-allowlist, green when armed, red when the scanner has halted for the day.
+3. **Account stat strip** — equity, buying power, cash, day P&L (`account.equity - account.last_equity`).
+4. **Risk panel** (`PortfolioRiskPanel`) — Phase 3 read-only view. 4 stat cards (total exposure, position count + largest weight, max loss if all stops hit, uncovered positions) + per-symbol table with weight %, market value, stop price, max loss to that stop. Warns at ≥40% concentration on a single position or any position without a sell-stop. Pure client-side compute over the positions + open orders the page already fetches — no extra endpoint.
+5. **Open positions table** — symbol, qty, avg entry, current price, market value, unrealized P&L $/%. Inline `[Close]` button → opens `OrderTicketModal` pre-filled as a sell at current qty.
+6. **Open orders table** — symbol, side (color-coded), qty, type, limit, status, submitted_at. Inline `[Cancel]` button → `DELETE /broker/orders/{id}`.
+7. **Recent fills table** — last 50 filled orders, read-only.
 
-Polls all four broker endpoints in parallel every 10 s via `Promise.all`. On
+Polls all five broker endpoints (account, positions, orders open, orders
+closed, auto-trade status) in parallel every 10 s via `Promise.all`. On
 HTTP 503, reads the `X-Broker-Status` header to distinguish `unreachable`
 (red banner — try again later) from `misconfigured` (amber banner — set
 `ALPACA_API_KEY` in `.env`). Existing rows stay visible during an outage —
@@ -150,6 +162,23 @@ result into the store (`brokerAccount`, `brokerStatus`). States:
 Click → navigates to `/portfolio`. This is also what keeps `brokerAccount`
 fresh for other components (e.g. `OrderTicketModal` reads it to decide
 whether to show the live-mode confirmation gate).
+
+### `components/trading/AutoTradePanel.tsx`
+Inline banner rendered between the account header and the risk panel on
+`/portfolio`. Driven by `GET /broker/auto-trade/status`. Colour state
+mirrors the subscriber's actual state (see backend `services/trading/auto_trade.py`):
+- **Grey** — `AUTO_TRADE_ENABLED=false`. Subscriber self-skips every tick.
+- **Amber** — enabled but `AUTO_TRADE_SIGNAL_TYPES` is empty. Subscriber runs but no signal type fires.
+- **Green** — armed: both enabled AND at least one signal_type in the allowlist.
+- **Red** — scanner halted for the day (`scanner_signals_today >= SCANNER_DAILY_SIGNAL_CAP`). Both dip + MCF scanners skip remaining ticks.
+
+### `components/trading/PortfolioRiskPanel.tsx`
+Pure client-side risk view — no extra API call, derives everything from
+the positions + open orders the page already fetches. Builds a `stops`
+lookup from the open SELL orders' `stop_price` field, computes per-symbol
+max loss to stop, and surfaces concentration warnings. Designed to catch
+"auto-trade bought 30 correlated tickers" before max-loss-if-stops-hit
+becomes the issue.
 
 ### Scanner integration — `components/DipScannerCard.tsx`
 Adds a `Trade Signal →` button next to the existing `Paper Trade`

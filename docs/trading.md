@@ -1,7 +1,10 @@
-# docs/trading.md — Order execution: paper trading first, live trading after
+# docs/trading.md — Order execution: paper trading only (live not on roadmap)
 # Sections: grep -n "SEC:" docs/trading.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:GOALS            What this initiative covers and what it explicitly does NOT
-# SEC:PHASES           Three-phase delivery plan with exit criteria per phase
+# SEC:PHASES           Three-phase delivery plan with exit criteria per phase (paper only — live is not on the roadmap)
 # SEC:ARCH             Broker factory pattern — mirrors LLM factory shape
 # SEC:BROKER_PROVIDERS Per-provider notes (Alpaca first, others later)
 # SEC:DATA_MODEL       BrokerOrder + position snapshots — local source of truth
@@ -16,24 +19,25 @@
 <!-- SEC:GOALS -->
 ## Goals
 
-Add **order execution** to the app — buy and sell US-listed equities/ETFs/options from inside the existing scanner workflow. Start with **paper trading** (no real capital) and flip to **live trading** later by changing one env var.
+Add **paper-money order execution** to the app — simulate buy/sell of US-listed equities/ETFs from inside the existing scanner workflow so we can measure whether the scanner's signals are profitable. The whole initiative is paper-only by design: the goal is signal validation, not capital deployment.
 
 **In scope (this initiative):**
 - A broker-agnostic order layer (`backend/app/brokers/`) that mirrors the LLM factory pattern — swap providers via `BROKER` env, no code changes.
-- Alpaca as the first (and for now, only) provider. Free, has a paper sandbox, same REST API for paper and live.
+- Alpaca paper sandbox as the first (and for now, only) provider. Free, no real capital ever at risk.
 - Local persistence of every order we submit, independent of broker uptime.
-- Manual order placement triggered from the scanner card and a new portfolio page.
-- Risk gates: per-order cap, per-day loss cap, hard "are you sure" prompts in live mode.
+- Manual order placement from the scanner card and a portfolio page.
+- Auto-paper-trade subscriber that converts scanner alerts into bracket orders — the validation harness for the scanner.
+- Risk gates that mirror live-mode safeguards (per-order cap, per-day loss cap, daily order count cap) even though paper money can't actually be lost — the caps exist so the *behaviour* generalises if we ever change our mind later.
 
-**Explicitly out of scope:**
-- Auto-trading (scanner signal → automatic order). That comes in Phase 3 behind a feature flag once we trust the paper P&L for ≥ 4 weeks. The earlier phases must work first.
-- Margin, shorts, options strategies. Cash-account long equities/ETFs only at first.
+**Explicitly out of scope (not planned, not on the roadmap):**
+- Live trading. The code path exists (`BROKER_MODE=live`) and the broker layer supports it, but **no sprint is planned for it**. We will not plan or scope live trading until paper P&L is clearly and convincingly profitable, and even then it will be a separate explicit decision — not a default next step.
+- Margin, shorts, options strategies.
 - Order routing optimisation. Whatever Alpaca's smart router does is fine.
-- Multi-account / per-user accounts. Single broker account, single API key, same pattern as the LLM keys.
+- Multi-account / per-user accounts. Single broker account, single API key.
 
-**Why Alpaca first:**
-- Paper sandbox and live both speak the same REST API at different `base_url`s. Library: [`alpaca-py`](https://github.com/alpacahq/alpaca-py).
-- Free for paper. Live is commission-free for equities/ETFs.
+**Why Alpaca:**
+- Free paper sandbox with realistic fills against a $100k simulated account.
+- Library: [`alpaca-py`](https://github.com/alpacahq/alpaca-py).
 - Already-built websocket trade-updates stream — drops into our existing alert infra later.
 
 ---
@@ -43,11 +47,15 @@ Add **order execution** to the app — buy and sell US-listed equities/ETFs/opti
 
 | Phase | Deliverable | Exit criteria | Branch |
 |---|---|---|---|
-| **1 — Foundation** | Broker factory + BaseBroker interface + Alpaca client + `GET /broker/account` smoke test + `BrokerOrder` model | `curl /broker/account` returns paper account equity/buying_power; no UI yet | `feat/trading-foundation` |
-| **2 — Manual paper trading** | `POST /broker/orders` + portfolio page (positions + open orders + recent fills) + "Buy/Sell" button on scanner card → confirm modal → submit | A trade placed from the UI shows up in the portfolio page and in Alpaca's paper dashboard with matching qty/avg_price | `feat/trading-manual` |
-| **3 — Auto-trade behind flag** | Optional scanner→order wiring, gated by `AUTO_TRADE_ENABLED=false` default; risk caps enforced; live-mode confirmation flow | 4+ weeks of paper P&L showing positive expectancy AND a manual review checklist (see [[SEC:RISK]]) before flipping `BROKER_MODE=live` | `feat/trading-auto` |
+| **1 — Foundation** ✅ | Broker factory + BaseBroker interface + Alpaca client + `GET /broker/account` smoke test + `BrokerOrder` model | `curl /broker/account` returns paper account equity/buying_power; no UI yet | `feat/trading-foundation` |
+| **2 — Manual paper trading** ✅ | `POST /broker/orders` + portfolio page (positions + open orders + recent fills) + "Buy/Sell" button on scanner card → confirm modal → submit + "New Order" button on portfolio page | A trade placed from the UI shows up in the portfolio page and in Alpaca's paper dashboard with matching qty/avg_price | `feat/trading-foundation` |
+| **3 — Auto-paper-trade (validation harness)** 🔧 | `services/trading/auto_trade.py` subscriber polls `scanner_alerts`, converts each into a bracket paper order through the **same** risk caps the manual route uses. Per-signal-type allowlist (`AUTO_TRADE_SIGNAL_TYPES`); off by default. Scanner halts for the day once `SCANNER_DAILY_SIGNAL_CAP` is hit. Status panel on `/portfolio`. | 4+ weeks of unbiased paper P&L per signal_type, captured on `/portfolio` + DB. The data tells us which signals are profitable — it does NOT imply a follow-on "go live" phase. | `feat/trading-auto` |
 
-Each phase ships as one branch + one PR ([[docs/rules.md]] Rule 5). Phases 2 and 3 do not start until the previous PR is merged.
+Each phase ships as one branch + one PR ([[docs/rules.md]] Rule 5). Phase 3 work is uncommitted in the working tree as of 2026-05-14 — see `local_debugging/push_plan.md`.
+
+**There is no Phase 4 on the roadmap.** Live trading is intentionally not planned. The `BROKER_MODE=live` code path exists (paper/live are mostly the same Alpaca REST surface) but turning it on is a separate, explicit, future decision — not a scheduled sprint. We will only consider it after sustained, repeatedly-verified paper profitability, and even then it would warrant its own design review, not just a phase rollover.
+
+**Why Phase 3 is the whole point:** if a human clicks every trade, the resulting P&L reflects the human's selection bias, not the strategy. The auto-trade subscriber takes every signal in the allowlist so the dataset is unbiased. Paper money makes this safe.
 
 ---
 

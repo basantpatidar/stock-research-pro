@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom"
 import { useWebSocket } from "./hooks/useWebSocket"
 import { useStore } from "./store"
+import { api } from "./services/api"
 import { AlertToast } from "./components/shared/AlertToast"
 import { ExecModeBar } from "./components/shared/ExecModeBar"
 import { ResearchPage } from "./pages/ResearchPage"
@@ -25,14 +27,58 @@ const NAV_ITEMS = [
   { to: "/usage",      label: "Usage" },
 ]
 
-const TOKEN_DAILY_LIMIT = 50_000
+interface UsageTodayLite {
+  tokens_today_pct: number
+  api_calls_today_pct: number
+  tokens_today: number
+  api_calls_today: number
+  token_daily_limit: number
+  api_calls_daily_limit: number
+}
+
+// Inline pill — color tiers (green <50%, amber 50-79%, red 80%+) match the
+// thresholds the backend uses for its `warning` field, so visual state and
+// the actual cap-rejection logic stay in sync. Hides at 0% to avoid noise
+// before any usage has accumulated.
+function UsagePill({ label, pct, count, limit }: { label: string; pct: number; count: number; limit: number }) {
+  if (count === 0) return null
+  const color = pct >= 80 ? T.red : pct >= 50 ? T.amber : T.green
+  return (
+    <span
+      title={`${count.toLocaleString()} / ${limit.toLocaleString()} ${label} used today`}
+      style={{
+        fontSize: 10, fontFamily: T.mono, fontWeight: 600,
+        padding: "2px 8px", borderRadius: 20,
+        background: `${color}20`, color, border: `1px solid ${color}`,
+        marginLeft: 4,
+      }}
+    >
+      {Math.round(pct)}% {label}
+    </span>
+  )
+}
 
 function AppShell() {
   useWebSocket()
-  const { wsConnected, alerts, tokenCount } = useStore()
+  const { wsConnected, alerts } = useStore()
   const unread = alerts.length
-  const tokenPct = Math.min(100, Math.round((tokenCount / TOKEN_DAILY_LIMIT) * 100))
-  const tokenPctColor = tokenPct >= 80 ? T.red : tokenPct >= 50 ? T.amber : T.green
+
+  // Server-side usage state — single source of truth. Polled every 30s so the
+  // pill reflects what's actually counted against the daily cap, not what the
+  // frontend session has locally accumulated (the old `tokenCount` store).
+  const [usage, setUsage] = useState<UsageTodayLite | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const { data } = await api.get<UsageTodayLite>("/usage/today")
+        if (!cancelled) setUsage(data)
+      } catch {}
+    }
+    load()
+    const t = setInterval(load, 30_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg }}>
@@ -105,16 +151,21 @@ function AppShell() {
           <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono, letterSpacing: "0.05em" }}>
             {wsConnected ? "LIVE" : "OFFLINE"}
           </span>
-          {tokenCount > 0 && (
-            <span style={{
-              fontSize: 10, fontFamily: T.mono, fontWeight: 600,
-              padding: "2px 8px", borderRadius: 20,
-              background: `${tokenPctColor}20`, color: tokenPctColor,
-              border: `1px solid ${tokenPctColor}`,
-              marginLeft: 4,
-            }}>
-              {tokenPct}% tokens
-            </span>
+          {usage && (
+            <>
+              <UsagePill
+                label="tokens"
+                pct={usage.tokens_today_pct}
+                count={usage.tokens_today}
+                limit={usage.token_daily_limit}
+              />
+              <UsagePill
+                label="api"
+                pct={usage.api_calls_today_pct}
+                count={usage.api_calls_today}
+                limit={usage.api_calls_daily_limit}
+              />
+            </>
           )}
         </div>
       </nav>

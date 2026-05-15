@@ -28,18 +28,25 @@ async def usage_today(_: str = Depends(verify_api_key)):
     today = data.get("daily", {}).get(today_key, {})
 
     tokens = today.get("tokens", 0)
+    api_calls = today.get("api_calls", 0)
     pct = round(tokens / _TOKEN_DAILY_LIMIT * 100, 1) if _TOKEN_DAILY_LIMIT > 0 else 0.0
+    api_pct = round(api_calls / _API_CALLS_DAILY_LIMIT * 100, 1) if _API_CALLS_DAILY_LIMIT > 0 else 0.0
 
     warning: str | None = None
     if pct >= 90:
         warning = f"Token usage at {pct:.1f}% of daily limit — approaching cap"
-    elif pct >= 75:
-        warning = f"Approaching daily token limit ({pct:.1f}% used)"
+    elif api_pct >= 90:
+        warning = f"API call usage at {api_pct:.1f}% of daily limit — approaching cap"
+    elif pct >= 75 or api_pct >= 75:
+        warning = f"Approaching daily limits (tokens {pct:.1f}%, api {api_pct:.1f}%)"
 
     return {
         "tokens_today": tokens,
         "tokens_today_pct": pct,
-        "api_calls_today": today.get("api_calls", 0),
+        "token_daily_limit": _TOKEN_DAILY_LIMIT,
+        "api_calls_today": api_calls,
+        "api_calls_today_pct": api_pct,
+        "api_calls_daily_limit": _API_CALLS_DAILY_LIMIT,
         "tickers_today": today.get("tickers", []),
         "warning": warning,
     }

@@ -1,5 +1,8 @@
-# docs/architecture.md — Tech stack, LLM factory, decisions, cache, DB, directory map
-# Sections: grep -n "SEC:" docs/architecture.md
+# docs/reference/architecture.md — Tech stack, LLM factory, decisions, cache, DB, directory map
+# Sections: grep -n "SEC:" docs/reference/architecture.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:STACK        Tech stack table
 # SEC:DIR_MAP      Project directory (key files only)
 # SEC:LLM_FACTORY  Provider-agnostic LLM setup

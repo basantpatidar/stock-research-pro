@@ -286,26 +286,28 @@ def run_screener(
     min_price_drop_pct: float = 10.0,
     sector: str = "all",
     max_pe: float = 0.0,
+    universe: str = "sp500",
+    limit: int = 50,
 ) -> dict:
     """
     Screen stocks based on filters: market cap, volume, price drop, sector.
     Returns qualifying stocks that may represent trading opportunities.
     min_market_cap_b: minimum market cap in billions (e.g. 100 = $100B)
     min_price_drop_pct: minimum 7-day price decline to qualify (e.g. 10 = -10%)
+    universe: which ticker pool to screen — "sp500" (default, ~150 names),
+              "nasdaq100" (growth/tech focus), "etfs" (sector + factor),
+              "mega" ($200B+ for fast scans), or "legacy" (old 30-symbol list)
+    limit: max tickers to fetch per run. Each one is a yfinance call (~200ms),
+           so 50 ≈ 10 s, 100 ≈ 20 s. Hard-capped at 150 to keep API latency sane.
     """
     try:
-        large_cap_tickers = [
-            "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO",
-            "ORCL", "AMD", "INTC", "QCOM", "TXN", "MU", "AMAT",
-            "JPM", "BAC", "WFC", "GS", "MS", "BLK",
-            "JNJ", "UNH", "PFE", "ABBV", "MRK",
-            "XOM", "CVX", "COP", "SLB",
-            "WMT", "AMZN", "COST", "TGT", "HD",
-            "BA", "CAT", "HON", "LMT", "RTX",
-        ]
+        from app.tools.universe import get_universe
+        # Resolve universe; cap to 150 max so a "limit=99999" can't DOS the API
+        ticker_pool = get_universe(universe)
+        screen_count = max(1, min(int(limit), 150))
 
         results = []
-        for ticker in large_cap_tickers[:30]:
+        for ticker in ticker_pool[:screen_count]:
             try:
                 stock = get_ticker(ticker)
                 info = stock.info

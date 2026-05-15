@@ -63,10 +63,17 @@ class Settings(BaseSettings):
     trade_max_order_dollars: float = Field(default=2000.0)
     trade_max_position_dollars: float = Field(default=5000.0)
     trade_daily_loss_cap_dollars: float = Field(default=-200.0)
-    trade_daily_order_count_cap: int = Field(default=20)
+    trade_daily_order_count_cap: int = Field(default=50)
     # Auto-trade — off until Phase 3 sign-off, even then gated per signal type
     auto_trade_enabled: bool = Field(default=False)
     auto_trade_signal_types: str = Field(default="", description="comma-separated allowlist; empty = none")
+    # Auto-trade subscriber poll interval (seconds). Short enough that scanner-
+    # alert → broker submit stays sub-minute, long enough to avoid hammering DB.
+    auto_trade_poll_seconds: int = Field(default=30)
+    # Scanner halt — once today's signal count reaches this, dip + MCF scanners
+    # stop firing for the day. Matches trade_daily_order_count_cap by default
+    # so an auto-trade run that hits the cap also stops generating more signals.
+    scanner_daily_signal_cap: int = Field(default=50)
 
     # Logging
     log_dir: str = Field(default="./local_debugging")
