@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from app.config import get_settings
 
@@ -363,6 +365,45 @@ async def _resolve_open_alerts():
         logger.warning("resolve_alerts job error: %s", exc)
 
 
+async def _run_eod_dump():
+    """Generate the daily EOD signal dump at market close.
+
+    Runs `local_debugging/eod_dump.py` in-process via a subprocess so a
+    Docker-only laptop never needs a host Python env or a manual
+    `docker compose exec`. Read-only: the script SELECTs from scanner_alerts +
+    broker_orders and writes one JSON to local_debugging/eod_signals/ (the
+    host bind mount), where it's ready to copy back for analysis.
+
+    The script is located via LOG_DIR — already set to /app/local_debugging in
+    docker-compose.yml — so the path is correct both in Docker and locally.
+    """
+    import subprocess
+    import sys
+
+    log_dir = os.getenv("LOG_DIR") or str(
+        Path(__file__).resolve().parents[3] / "local_debugging"
+    )
+    script = Path(log_dir) / "eod_dump.py"
+    if not script.exists():
+        logger.warning("eod_dump: script not found at %s — skipping", script)
+        return
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if proc.returncode == 0:
+            lines = (proc.stdout or "").strip().splitlines()
+            logger.info("eod_dump: report generated — %s", lines[-1].strip() if lines else "ok")
+        else:
+            logger.warning("eod_dump: failed rc=%d — %s", proc.returncode, (proc.stderr or "")[-400:])
+    except Exception as exc:
+        logger.warning("eod_dump job error: %s", exc)
+
+
 def get_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is None:
@@ -445,13 +486,30 @@ def start_scheduler():
         misfire_grace_time=30,
     )
 
+    # EOD signal dump — Mon-Fri 4:35 PM ET, after the 3:45 PM resolution pass
+    # has closed every open alert. Writes local_debugging/eod_signals/<date>.json
+    # so the Docker-only laptop produces the daily report with no manual step.
+    import pytz
+    scheduler.add_job(
+        _run_eod_dump,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour=16, minute=35,
+            timezone=pytz.timezone("America/New_York"),
+        ),
+        id="eod_dump",
+        name="EOD signal dump",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
     scheduler.start()
     logger.info(
         f"Scheduler started — watchlist every {settings.watchlist_alert_interval_minutes}min, "
         f"screener every {settings.screener_interval_minutes}min, "
         f"dip scanner every 5min, "
         f"auto-trade every {settings.auto_trade_poll_seconds}s "
-        f"(enabled={settings.auto_trade_enabled})"
+        f"(enabled={settings.auto_trade_enabled}), "
+        f"eod dump 4:35 PM ET Mon-Fri"
     )
 
 
