@@ -44,8 +44,10 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 | `get_fundamentals` | fundamentals.py → core_tools | yfinance | pe_ratio, peg_ratio, profit_margin, debt_to_equity, free_cash_flow |
 | `get_options_signals` | options.py → core_tools | yfinance | put_call_ratio, iv, unusual_activity |
 | `get_insider_activity` | insider.py → core_tools | yfinance (Form 4) | insider_signal, recent_trades[] |
-| `get_institutional_changes` | institutional.py → core_tools | yfinance (13F) | top_holders[] |
+| `scan_mcf_opportunities` | mcf_scanner.py | yfinance | Uses 3-layer market context funnel to identify high conviction setups and ~1% profit targets. |
+| `get_vcp_pattern` | patterns.py | yfinance | Minervini Volatility Contraction Pattern detection (Stage 2, tight closes). |
 | `get_short_interest` | short_interest.py → core_tools | yfinance | short_float_pct, days_to_cover, short_squeeze_potential |
+| `get_institutional_changes` | institutional.py → core_tools | yfinance (13F) | top_holders[] |
 | `get_geopolitical_events` | geopolitical.py | NewsAPI | events[] (title, severity, impacted_sectors) |
 | `get_macro_environment` | macro.py → remaining_tools | yfinance | vix, sp500, oil_wti, yields, gold — NO ticker arg |
 | `get_sector_heatmap` | sector.py → remaining_tools | yfinance | 11 sector ETFs 5d perf — NO ticker arg |

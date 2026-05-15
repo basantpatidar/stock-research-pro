@@ -274,7 +274,7 @@ ScannerAlert      # Daily Target Trade Scanner — every fired signal + its outc
                   # outcome_price, outcome_time, actual_pnl_pct, actual_pnl_dollar
                   # resolved_by ("target_hit" | "stop_hit" | "time_stop" | "eod_close")
                   # five_min_direction ("up" | "down" | "flat" | NULL — direction at entry+5min)
-                  # See docs/features.md SEC:DIP_SCANNER for full lifecycle and gates.
+                  # See docs/reference/features.md SEC:DIP_SCANNER for full lifecycle and gates.
 ```
 
 **Planned additions (not yet built):**
