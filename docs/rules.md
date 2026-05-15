@@ -1,5 +1,8 @@
 # docs/rules.md — Operating rules for any change in this repo
 # Sections: grep -n "SEC:" docs/rules.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:DOCS         Docs-update discipline — when and how to update docs/
 # SEC:GIT          Branching, commit hygiene, PR cadence
 # SEC:CODE         Code-level rules that complement CLAUDE.md Critical Rules
@@ -38,6 +41,16 @@ CLAUDE.md links here from its Critical Rules section.
 ### Rule 4 — Personal planning docs do not ship
 **Why:** Sprint notes, brainstorms, critiques, and todo files clutter the repo and confuse future readers about what's authoritative.
 **How to apply:** Drop them in `local_debugging/` (already gitignored) **or** name them with one of the patterns in `.gitignore` (`docs/*-sprint.md`, `docs/*_critique*.md`, `docs/*_proposal*.md`, `docs/*_philosophy*.md`, `docs/*_strategy*.md`). Project docs that genuinely help a developer understand the codebase stay tracked.
+
+### Rule 4b — Every doc carries a version + last-updated line; bump on every edit
+**Why:** Drift detection. Versioned docs make it possible to answer "is this section current?" without diffing against git history. The version+date pair lives near the top (after the title comment, before the SEC anchor block) so it's the first thing visible.
+**How to apply:**
+- Format: `**Doc version:** X.Y · **Last updated:** YYYY-MM-DD`
+- Bump rules:
+  - **Patch (X.Y → X.Y+1)**: content edit within an existing section — typo fix, value update, new row in an existing table.
+  - **Minor (X.Y → X+1.0)**: new SEC: anchor, new sub-section, or behavioural reframe of an existing section.
+- Always update the date on **any** edit, even if the version doesn't bump.
+- Applies to all `docs/*.md` plus `CLAUDE.md` and `plan.md`. Exempt: `local_debugging/*.md` (working logs), `README.md`.
 
 ---
 

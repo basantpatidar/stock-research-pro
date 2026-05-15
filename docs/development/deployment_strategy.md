@@ -1,5 +1,7 @@
 # Multi-Machine Deployment & Architecture Strategy
 
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 This document outlines the dual-machine architecture used for Stock Research Pro. It provides essential context for any future development, debugging, or database analysis.
 
 ## The Architecture
