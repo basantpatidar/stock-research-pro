@@ -4,6 +4,7 @@ import { api } from "../services/api"
 import { T } from "../theme"
 import { useStore } from "../store"
 import { SituationSummary } from "./SituationSummary"
+import { OrderTicketModal, type TicketPrefill } from "./trading/OrderTicketModal"
 
 interface Candle { time: string; open: number; high: number; low: number; close: number }
 
@@ -619,6 +620,8 @@ export function DipScannerCard() {
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => !localStorage.getItem("srp_onboarded"))
   const [paperTraded, setPaperTraded] = useState<string | null>(null)  // null | ticker key
   const [historyTicker, setHistoryTicker] = useState<string | null>(null)
+  const [ticket, setTicket] = useState<TicketPrefill | null>(null)
+  const brokerStatus = useStore((s) => s.brokerStatus)
 
   const dismissOnboarding = () => {
     localStorage.setItem("srp_onboarded", "1")
@@ -1115,6 +1118,36 @@ export function DipScannerCard() {
                         title="Log as a paper trade — no real money, tracks your record locally"
                       >
                         {paperTraded === best.ticker ? "Paper ✓" : "Paper Trade"}
+                      </button>
+                      {/* Trade this signal — routes through the broker (paper or live per BROKER_MODE) */}
+                      <button
+                        onClick={() => setTicket({
+                          symbol: best.ticker,
+                          side: "buy",
+                          qty: Math.floor(best.shares),
+                          orderType: "limit",
+                          limitPrice: best.entry_price,
+                          stopPrice: best.stop_price,
+                          takeProfitPrice: best.target_price,
+                          source: "scanner_alert",
+                          scannerAlertId: (best as any).alert_id ?? null,
+                        })}
+                        disabled={brokerStatus !== "ok"}
+                        style={{
+                          fontSize: 11, padding: "6px 10px",
+                          background: brokerStatus === "ok" ? T.blueDim : "transparent",
+                          color: brokerStatus === "ok" ? T.blue : T.text3,
+                          border: `1px solid ${brokerStatus === "ok" ? T.blue : T.border}`,
+                          borderRadius: 6, cursor: brokerStatus === "ok" ? "pointer" : "not-allowed",
+                          opacity: brokerStatus === "ok" ? 1 : 0.5,
+                        }}
+                        title={brokerStatus === "ok"
+                          ? "Submit to broker (entry/stop/target pre-filled). Phase 2 manual — Phase 3 will auto-fire."
+                          : brokerStatus === "misconfigured"
+                            ? "Broker not configured — set ALPACA_API_KEY in .env"
+                            : "Broker unreachable — try again later"}
+                      >
+                        Trade Signal →
                       </button>
                     </div>
                   )}
@@ -1624,6 +1657,14 @@ export function DipScannerCard() {
           </div>
         )
       })()}
+
+      {ticket && (
+        <OrderTicketModal
+          prefill={ticket}
+          onClose={() => setTicket(null)}
+          onPlaced={() => setTicket(null)}
+        />
+      )}
     </div>
   )
 }

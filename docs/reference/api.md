@@ -5,6 +5,7 @@
 # SEC:V2_ROUTES     Tiered research routes (tier1/tier2/tier3/estimate)
 # SEC:MCF_ROUTES    Market Context First (MCF) scanner
 # SEC:USAGE_ROUTES  Usage tracking routes
+# SEC:BROKER_ROUTES Broker / order execution routes (paper + live trading)
 # SEC:REALTIME      SSE stream + WebSocket
 
 ---
@@ -281,6 +282,42 @@ Response: {
 }
 ```
 Returns last 30 days. Returns zeros if `data/usage.json` does not exist yet.
+
+---
+
+<!-- SEC:BROKER_ROUTES -->
+## Broker Routes
+
+Order execution endpoints, gated by the same `X-API-Key` middleware as the rest of the app. Provider is selected via the `BROKER` env var; mode (`paper` / `live`) via `BROKER_MODE`. See `docs/trading.md` SEC:ARCH for the broker factory pattern and SEC:RISK for server-side caps applied before every order submit.
+
+`GET /broker/account` — Phase 1 smoke test
+```json
+Response: { "broker": "alpaca", "mode": "paper", "cash": 100000.00,
+            "buying_power": 100000.00, "equity": 100000.00,
+            "daytrade_count": 0 }
+```
+Returns HTTP 503 with header `X-Broker-Status: unreachable` if the broker API is down.
+
+`GET /broker/positions` — Phase 2
+Returns `list[Position]`. 30s Redis cache; the broker is authoritative for `market_value` and `unrealized_pl`.
+
+`GET /broker/orders?status=open|all|closed&limit=50` — Phase 2
+Merges local `BrokerOrder` rows with the broker's current status — local rows are the source of truth for orders we submitted, the broker is the source of truth for fill state.
+
+`POST /broker/orders` — Phase 2
+```json
+Request:  { "symbol": "SPY", "side": "buy", "qty": 10, "order_type": "limit",
+            "limit_price": 580.00, "time_in_force": "day",
+            "stop_loss": 575.00, "take_profit": 595.00,
+            "source": "manual", "scanner_alert_id": null,
+            "client_order_id": "<uuid-from-frontend>" }
+Response: { "id": "...", "broker_order_id": "...", "status": "accepted", ... }
+```
+Risk-cap rejection returns HTTP 422 with `{ "error": "max_order_dollars_exceeded", "limit": 2000, "attempted": 5800 }`. Live mode additionally requires a `confirm_token` matching the expected typed string (see SEC:RISK in docs/trading.md).
+
+`GET /broker/orders/{order_id}` — single lookup. `DELETE /broker/orders/{order_id}` — best-effort cancel.
+
+`GET /broker/clock` — Phase 2. Mirrors broker's market clock so the UI doesn't compute open/close locally.
 
 ---
 

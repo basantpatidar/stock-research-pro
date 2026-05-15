@@ -1,7 +1,8 @@
 # docs/frontend.md — Pages, components, Zustand store, hooks, key types
 # Sections: grep -n "SEC:" docs/frontend.md
-# SEC:PAGES       5 page components and their responsibilities
+# SEC:PAGES       Page components and their responsibilities
 # SEC:COMPONENTS  Key shared + research components
+# SEC:PORTFOLIO_PAGE  Portfolio page + order ticket modal + broker status badge
 # SEC:STORE       Zustand store shape
 # SEC:HOOKS       Custom hooks
 # SEC:TYPES       Core TypeScript interfaces (abbreviated)
@@ -21,6 +22,7 @@
 | `UsagePage.tsx` | `/usage` | Token breakdown, API metrics, and guard rail limit status. |
 | `McfDashboardPage.tsx` | `/mcf` | Standalone dashboard for the Market Context First (MCF) funnel scanner. |
 | `DashboardPage.tsx` | `/dashboard` | Market pulse, top movers, sector rotation grid, Weekly P&L bar, Daily Target Trade Scanner (DipScannerCard + ScannerPerformanceCard) |
+| `PortfolioPage.tsx` | `/portfolio` | Broker account header, open positions, open orders, recent fills. Polls `/broker/*` every 10s. See SEC:PORTFOLIO_PAGE. |
 
 **ResearchPage flow:**
 1. User enters ticker → `runSearch()` fires simultaneously:
@@ -107,6 +109,59 @@ Placed above scanner grid on DashboardPage. Features:
 
 ---
 
+<!-- SEC:PORTFOLIO_PAGE -->
+## Portfolio Page + Trading Components
+
+The `/portfolio` page, `OrderTicketModal`, and `BrokerStatusBadge` together
+implement Phase 2 of the broker integration (see `docs/trading.md` SEC:PHASES).
+Phase 1 was the backend factory + smoke route; Phase 3 is auto-trade behind
+a feature flag.
+
+### `pages/PortfolioPage.tsx`
+Layout, top to bottom:
+1. **Header** — page title, mode pill (`PAPER` amber / `LIVE` red), manual refresh button.
+2. **Account stat strip** — equity, buying power, cash, day P&L (`account.equity - account.last_equity`).
+3. **Open positions table** — symbol, qty, avg entry, current price, market value, unrealized P&L $/%. Inline `[Close]` button → opens `OrderTicketModal` pre-filled as a sell at current qty.
+4. **Open orders table** — symbol, side (color-coded), qty, type, limit, status, submitted_at. Inline `[Cancel]` button → `DELETE /broker/orders/{id}`.
+5. **Recent fills table** — last 50 filled orders, read-only.
+
+Polls all four broker endpoints in parallel every 10 s via `Promise.all`. On
+HTTP 503, reads the `X-Broker-Status` header to distinguish `unreachable`
+(red banner — try again later) from `misconfigured` (amber banner — set
+`ALPACA_API_KEY` in `.env`). Existing rows stay visible during an outage —
+the page never blanks out.
+
+### `components/trading/OrderTicketModal.tsx`
+Props: `prefill: TicketPrefill`, `onClose`, `onPlaced`. Self-contained modal
+that overlays any page. Behaviour:
+- **Qty mode toggle**: `shares` or `$`. Dollar mode auto-computes whole shares once a limit price is set (`Math.floor(dollars / limit_price)`).
+- **Bracket checkbox**: when enabled, the body includes `stop_price` + `take_profit_price` so a bracket order is submitted in one round-trip.
+- **Live-mode confirmation**: when `brokerAccount.mode === 'live'`, an extra row appears with the exact string the backend expects (`"BUY 10 SPY"`) and the submit button stays disabled until the user types it verbatim. The token is computed via `expectedConfirmToken()` in `services/broker.ts` — same source of truth as the backend.
+- **`client_order_id` is generated once per modal mount** via `crypto.randomUUID` (with a Math.random fallback) and reused on retries — the backend looks up by this UUID for idempotency.
+- **Cap-rejection mapping**: the backend returns `HTTP 422 { error: <code>, ...detail }`; the modal's `CAP_COPY` table turns each code into actionable copy (e.g. `max_position_dollars_exceeded` → "trim qty or close an existing position first") rather than raw error strings.
+
+### `components/shared/BrokerStatusBadge.tsx`
+Pill in the top nav. Polls `GET /broker/account` every 30 s and writes the
+result into the store (`brokerAccount`, `brokerStatus`). States:
+- `ok` → `PAPER` (amber) or `LIVE` (red) text, green status dot
+- `misconfigured` → `NOT SET` (grey), red dot, tooltip nudges to `.env`
+- `unreachable` → `DOWN` (red), red dot
+
+Click → navigates to `/portfolio`. This is also what keeps `brokerAccount`
+fresh for other components (e.g. `OrderTicketModal` reads it to decide
+whether to show the live-mode confirmation gate).
+
+### Scanner integration — `components/DipScannerCard.tsx`
+Adds a `Trade Signal →` button next to the existing `Paper Trade`
+(localStorage) and `Enter Trade →` (manual checklist) buttons on the
+opportunity card. Pre-fills the `OrderTicketModal` with the scanner's
+`entry_price` as limit, `stop_price` and `target_price` as bracket legs,
+and `source: 'scanner_alert'` so Phase 3 auto-trade analytics can join
+broker orders back to their triggering signal. Disabled when
+`brokerStatus !== 'ok'` with a tooltip explaining which state.
+
+---
+
 <!-- SEC:STORE -->
 ## Zustand Store (`frontend/src/store.ts`)
 
@@ -120,15 +175,23 @@ alerts: Alert[]
 streamEvents: SSEEvent[]
 isStreaming: boolean
 wsConnected: boolean
+scannerView: "simple" | "pro" | "guide"
+
+// Broker / trading (Phase 2)
+brokerAccount: BrokerAccount | null
+brokerStatus: "ok" | "unreachable" | "misconfigured" | "unknown"
+positions: BrokerPosition[]
+openOrders: BrokerOrder[]
 
 // Actions
 setMode(m)  setExecMode(m)  setLastTicker(t)  addTokens(n)
 setWatchlist(items)  addAlert(a)
 addStreamEvent(e)  clearStreamEvents()
 setStreaming(b)  setWsConnected(b)
+setBrokerAccount(a)  setBrokerStatus(s)  setPositions(p)  setOpenOrders(o)
 ```
 
-**Persistence:** `mode`, `execMode`, and `lastTicker` are persisted to `localStorage` via `zustand/middleware persist`. They survive page reloads and browser restarts.
+**Persistence:** `mode`, `execMode`, `lastTicker`, and `scannerView` are persisted to `localStorage` via `zustand/middleware persist`. They survive page reloads and browser restarts. **Broker state (`brokerAccount`, `brokerStatus`, `positions`, `openOrders`) is intentionally NOT persisted** — it must always reflect live broker state on a fresh load, never stale localStorage.
 
 ---
 

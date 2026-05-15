@@ -10,6 +10,8 @@ import { MacroPage } from "./pages/MacroPage"
 import { UsagePage } from "./pages/UsagePage"
 import { DashboardPage } from "./pages/DashboardPage"
 import { McfDashboardPage } from "./pages/McfDashboardPage"
+import { PortfolioPage } from "./pages/PortfolioPage"
+import { BrokerStatusBadge } from "./components/shared/BrokerStatusBadge"
 import { T } from "./theme"
 
 const NAV_ITEMS = [
@@ -19,6 +21,7 @@ const NAV_ITEMS = [
   { to: "/watchlist",  label: "Watchlist" },
   { to: "/screener",   label: "Screener" },
   { to: "/macro",      label: "Macro" },
+  { to: "/portfolio",  label: "Portfolio" },
   { to: "/usage",      label: "Usage" },
 ]
 
@@ -86,8 +89,9 @@ function AppShell() {
           ))}
         </div>
 
-        {/* Live status + token counter */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
+        {/* Live status + broker badge + token counter */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <BrokerStatusBadge />
           <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
             <div style={{
               width: 8, height: 8, borderRadius: "50%",
@@ -126,6 +130,7 @@ function AppShell() {
           <Route path="/watchlist"  element={<WatchlistPage />} />
           <Route path="/screener"   element={<ScreenerPage />} />
           <Route path="/macro"      element={<MacroPage />} />
+          <Route path="/portfolio"  element={<PortfolioPage />} />
           <Route path="/usage"      element={<UsagePage />} />
         </Routes>
       </main>

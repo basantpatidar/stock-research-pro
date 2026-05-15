@@ -92,6 +92,52 @@ class ScannerAlert(Base):
     five_min_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)  # up / down / flat — price direction at entry+5min (#29)
 
 
+class BrokerOrder(Base):
+    """Local snapshot of every order we submit to a broker.
+
+    Why we keep a local copy when Alpaca already stores them: this app's UI
+    must work even when Alpaca is unreachable, and historical PnL analytics
+    must not depend on Alpaca's retention. The broker is authoritative for
+    *fill state* (`filled_qty`, `filled_avg_price`); the local row is
+    authoritative for the fact that *we submitted this order*.
+
+    `mode` is frozen at submission time so a paper-mode order stays labeled
+    paper even after BROKER_MODE flips to live — never mix the two in
+    aggregations. See docs/trading.md SEC:DATA_MODEL.
+    """
+
+    __tablename__ = "broker_orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    broker: Mapped[str] = mapped_column(String(20), nullable=False)
+    broker_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)  # paper | live — frozen for audit
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String(4), nullable=False)  # buy | sell
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    order_type: Mapped[str] = mapped_column(String(12), nullable=False)
+    limit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    take_profit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    time_in_force: Mapped[str] = mapped_column(String(4), nullable=False, default="day")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new", index=True)
+    filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    filled_avg_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")  # manual | scanner_alert
+    scanner_alert_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    # We generate this UUID on the frontend so retries are idempotent on the
+    # broker side. Unique constraint catches accidental double-clicks.
+    client_order_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("client_order_id", name="uq_broker_orders_client_order_id"),
+    )
+
+
 class StockDataCache(Base):
     """Caches slow-changing yfinance data keyed by (ticker, data_type).
 
