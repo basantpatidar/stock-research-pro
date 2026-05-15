@@ -39,6 +39,7 @@ async def _run_dip_scan():
     import pytz
     from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _get_session_window, SESSION_WINDOWS
     from app.api.alerts import broadcast
+    from app.services.trading.auto_trade import should_halt_scanner
 
     et_tz = pytz.timezone("America/New_York")
     now_et = datetime.now(et_tz)
@@ -51,6 +52,13 @@ async def _run_dip_scan():
             "window": window,
         })
         return  # outside trading hours — heartbeat still recorded
+
+    # Daily-signal halt — once today's scanner_alerts >= cap, stop firing.
+    # Matches the auto-trade order cap so a full day of auto-fired orders also
+    # silences the source feeding it.
+    if await should_halt_scanner(get_settings()):
+        logger.info("dip_scan: halted for the day — signal cap reached")
+        return
 
     tickers = ETF_TIERS[1]  # Tier 1 only for background job
     t0 = time.monotonic()
@@ -114,6 +122,7 @@ async def _run_mcf_scan(force: bool = False):
     from app.tools.mcf_scanner import scan_mcf_opportunities
     from app.db.database import get_db_direct
     from app.services.data_cache import set_stock_cache
+    from app.services.trading.auto_trade import should_halt_scanner
     from app.db.models import ScannerAlert
     import uuid
 
@@ -123,6 +132,11 @@ async def _run_mcf_scan(force: bool = False):
     hm = now_et.hour * 60 + now_et.minute
     if not force and (hm < 9 * 60 + 30 or hm >= 16 * 60):
         return  # outside trading hours
+
+    # Daily-signal halt — same gate as the dip scanner.
+    if not force and await should_halt_scanner(get_settings()):
+        logger.info("mcf_scan: halted for the day — signal cap reached")
+        return
         
     try:
         # 1. Generate scan
@@ -416,11 +430,28 @@ def start_scheduler():
         misfire_grace_time=60,
     )
 
+    # Auto-trade subscriber — turns scanner_alert rows into paper bracket
+    # orders when AUTO_TRADE_ENABLED=true and the alert's signal_type is in
+    # AUTO_TRADE_SIGNAL_TYPES. The job itself is registered unconditionally;
+    # it self-skips when the flag is off, so flipping the env requires only
+    # a restart, not a job-graph change.
+    from app.services.trading.auto_trade import _run_auto_trade_subscriber
+    scheduler.add_job(
+        _run_auto_trade_subscriber,
+        trigger=IntervalTrigger(seconds=settings.auto_trade_poll_seconds),
+        id="auto_trade_subscriber",
+        name="Auto-trade scanner alerts",
+        replace_existing=True,
+        misfire_grace_time=30,
+    )
+
     scheduler.start()
     logger.info(
         f"Scheduler started — watchlist every {settings.watchlist_alert_interval_minutes}min, "
         f"screener every {settings.screener_interval_minutes}min, "
-        f"dip scanner every 5min"
+        f"dip scanner every 5min, "
+        f"auto-trade every {settings.auto_trade_poll_seconds}s "
+        f"(enabled={settings.auto_trade_enabled})"
     )
 
 
