@@ -30,7 +30,7 @@
 | 4 | **Per-data TTL caching** | Every tool gets its own TTL matching how often that data actually changes. See SEC:CACHING. Applies to ALL tool calls, not just LLM. |
 | 5 | **DB-backed cache for slow-changing data** | Quarterly/weekly data stored in StockDataCache DB table (survives restarts). Redis-only for real-time data (price, technicals). |
 | 6 | **Reddit features parked** | Any feature requiring Reddit PRAW is parked until API access is confirmed. See SEC:PARKED. |
-| 7 | **API setup instructions in code** | Every optional API key gets a comment in `.env.example` with the exact URL to get it and step-by-step. Also documented in `docs/dev.md` SEC:ENV_VARS. |
+| 7 | **API setup instructions in code** | Every optional API key gets a comment in `.env.example` with the exact URL to get it and step-by-step. Also documented in `docs/development/dev.md` SEC:ENV_VARS. |
 | 8 | **One branch + PR per sprint** | Branch naming: `feat/sprint-N-short-description`. Always merge before starting next sprint. |
 | 9 | **plan.md auto-updated** | After every sprint completes, update SEC:STATUS (mark built) and SEC:PRIORITY (mark done). Claude does this without being asked. |
 

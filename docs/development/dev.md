@@ -175,29 +175,29 @@ def test_get_price_error(mock_yfinance_error):
 - [ ] If T2: add to `_TIER2_TOOLS` + `_TOKEN_ESTIMATES` in `research_v2.py`
 - [ ] If T3: add to `_TIER3_TOOLS` + `_TOKEN_ESTIMATES` in `research_v2.py`
 - [ ] Write test in `tests/tools/test_tools.py`
-- [ ] Update `docs/tools.md` SEC:V1_TOOLS or SEC:V2_TOOLS
+- [ ] Update `docs/reference/tools.md` SEC:V1_TOOLS or SEC:V2_TOOLS
 - [ ] Add entry to `CLAUDE.md` Recent Changes
 
 ### New API endpoint
 - [ ] Add route to appropriate file in `backend/app/api/`
 - [ ] Register router in `main.py`
-- [ ] Add to `docs/api.md` under the correct SEC:
+- [ ] Add to `docs/reference/api.md` under the correct SEC:
 - [ ] Add entry to `CLAUDE.md` Recent Changes
 
 ### New frontend page
 - [ ] Create `frontend/src/pages/MyPage.tsx`
 - [ ] Add route in `App.tsx`
 - [ ] Add nav link in nav component
-- [ ] Update `docs/frontend.md` SEC:PAGES
+- [ ] Update `docs/reference/frontend.md` SEC:PAGES
 - [ ] Add entry to `CLAUDE.md` Recent Changes
 
 ### New guard rail limit
 - [ ] Add to `backend/app/services/usage/limits.py` ONLY
 - [ ] Add env var to `.env.example`
-- [ ] Update `docs/features.md` SEC:GUARD_RAILS table
-- [ ] Update `docs/dev.md` SEC:ENV_VARS
+- [ ] Update `docs/reference/features.md` SEC:GUARD_RAILS table
+- [ ] Update `docs/development/dev.md` SEC:ENV_VARS
 
 ### Database change
 - [ ] Update `backend/app/db/models.py`
 - [ ] Run `make migration MSG="description"` then `make migrate`
-- [ ] Update `docs/architecture.md` SEC:DB_MODELS
+- [ ] Update `docs/reference/architecture.md` SEC:DB_MODELS
