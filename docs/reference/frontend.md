@@ -19,7 +19,8 @@
 | `WatchlistPage.tsx` | `/watchlist` | Live signals table + alert feed |
 | `ScreenerPage.tsx` | `/screener` | Filter builder + results + preset management |
 | `MacroPage.tsx` | `/macro` | Sector heatmap + geopolitical events + macro indicators + FRED Credit & Rates Dashboard |
-| `UsagePage.tsx` | `/usage` | Token usage chart (30d) + guard-rail limits table |
+| `UsagePage.tsx` | `/usage` | Token breakdown, API metrics, and guard rail limit status. |
+| `McfDashboardPage.tsx` | `/mcf` | Standalone dashboard for the Market Context First (MCF) funnel scanner. |
 | `DashboardPage.tsx` | `/dashboard` | Market pulse, top movers, sector rotation grid, Weekly P&L bar, Daily Target Trade Scanner (DipScannerCard + ScannerPerformanceCard) |
 | `PortfolioPage.tsx` | `/portfolio` | Broker account header, open positions, open orders, recent fills. Polls `/broker/*` every 10s. See SEC:PORTFOLIO_PAGE. |
 
@@ -82,8 +83,9 @@ Main scanner card on DashboardPage. Features:
 - "Explain this setup" button — disabled in saver mode, ~200 tokens via tier2 API
 - Other setups row: all signal types (dip_buy + orb + vwap) with type label + score chip
 
-**`ScannerPerformanceCard.tsx`**
-Analytics card on DashboardPage. Features:
+**`ScannerPerformanceCard.tsx`** | Dashboard | P&L cumulative chart, win rates, and forward accuracy stats for scanner. |
+**`McfScannerCard.tsx`** | MCF Dashboard | Visualizes the 3-layer MCF funnel (Weather, Tide, Setup) and performance. |
+
 - Win rate, expected value/trade, current streak
 - SVG cumulative P&L line chart (chronological from analytics endpoint)
 - By-ETF and by-session-window mini breakdowns
