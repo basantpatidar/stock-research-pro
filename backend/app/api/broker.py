@@ -332,3 +332,65 @@ async def place_broker_order(
     row.filled_avg_price = placed.filled_avg_price
     row.filled_at = placed.filled_at
     return placed
+
+
+# ── Auto-trade status ─────────────────────────────────────────────────────────
+
+class AutoTradeStatus(BaseModel):
+    """Snapshot of the auto-trade subscriber's current state for the portfolio
+    page. All counts are ET-day-anchored to match the risk caps and the
+    scanner halt."""
+    enabled: bool
+    allowlist: list[str]
+    poll_seconds: int
+    orders_today: int
+    daily_order_cap: int
+    scanner_signals_today: int
+    scanner_daily_signal_cap: int
+    scanner_halted: bool
+    last_auto_order_at: datetime | None = None
+    last_auto_order_symbol: str | None = None
+
+
+@router.get("/auto-trade/status", response_model=AutoTradeStatus, dependencies=[Depends(verify_api_key)])
+async def get_auto_trade_status(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AutoTradeStatus:
+    """What the auto-trade subscriber sees right now. The UI uses this to
+    show a banner with: are we on? what's the allowlist? how many fired
+    today? did the scanner halt? Doesn't touch the broker — pure DB read."""
+    from app.services.trading.auto_trade import (
+        _parse_allowlist, _today_et_midnight_utc, count_alerts_today,
+    )
+    from sqlalchemy import func as _func
+
+    settings = get_settings()
+    cutoff = _today_et_midnight_utc()
+
+    # Orders count — across both manual + auto, since the cap is shared.
+    orders_today = await db.scalar(
+        select(_func.count(BrokerOrder.id)).where(BrokerOrder.submitted_at >= cutoff)
+    ) or 0
+
+    # Most-recent scanner_alert-sourced order — for the "last fired" line.
+    last_row = (await db.scalars(
+        select(BrokerOrder)
+        .where(BrokerOrder.source == "scanner_alert", BrokerOrder.submitted_at >= cutoff)
+        .order_by(BrokerOrder.submitted_at.desc())
+        .limit(1)
+    )).one_or_none()
+
+    signals_today = await count_alerts_today(db)
+    return AutoTradeStatus(
+        enabled=settings.auto_trade_enabled,
+        allowlist=sorted(_parse_allowlist(settings.auto_trade_signal_types)),
+        poll_seconds=settings.auto_trade_poll_seconds,
+        orders_today=int(orders_today),
+        daily_order_cap=settings.trade_daily_order_count_cap,
+        scanner_signals_today=signals_today,
+        scanner_daily_signal_cap=settings.scanner_daily_signal_cap,
+        scanner_halted=signals_today >= settings.scanner_daily_signal_cap,
+        last_auto_order_at=last_row.submitted_at if last_row else None,
+        last_auto_order_symbol=last_row.symbol if last_row else None,
+    )
