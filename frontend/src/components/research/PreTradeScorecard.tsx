@@ -1,4 +1,4 @@
-import type { PreTradeScore } from "../../types"
+import type { PreTradeScore, PreTradeCheck } from "../../types"
 import { T } from "../../theme"
 
 interface Props {
@@ -15,6 +15,55 @@ const VERDICT_DIM: Record<string, string> = {
   green: "#22cc6620",
   amber: "#ffaa0020",
   red:   "#ff444420",
+}
+
+const VERDICT_LEAD: Record<string, string> = {
+  PROCEED: "Setup is clean — entry is justified.",
+  CAUTION: "Mixed setup — entry is possible but smaller size is wise.",
+  AVOID:   "Setup is too weak — skip this trade.",
+}
+
+/**
+ * Plain-English explanation of the score. Synthesises the checks into two
+ * lines (what's working / what's missing) so the user doesn't have to read
+ * 8 dots and reverse-engineer the recommendation themselves.
+ *
+ * Opus idea #22 — same data, narrative form.
+ */
+function buildExplanation(score: PreTradeScore): { lead: string; positives: PreTradeCheck[]; negatives: PreTradeCheck[] } {
+  const lead = VERDICT_LEAD[score.verdict] ?? `Score ${score.score} of ${score.total}.`
+  const positives = score.checks.filter((c) => c.pass === true)
+  const negatives = score.checks.filter((c) => c.pass === false)
+  return { lead, positives, negatives }
+}
+
+function ChecklistSummary({ score }: { score: PreTradeScore }) {
+  const { lead, positives, negatives } = buildExplanation(score)
+  const accent = VERDICT_COLOR[score.verdict_color] ?? T.text2
+
+  if (score.checks.length === 0) return null
+
+  return (
+    <div style={{
+      background: T.surface2, borderLeft: `3px solid ${accent}`,
+      padding: "8px 12px", borderRadius: 4,
+      fontSize: 12, color: T.text, lineHeight: 1.5,
+    }}>
+      <div style={{ marginBottom: positives.length || negatives.length ? 4 : 0 }}>{lead}</div>
+      {positives.length > 0 && (
+        <div style={{ color: T.text2 }}>
+          <span style={{ color: T.green, fontWeight: 600 }}>Working:</span>{" "}
+          {positives.map((p) => p.label.toLowerCase()).join(", ")}.
+        </div>
+      )}
+      {negatives.length > 0 && (
+        <div style={{ color: T.text2 }}>
+          <span style={{ color: T.red, fontWeight: 600 }}>Missing:</span>{" "}
+          {negatives.map((n) => `${n.label.toLowerCase()} (${n.value})`).join(", ")}.
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function PreTradeScorecard({ data }: Props) {
@@ -50,6 +99,9 @@ export function PreTradeScorecard({ data }: Props) {
           Pre-Trade Checklist
         </span>
       </div>
+
+      {/* Plain-English summary — what's working, what's missing, bottom line */}
+      <ChecklistSummary score={data} />
 
       {/* Checklist grid — 2 columns */}
       <div style={{
