@@ -8,6 +8,8 @@ const DEFAULT_FILTERS: ScreenerFilters = {
   min_price_drop_pct: 10,
   sector: "all",
   max_pe: 0,
+  universe: "sp500",
+  limit: 50,
 }
 
 export function useScreener() {

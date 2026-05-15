@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useScreener } from "../hooks/useScreener"
 import { useWatchlist } from "../hooks/useWatchlist"
 import { T, chgColor } from "../theme"
+import type { ScreenerFilters } from "../types"
 
 const SECTORS = ["all", "Technology", "Healthcare", "Financials", "Energy", "Consumer Discretionary", "Industrials", "Communication Services"]
 
@@ -100,6 +101,24 @@ export function ScreenerPage() {
             value={filters.sector}
             options={SECTORS.map(s => [s, s === "all" ? "All sectors" : s])}
             onChange={v => setFilters({ ...filters, sector: v as string })}
+          />
+          <FilterSelect
+            label="Universe"
+            value={filters.universe ?? "sp500"}
+            options={[
+              ["sp500", "S&P 500 (~150)"],
+              ["nasdaq100", "NASDAQ-100 (~40)"],
+              ["etfs", "Major ETFs (~24)"],
+              ["mega", "Mega-cap ($200B+)"],
+              ["legacy", "Legacy 30"],
+            ]}
+            onChange={v => setFilters({ ...filters, universe: v as ScreenerFilters["universe"] })}
+          />
+          <FilterSelect
+            label="Limit"
+            value={filters.limit ?? 50}
+            options={[[20, "Top 20"], [50, "Top 50"], [100, "Top 100"], [150, "Top 150"]]}
+            onChange={v => setFilters({ ...filters, limit: v as number })}
           />
         </div>
 
