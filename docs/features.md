@@ -1,5 +1,8 @@
 # docs/features.md — Execution modes, tiers, guard rails, usage tracking, background jobs
 # Sections: grep -n "SEC:" docs/features.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:EXEC_MODES        saver / normal / deep — what each does
 # SEC:TIERS             T1/T2/T3 — when runs, LLM, tools
 # SEC:TOKEN_ESTIMATES   Per-tool token costs
@@ -8,6 +11,7 @@
 # SEC:BACKGROUND_JOBS   APScheduler jobs
 # SEC:CONVERGENCE       Signal convergence score (0-100) logic
 # SEC:ALERTS            Alert system (watchlist + screener)
+# SEC:AUTO_PAPER_TRADE  Auto-paper-trade subscriber (Phase 3 validation harness)
 
 ---
 
@@ -134,10 +138,14 @@ Configured in `backend/app/services/scheduler.py`, started in FastAPI lifespan.
 |---|---|---|
 | `evaluate_watchlist` | 5 min | Runs all active watchlist tickers through tools; fires WebSocket alert if strong signal |
 | `run_screener_background` | 15 min | Runs all `auto_monitor=True` screener presets; fires WebSocket alert on matches |
-| `_run_dip_scan` | 5 min | Checks session window; calls `scan_dip_opportunities`; broadcasts `dip_buy_alert` via WebSocket for any score ≥ 65 opportunity |
+| `_run_dip_scan` | 5 min | Checks session window AND scanner-halt cap; calls `scan_dip_opportunities`; broadcasts `dip_buy_alert` via WebSocket for any score ≥ 65 opportunity |
+| `_run_mcf_scan` | 5 min | Same halt check; runs MCF Funnel; persists alerts directly with `signal_type="mcf_dip_buy"` |
 | `_resolve_open_alerts` | 5 min | Fetches current price for all open `ScannerAlert` rows; marks `win` (target hit), `loss` (stop hit), or `expired` (EOD close) |
+| `_run_auto_trade_subscriber` | `AUTO_TRADE_POLL_SECONDS` (default 30 s) | Phase 3. Self-skips when `AUTO_TRADE_ENABLED=false` OR empty allowlist OR outside market hours. Otherwise queries open `scanner_alerts` whose `signal_type ∈ AUTO_TRADE_SIGNAL_TYPES` that haven't yet produced a `BrokerOrder`, builds a bracket order from each alert's entry/stop/target, runs `check_order_caps`, persists the `BrokerOrder` (with `source="scanner_alert"` + `scanner_alert_id`), submits via the broker. Idempotent on `client_order_id="auto-{alert.id}"`. |
 
-Both watchlist and screener jobs share the same `_yf_client.py` rate limiter. Dip scan jobs run 0 LLM — always safe in any exec mode. Intervals configurable via env vars.
+Both watchlist and screener jobs share the same `_yf_client.py` rate limiter. Dip + MCF scan jobs run 0 LLM — always safe in any exec mode. Intervals configurable via env vars.
+
+**Scanner halt-for-day:** the dip + MCF scan jobs both check `should_halt_scanner(settings)` at the top of every tick. Once today's `scanner_alerts` count reaches `SCANNER_DAILY_SIGNAL_CAP` (default 50), both scanners skip remaining ticks for the rest of the trading day. Pairs naturally with `TRADE_DAILY_ORDER_COUNT_CAP` (same default 50) so a runaway auto-trade run also silences the source feeding it.
 
 ---
 
@@ -311,6 +319,40 @@ Backtest rows are gated on the same score floor as live: `score ≥ 72`, plus `�
 
 ### AI Signal Analysis (LLM, ~500 tokens, opt-in)
 `POST /dip-scanner/analyze` is the only LLM-touching scanner path. Click-triggered from "What does this mean?" button in pro view; result clears on each new scan. Pulls last 30 closed signals for `(ticker, signal_type)` to build a structured prompt with historical win rate / avg win / avg loss, then returns `{ verdict (FAVORABLE/MIXED/UNFAVORABLE), plain_english, key_risk, watch_for }`. Falls back to a rule-based response if LLM call fails. Blocked in saver mode.
+
+---
+
+<!-- SEC:AUTO_PAPER_TRADE -->
+## Auto-Paper-Trade Subscriber (Phase 3)
+
+**Goal:** unbiased measurement of scanner profitability. Every signal in the allowlist becomes a paper bracket order so the resulting P&L reflects the strategy, not human selection bias. **Paper-only by design** — see `docs/trading.md` SEC:GOALS for why live trading is intentionally absent from the roadmap.
+
+**Code:** `backend/app/services/trading/auto_trade.py` (subscriber + scanner halt + alert→order conversion); `backend/app/api/broker.py` GET `/broker/auto-trade/status` (status endpoint); `frontend/src/components/trading/AutoTradePanel.tsx` (UI banner).
+
+### How it fires
+The subscriber is registered unconditionally in the scheduler (so flipping the env flag doesn't require a job-graph change). On every tick (default 30 s):
+1. **Self-skip gates:** `AUTO_TRADE_ENABLED=false`, empty `AUTO_TRADE_SIGNAL_TYPES` allowlist, broker unavailable, or outside US market hours (9:30–16:00 ET Mon–Fri) → return immediately, log nothing.
+2. **Query open alerts** with `signal_type ∈ allowlist`, entry_time ≥ today midnight ET, and no existing `BrokerOrder.scanner_alert_id` linkage — bounded to 20 per tick (leftovers picked up next poll).
+3. **Per alert**, build a bracket `PlaceOrderRequest`: `qty = floor(alert.capital_used / alert.entry_price)`, limit at entry, stop at alert.stop_price, take-profit at alert.target_price, TIF day, `client_order_id="auto-{alert.id}"` (idempotent — same alert can never fire twice).
+4. **Run `check_order_caps`** (the SAME risk gate manual orders go through — single source of truth).
+5. **Persist `BrokerOrder`** with `source="scanner_alert"` + `scanner_alert_id`, submit to broker, update row with broker response.
+6. **Daily cap reached** (`daily_order_count_cap_reached` from check_order_caps) → break out of the per-alert loop; remaining alerts wait for tomorrow.
+
+### Configuration
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `AUTO_TRADE_ENABLED` | `false` | Master kill switch. `true` alone does NOT fire — allowlist must also be non-empty. |
+| `AUTO_TRADE_SIGNAL_TYPES` | (empty) | Comma-separated allowlist, e.g. `orb_breakout,failed_breakdown`. Empty = no fires regardless of flag. |
+| `AUTO_TRADE_POLL_SECONDS` | `30` | Subscriber tick rate. |
+| `TRADE_DAILY_ORDER_COUNT_CAP` | `50` | Hard cap on orders per day (manual + auto combined). 51st rejected with 422. |
+| `SCANNER_DAILY_SIGNAL_CAP` | `50` | Once today's `scanner_alerts` reach this, dip + MCF scanners halt for the day. |
+
+### Linking back to the source signal
+`BrokerOrder.scanner_alert_id` is the foreign key. `eod_dump.py` joins through it to surface per-fill slippage (`filled_avg_price - alert.entry_price`), coverage gap (alerts that didn't produce orders — auto off, not in allowlist, or risk-cap rejected), and per-signal-type fill rate. See `local_debugging/eod_dump.py` `_build_trading_report`.
+
+### Manual + auto coexist
+Manual orders through `POST /broker/orders` keep working unchanged. The subscriber only adds *additional* order flow; it never displaces or rate-limits manual entries. Both paths share the same risk caps and `BrokerOrder` table. The `source` column (`"manual"` vs `"scanner_alert"`) distinguishes them.
 
 ---
 

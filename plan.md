@@ -1,5 +1,8 @@
 # Stock Research Pro — Feature Roadmap
 # Navigation: grep -n "SEC:" plan.md → read with offset+limit
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:DECISIONS      Locked-in architectural decisions (read this first)
 # SEC:CACHING        Per-data TTL strategy (LLM + non-LLM)
 # SEC:UI_PAGES       Page layout and where features live
@@ -220,9 +223,9 @@ The day trader's morning starting point. Opens to this page by default when mode
 ### Next Up (from todo.md + backlog)
 | Sprint | Feature(s) | Audience | Complexity | Tokens |
 |---|---|---|---|---|
-| **TRADE-1** | Trading foundation — broker factory + Alpaca client + `/broker/account` + `BrokerOrder` model. See `docs/trading.md` SEC:PHASES. | Both | Medium | 0 |
-| **TRADE-2** | Manual paper trading — portfolio page, order ticket modal, scanner card "Trade this signal" button | Both | High | 0 |
-| **TRADE-3** | Auto-trade behind flag — scanner→order wiring, daily-loss cap enforcement, live-mode confirmation flow | Day trader | High | 0 |
+| **TRADE-1** ✅ | Trading foundation — broker factory + Alpaca client + `/broker/account` + `BrokerOrder` model. See `docs/trading.md` SEC:PHASES. | Both | Medium | 0 |
+| **TRADE-2** ✅ | Manual paper trading — portfolio page, order ticket modal, scanner card "Trade this signal" button, "New Order" button on portfolio page | Both | High | 0 |
+| **TRADE-3** 🔧 | Auto-paper-trade subscriber — scanner→bracket-order wiring behind `AUTO_TRADE_ENABLED` flag + per-signal-type allowlist + scanner halt at daily cap. **Paper only — live trading is not planned.** | Day trader | High | 0 |
 | **26** | Sentiment Divergence Signal | Both | Low | 0 |
 | **27** | Portfolio risk page (multi-stock exposure) | Both | Medium | 0 |
 | **28** | Expand screener beyond 30 hardcoded tickers | Both | Low | 0 |

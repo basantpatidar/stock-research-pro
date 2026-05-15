@@ -1,5 +1,8 @@
 # docs/tools.md — Tool catalog, invocation pattern, conventions, how to add a tool
 # Sections: grep -n "SEC:" docs/tools.md
+
+**Doc version:** 1.0 · **Last updated:** 2026-05-14
+
 # SEC:TOOL_CONVENTIONS   Rules, invocation pattern, yfinance wrapper
 # SEC:V1_TOOLS           20 V1 tools (name, source, what it returns)
 # SEC:V2_TOOLS           6 V2 new tools (Tier 3 deep analysis)
@@ -55,7 +58,7 @@ Tools are synchronous (blocking I/O); `asyncio.to_thread` keeps the async event 
 | `get_cascade_impact` | cascade.py → remaining_tools | LLM | causal chain: event → stock impact |
 | `get_price_forecast` | forecast.py → remaining_tools | yfinance + LLM | forecast text, targets {days, weeks, quarter} |
 | `get_risk_reward` | risk_reward.py → remaining_tools | yfinance | entry_price, stop_loss, target_price, risk_reward_ratio |
-| `run_screener` | screener.py → remaining_tools | yfinance | matching tickers[] with price/cap/volume/sector |
+| `run_screener` | screener.py → remaining_tools, universe.py | yfinance | matching tickers[] with price/cap/volume/sector. Accepts `universe` (`sp500`/`nasdaq100`/`etfs`/`mega`/`legacy`, default `sp500`) + `limit` (default 50, max 150) — see [[universe.py]] |
 | `get_convergence_score` | convergence.py → remaining_tools | all signals | convergence_score (0-100), label, signals[], bullish/bearish count |
 | `get_trends` | google_trends.py → remaining_tools | pytrends | interest spike detection |
 | `get_mtf_confluence` | technicals_mtf.py | yfinance | confluence_score (0-100), label, alignment, timeframes{5m,15m,1h,1d} each with direction/rsi/macd_bullish/price_above_vwap |
