@@ -75,6 +75,19 @@ export interface BrokerClock {
   mode: BrokerMode
 }
 
+export interface AutoTradeStatus {
+  enabled: boolean
+  allowlist: string[]
+  poll_seconds: number
+  orders_today: number
+  daily_order_cap: number
+  scanner_signals_today: number
+  scanner_daily_signal_cap: number
+  scanner_halted: boolean
+  last_auto_order_at: string | null
+  last_auto_order_symbol: string | null
+}
+
 export interface CapRejection {
   error: string  // backend code, e.g. "max_order_dollars_exceeded"
   limit_dollars?: number
@@ -567,6 +580,8 @@ export interface ScreenerFilters {
   min_price_drop_pct: number
   sector: string
   max_pe: number
+  universe?: "sp500" | "nasdaq100" | "etfs" | "mega" | "legacy"
+  limit?: number
 }
 
 export interface ScreenerResult {

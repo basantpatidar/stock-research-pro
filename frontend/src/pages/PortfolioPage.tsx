@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback } from "react"
 import { brokerApi } from "../services/broker"
 import { useStore } from "../store"
 import { T, chgColor, chgDim } from "../theme"
-import type { BrokerOrder, BrokerPosition } from "../types/index"
+import type { AutoTradeStatus, BrokerOrder, BrokerPosition } from "../types/index"
 import { OrderTicketModal, type TicketPrefill } from "../components/trading/OrderTicketModal"
+import { PortfolioRiskPanel } from "../components/trading/PortfolioRiskPanel"
 
 const POLL_MS = 10_000
 
@@ -31,6 +32,56 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
 }
 
 
+function AutoTradePanel({ s }: { s: AutoTradeStatus }) {
+  // Colors: green when on AND will fire (allowlist non-empty), amber when on
+  // but allowlist empty (no-op), grey when fully off. Red when scanner halted.
+  const armed = s.enabled && s.allowlist.length > 0
+  const halted = s.scanner_halted
+  const accent = halted ? T.red : armed ? T.green : s.enabled ? T.amber : T.text3
+  const bg = halted ? T.redDim : armed ? "rgba(34,197,94,0.08)" : s.enabled ? T.amberDim : T.surface
+
+  const lastFired = s.last_auto_order_at
+    ? new Date(s.last_auto_order_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+    : null
+
+  return (
+    <div style={{
+      background: bg, border: `1px solid ${accent}`, borderRadius: 10,
+      padding: "10px 14px", marginBottom: 16, display: "flex",
+      alignItems: "center", gap: 16, flexWrap: "wrap",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 700, fontFamily: T.mono, letterSpacing: "0.08em",
+          padding: "2px 8px", borderRadius: 4, background: accent,
+          color: halted || armed ? "#000" : T.text,
+        }}>
+          {halted ? "SCANNER HALTED" : armed ? "AUTO-TRADE ON" : s.enabled ? "AUTO-TRADE (NO ALLOWLIST)" : "AUTO-TRADE OFF"}
+        </span>
+        {s.allowlist.length > 0 && (
+          <span style={{ fontSize: 11, color: T.text2, fontFamily: T.mono }}>
+            allow: {s.allowlist.join(", ")}
+          </span>
+        )}
+      </div>
+      <div style={{ marginLeft: "auto", display: "flex", gap: 18, fontSize: 12, fontFamily: T.mono }}>
+        <span style={{ color: T.text2 }}>
+          orders today: <span style={{ color: T.text }}>{s.orders_today}/{s.daily_order_cap}</span>
+        </span>
+        <span style={{ color: T.text2 }}>
+          signals today: <span style={{ color: T.text }}>{s.scanner_signals_today}/{s.scanner_daily_signal_cap}</span>
+        </span>
+        {lastFired && (
+          <span style={{ color: T.text2 }}>
+            last: <span style={{ color: T.text }}>{s.last_auto_order_symbol} @ {lastFired}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 function ModePill({ mode }: { mode: "paper" | "live" }) {
   const isPaper = mode === "paper"
   const c = isPaper ? T.amber : T.red
@@ -53,21 +104,24 @@ export function PortfolioPage() {
   const [recentFills, setRecentFills] = useState<BrokerOrder[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ticket, setTicket] = useState<TicketPrefill | null>(null)
+  const [autoTrade, setAutoTrade] = useState<AutoTradeStatus | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
     try {
-      const [account, pos, open, closed] = await Promise.all([
+      const [account, pos, open, closed, at] = await Promise.all([
         brokerApi.account(),
         brokerApi.positions(),
         brokerApi.listOrders("open", 100),
         brokerApi.listOrders("closed", 50),
+        brokerApi.autoTradeStatus().catch(() => null),
       ])
       setBrokerAccount(account)
       setBrokerStatus("ok")
       setPositions(pos)
       setOpenOrders(open)
       setRecentFills(closed.filter((o) => o.status === "filled"))
+      setAutoTrade(at)
     } catch (e: any) {
       const status = e?.response?.status
       const bs = e?.response?.headers?.["x-broker-status"]
@@ -121,8 +175,20 @@ export function PortfolioPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: T.text, margin: 0 }}>Portfolio</h1>
         {brokerAccount && <ModePill mode={brokerAccount.mode} />}
+        <button
+          onClick={() => setTicket({ symbol: "", side: "buy", source: "manual" })}
+          disabled={brokerStatus !== "ok"}
+          style={{
+            marginLeft: "auto", padding: "5px 14px", fontSize: 12, fontFamily: T.mono,
+            background: brokerStatus === "ok" ? T.green : T.surface2,
+            color: brokerStatus === "ok" ? "#000" : T.text3,
+            border: `1px solid ${brokerStatus === "ok" ? T.green : T.border}`,
+            borderRadius: 6, cursor: brokerStatus === "ok" ? "pointer" : "not-allowed",
+            fontWeight: 600,
+          }}
+        >+ New Order</button>
         <button onClick={refresh} style={{
-          marginLeft: "auto", padding: "5px 12px", fontSize: 12, fontFamily: T.mono,
+          padding: "5px 12px", fontSize: 12, fontFamily: T.mono,
           background: T.surface2, color: T.text2, border: `1px solid ${T.border}`,
           borderRadius: 6, cursor: "pointer",
         }}>↻ Refresh</button>
@@ -141,6 +207,9 @@ export function PortfolioPage() {
         }}>{error}</div>
       )}
 
+      {/* Auto-trade status */}
+      {autoTrade && <AutoTradePanel s={autoTrade} />}
+
       {/* Account header */}
       {brokerAccount && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
@@ -154,6 +223,15 @@ export function PortfolioPage() {
             color={dayPnl == null ? T.text : chgColor(dayPnl)}
           />
         </div>
+      )}
+
+      {/* Risk */}
+      {brokerAccount && positions.length > 0 && (
+        <PortfolioRiskPanel
+          positions={positions}
+          openOrders={openOrders}
+          equity={brokerAccount.equity}
+        />
       )}
 
       {/* Open Positions */}

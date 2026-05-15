@@ -6,6 +6,7 @@
  */
 import { api } from "./api"
 import type {
+  AutoTradeStatus,
   BrokerAccount,
   BrokerClock,
   BrokerOrder,
@@ -44,6 +45,8 @@ export const brokerApi = {
     wrap<BrokerOrder>(api.post("/broker/orders", body)),
 
   cancelOrder: (id: string) => wrap<void>(api.delete(`/broker/orders/${id}`)),
+
+  autoTradeStatus: () => wrap<AutoTradeStatus>(api.get("/broker/auto-trade/status")),
 }
 
 /**
