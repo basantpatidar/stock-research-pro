@@ -20,6 +20,8 @@ class ScreenerFilters(BaseModel):
     min_price_drop_pct: float = 10.0
     sector: str = "all"
     max_pe: float = 0.0
+    universe: str = "sp500"        # sp500 | nasdaq100 | etfs | mega | legacy
+    limit: int = 50                # max tickers to fetch (hard-capped at 150)
 
 
 class SavePresetRequest(BaseModel):
@@ -43,6 +45,8 @@ async def run_screener_now(
                 "min_price_drop_pct": filters.min_price_drop_pct,
                 "sector": filters.sector,
                 "max_pe": filters.max_pe,
+                "universe": filters.universe,
+                "limit": filters.limit,
             }
         )
         return result
