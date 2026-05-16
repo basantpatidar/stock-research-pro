@@ -1,7 +1,7 @@
 # docs/features.md — Execution modes, tiers, guard rails, usage tracking, background jobs
 # Sections: grep -n "SEC:" docs/features.md
 
-**Doc version:** 1.0 · **Last updated:** 2026-05-14
+**Doc version:** 1.1 · **Last updated:** 2026-05-15
 
 # SEC:EXEC_MODES        saver / normal / deep — what each does
 # SEC:TIERS             T1/T2/T3 — when runs, LLM, tools
@@ -142,6 +142,7 @@ Configured in `backend/app/services/scheduler.py`, started in FastAPI lifespan.
 | `_run_mcf_scan` | 5 min | Same halt check; runs MCF Funnel; persists alerts directly with `signal_type="mcf_dip_buy"` |
 | `_resolve_open_alerts` | 5 min | Fetches current price for all open `ScannerAlert` rows; marks `win` (target hit), `loss` (stop hit), or `expired` (EOD close) |
 | `_run_auto_trade_subscriber` | `AUTO_TRADE_POLL_SECONDS` (default 30 s) | Phase 3. Self-skips when `AUTO_TRADE_ENABLED=false` OR empty allowlist OR outside market hours. Otherwise queries open `scanner_alerts` whose `signal_type ∈ AUTO_TRADE_SIGNAL_TYPES` that haven't yet produced a `BrokerOrder`, builds a bracket order from each alert's entry/stop/target, runs `check_order_caps`, persists the `BrokerOrder` (with `source="scanner_alert"` + `scanner_alert_id`), submits via the broker. Idempotent on `client_order_id="auto-{alert.id}"`. |
+| `_run_eod_dump` | Cron — Mon-Fri 4:35 PM ET | Subprocesses `local_debugging/eod_dump.py` (located via `LOG_DIR`) so the daily report writes itself with no manual `docker compose exec`. Read-only — SELECTs scanner_alerts + broker_orders, writes `local_debugging/eod_signals/<date>.json` to the host bind mount. Runs after the 3:45 PM resolution pass so all alerts are closed. |
 
 Both watchlist and screener jobs share the same `_yf_client.py` rate limiter. Dip + MCF scan jobs run 0 LLM — always safe in any exec mode. Intervals configurable via env vars.
 

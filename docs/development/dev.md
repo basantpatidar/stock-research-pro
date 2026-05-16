@@ -1,7 +1,7 @@
 # docs/dev.md — Commands, env vars, testing conventions, adding features
 # Sections: grep -n "SEC:" docs/dev.md
 
-**Doc version:** 1.0 · **Last updated:** 2026-05-14
+**Doc version:** 1.1 · **Last updated:** 2026-05-15
 
 # SEC:COMMANDS      make / docker commands
 # SEC:ENV_VARS      All environment variables with defaults
@@ -38,6 +38,13 @@ make migration MSG="add_table"  # Generate new migration
 # Utilities
 make health       # curl /health
 make clean        # Remove __pycache__, .pytest_cache, dist
+
+# EOD signal dump — runs INSIDE the backend container (Docker-only laptop has
+# no host Python). Output lands in local_debugging/eod_signals/ on the host.
+# Normally automated by the eod_dump scheduler job (Mon-Fri 4:35 PM ET);
+# run manually only to re-generate or backfill a specific day.
+docker compose exec backend python local_debugging/eod_dump.py                  # today
+docker compose exec backend python local_debugging/eod_dump.py --date 2026-05-13 # specific day
 ```
 
 Run tests manually: `PYTHONPATH=. python -m pytest tests/ -v`
@@ -84,6 +91,14 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stockresearch
 REDIS_URL=redis://localhost:6379
 ENVIRONMENT=development
 
+# Scanner diagnostics logs — blank = code default ./local_debugging/.
+# docker-compose.yml overrides both to /app/local_debugging/* so they land in
+# the host bind mount (the in-container default resolves to /local_debugging,
+# which is ephemeral and never reaches the host). Never set an absolute /app
+# path here — it breaks local non-Docker runs.
+SCANNER_HEARTBEAT_LOG=                   # heartbeat: one line per dip-scan tick
+NEAR_MISS_LOG=                           # signals scored 65-71 (just-missed band)
+
 # yfinance rate limiting (lower = safer vs Yahoo 429s in Docker)
 YF_REQUESTS_PER_SECOND=2
 
@@ -127,6 +142,7 @@ AUTO_TRADE_ENABLED=false            # opt-in flag — flipping to true does noth
 AUTO_TRADE_SIGNAL_TYPES=            # comma-separated, e.g. orb_breakout,failed_breakdown; empty = no fires
 AUTO_TRADE_POLL_SECONDS=30          # subscriber tick rate
 SCANNER_DAILY_SIGNAL_CAP=50         # dip + MCF scanners halt for the day once today's scanner_alerts hits this
+SCANNER_SCORE_THRESHOLD=72          # live score gate — signal must score >= this to fire/persist; set 70 to admit near-misses
 ```
 
 **Inline comment trap (Docker Compose):** the `env_file` parser does NOT strip inline `# ...` comments — `KEY=val   # note` is loaded as the literal value `val   # note`. Always put comments on their own line **above** the variable. This bit us on 2026-05-14 when `ALPACA_BASE_URL=   # optional override` silently loaded the comment as the URL.

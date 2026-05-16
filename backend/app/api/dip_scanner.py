@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import verify_api_key
 from app.db.database import get_db
 from app.db.models import ScannerAlert
-from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _backfill_ticker, SESSION_WINDOWS
+from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _backfill_ticker, SESSION_WINDOWS, SCORE_THRESHOLD
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dip-scanner", tags=["dip-scanner"])
@@ -137,7 +137,7 @@ async def get_config(_: str = Depends(verify_api_key)):
         "etf_tiers": ETF_TIERS,
         "session_windows": {k: v["label"] for k, v in SESSION_WINDOWS.items()},
         "default_capital": DEFAULT_CAPITAL,
-        "score_threshold": 65,
+        "score_threshold": SCORE_THRESHOLD,
         "trading_hours_et": {"regular_open": "9:40 AM", "regular_close": "4:00 PM", "pre_market": "4:00 AM", "after_hours_close": "8:00 PM"},
     }
 
