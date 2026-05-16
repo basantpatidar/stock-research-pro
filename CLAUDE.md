@@ -2,7 +2,7 @@
 # Read this file first (~100 lines). Then grep docs/ for specifics.
 # Workflow: grep -n "SEC:" docs/<file>.md → pick a line → read from there.
 
-**Doc version:** 1.0 · **Last updated:** 2026-05-14
+**Doc version:** 1.1 · **Last updated:** 2026-05-16
 
 ---
 
@@ -69,7 +69,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 1. **Tools never raise** — always `return {"error": "..."}` on failure, never `raise`
 2. **One tool per file** — `backend/app/tools/<name>.py`, import in `graph.py` ALL_TOOLS
-3. **LLM swap = one env change** — change `MODEL_TYPE` in `.env`, zero code changes
+3. **LLM swap = one env change** — change `MODEL_TYPE` in `.env.shared`, zero code changes
 4. **Saver mode bypasses all token limits** — by design, do not add guards for it
 5. **Every change** → update the relevant `docs/` file + add a line to Recent Changes below
 6. **Guard rail limits** live only in `backend/app/services/usage/limits.py` — edit nowhere else
@@ -82,6 +82,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-16 | Two-file env config split (`feat/env-config-split`): added `.env.shared` (committed, propagates via `git pull`) containing all shared tuning knobs — `MODEL_TYPE`, `BROKER`/`BROKER_MODE`, all `TRADE_*`, `AUTO_TRADE_*`, `SCANNER_*`, `CACHE_TTL_*`, usage limits, `ENVIRONMENT`, `USAGE_FILE`. Secrets + machine-specific values stay in `.env` (gitignored). `docker-compose.yml` now loads `env_file: [.env.shared, .env]`; Pydantic `Settings.Config.env_file` updated to `(".env.shared", ".env")`. `.env.example` slimmed to credentials-only template with a pointer to `.env.shared`. `docs/development/dev.md` SEC:ENV_VARS rewritten with two-file table + per-file snippets. Critical Rule #3 updated to reference `.env.shared`. |
 | 2026-05-14 | Phase 3 auto-paper-trade + frontend sprint batch (uncommitted, staged in `local_debugging/push_plan.md` for tomorrow's push). New `services/trading/auto_trade.py` subscriber converts allowlisted `scanner_alerts` into bracket paper orders through the same risk caps the manual route uses, idempotent on `client_order_id="auto-{alert.id}"`. Scanner halt: dip + MCF scanners skip ticks once today's `scanner_alerts` ≥ `SCANNER_DAILY_SIGNAL_CAP=50`. New env: `AUTO_TRADE_ENABLED` (off by default), `AUTO_TRADE_SIGNAL_TYPES` (allowlist), `AUTO_TRADE_POLL_SECONDS=30`. `TRADE_DAILY_ORDER_COUNT_CAP` bumped 20 → 50. New `GET /broker/auto-trade/status` endpoint feeds an inline banner on `/portfolio`. New `<PortfolioRiskPanel>` shows total exposure, concentration warnings, max loss if all stops hit. `+ New Order` button on `/portfolio` (closes the Phase 2 hole — modal was rendered but had no trigger). Live usage pills (tokens + api %) in top nav, polled every 30s from `/usage/today`. Screener universe expanded 30 → 142 across 5 named pools (`backend/app/tools/universe.py`). `PreTradeScorecard` gains a plain-English summary line. `eod_dump.py` extended to surface `broker_orders` + alert↔order coverage + slippage. `docs/trading.md` SEC:PHASES restored to 3 phases — **live trading explicitly removed from the roadmap** (code path exists in `BROKER_MODE=live` but no sprint planned). `.env`/`.env.example` reformatted so all comments live above their variables (Docker Compose env_file parser doesn't strip inline `#`). |
 | 2026-05-14 | Trading Phase 2 shipped: server-side risk caps (`services/trading/limits.py` — per-order $, per-position $, daily order count, daily realised loss via `account.equity - account.last_equity`), full `/broker/*` route set (POST orders with cap enforcement + idempotent client_order_id, GET positions/orders/clock, DELETE cancel), `BrokerOrder` rows persisted *before* the broker call so a mid-flight failure still leaves evidence of intent. Frontend: `/portfolio` page (account header + positions + open orders + fills, polls every 10s), `OrderTicketModal` (buy/sell with bracket + live-mode typed confirmation + cap-rejection copy mapping), `BrokerStatusBadge` in top nav, and a `Trade Signal →` button on `DipScannerCard` that pre-fills the modal from scanner entry/stop/target. |
 | 2026-05-14 | New `docs/trading.md` plans broker integration (paper trading first, live after sign-off). Provider-agnostic via `BROKER` + `BROKER_MODE` env vars mirroring the LLM factory shape; Alpaca implementation first. Three phases: foundation (factory + smoke route + DB model), manual paper trading (portfolio page + order ticket), auto-trade behind feature flag. Risk caps (`TRADE_MAX_ORDER_DOLLARS` etc.) defined as their own service alongside `services/usage/limits.py`. |
