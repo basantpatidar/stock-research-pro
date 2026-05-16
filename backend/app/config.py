@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     cache_ttl_llm_personas_hours: int = Field(default=168)     # 7 days — investment thesis changes slowly
 
     class Config:
-        env_file = ".env"
+        env_file = (".env.shared", ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
 

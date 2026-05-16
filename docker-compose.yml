@@ -19,6 +19,7 @@ services:
       - SCANNER_HEARTBEAT_LOG=/app/local_debugging/scanner_heartbeat.jsonl
       - NEAR_MISS_LOG=/app/local_debugging/near_miss_log.jsonl
     env_file:
+      - .env.shared
       - .env
     depends_on:
       postgres:
