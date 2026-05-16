@@ -100,6 +100,14 @@ def _log_near_miss(
 
 ET_TZ = pytz.timezone("America/New_York")
 
+# ── Live score gate ───────────────────────────────────────────────────────────
+# Minimum score for a strict-mode signal to fire (and to be persisted by the
+# backfill). Default 72. Set SCANNER_SCORE_THRESHOLD=70 to admit the 65-71
+# near-miss band — change is env-only, so it can be flipped on the laptop with
+# a restart (no rebuild) and reverted the same way. loose-mode keeps its own
+# fixed 65 gate and is unaffected.
+SCORE_THRESHOLD = int(os.getenv("SCANNER_SCORE_THRESHOLD", "72"))
+
 # ── ETF universe ──────────────────────────────────────────────────────────────
 
 ETF_TIERS: dict[int, list[str]] = {
@@ -510,7 +518,7 @@ def _score_etf(
     if not top_reasons:
         top_reasons = signals[:2]
 
-    score_threshold = 65 if loose else 72
+    score_threshold = 65 if loose else SCORE_THRESHOLD
     if score < score_threshold:
         if score >= 65 and not loose:  # near-miss: passed pattern checks, just below threshold
             _log_near_miss(ticker, score, signals, current_price, window, now_et=now_et)
@@ -1222,8 +1230,9 @@ def _backfill_ticker(ticker: str, days: int = 60) -> list[dict]:
             def _append(stype: str, entry: float, target: float, stop: float, score: int, sigs: list[str]) -> None:
                 # Mirror live gates: backtest must persist only signals the live scanner
                 # would fire. ORB/VWAP/Failed-Breakdown previously bypassed both checks
-                # because they don't route through _score_etf.
-                if score < 72:
+                # because they don't route through _score_etf. Uses the same
+                # SCORE_THRESHOLD as live so the two stay aligned when it's retuned.
+                if score < SCORE_THRESHOLD:
                     return
                 if window == "lunch_drift" and score < 80:
                     return
