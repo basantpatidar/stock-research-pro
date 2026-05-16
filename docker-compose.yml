@@ -11,6 +11,13 @@ services:
       - REDIS_URL=redis://redis:6379
       - LOG_DIR=/app/local_debugging
       - TZ=America/New_York
+      # Scanner log paths MUST be absolute and inside the mounted volume below.
+      # The code's default path resolves relative to the source file — inside
+      # this container that lands at /local_debugging (ephemeral, lost on
+      # restart, never on the host). These two override it onto the host bind
+      # mount so eod_dump.py on the host can read them.
+      - SCANNER_HEARTBEAT_LOG=/app/local_debugging/scanner_heartbeat.jsonl
+      - NEAR_MISS_LOG=/app/local_debugging/near_miss_log.jsonl
     env_file:
       - .env.shared
       - .env

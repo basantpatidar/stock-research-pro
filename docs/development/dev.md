@@ -1,7 +1,7 @@
 # docs/dev.md — Commands, env vars, testing conventions, adding features
 # Sections: grep -n "SEC:" docs/dev.md
 
-**Doc version:** 1.1 · **Last updated:** 2026-05-16
+**Doc version:** 1.2 · **Last updated:** 2026-05-16
 
 # SEC:COMMANDS      make / docker commands
 # SEC:ENV_VARS      All environment variables with defaults
@@ -38,6 +38,13 @@ make migration MSG="add_table"  # Generate new migration
 # Utilities
 make health       # curl /health
 make clean        # Remove __pycache__, .pytest_cache, dist
+
+# EOD signal dump — runs INSIDE the backend container (Docker-only laptop has
+# no host Python). Output lands in local_debugging/eod_signals/ on the host.
+# Normally automated by the eod_dump scheduler job (Mon-Fri 4:35 PM ET);
+# run manually only to re-generate or backfill a specific day.
+docker compose exec backend python local_debugging/eod_dump.py                  # today
+docker compose exec backend python local_debugging/eod_dump.py --date 2026-05-13 # specific day
 ```
 
 Run tests manually: `PYTHONPATH=. python -m pytest tests/ -v`
