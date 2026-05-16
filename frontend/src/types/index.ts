@@ -375,6 +375,7 @@ export interface NewsItem {
   url: string
   catalyst_type?: string
   catalyst_strength?: "HIGH" | "MEDIUM" | "LOW"
+  relevance_score?: number
 }
 
 export interface AnalystData {

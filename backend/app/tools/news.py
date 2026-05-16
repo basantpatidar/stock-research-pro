@@ -4,19 +4,8 @@ from datetime import datetime, timedelta
 from app.config import get_settings
 
 
-def _resolve_query(ticker: str, company_name: str) -> str:
-    """
-    Build the best possible NewsAPI search query for a ticker.
-
-    Priority:
-      1. Caller-supplied company_name  → use as-is (already authoritative)
-      2. yfinance longName             → look it up from the ticker's info
-      3. Fallback                      → ticker symbol only
-
-    The query is quoted ("ServiceNow") so NewsAPI does exact-phrase matching
-    instead of treating each word independently.  This prevents ambiguous
-    tickers like NOW, IT, A, or WELL from matching unrelated articles.
-    """
+def _resolve_company_name(ticker: str, company_name: str) -> str:
+    """Return a clean company name for query building and relevance scoring."""
     if company_name:
         name = company_name
     else:
@@ -27,19 +16,40 @@ def _resolve_query(ticker: str, company_name: str) -> str:
         except Exception:
             name = ""
 
-    # Strip common legal suffixes that add noise to the search
     for suffix in (", Inc.", " Inc.", ", Corp.", " Corp.", ", Ltd.", " Ltd.",
                    ", LLC", " LLC", " Holdings", " Group", " Corporation"):
         name = name.replace(suffix, "")
-    name = name.strip()
+    return name.strip()
 
-    # Use the cleaner of company name vs ticker (prefer name when available)
-    search_term = name if name else ticker.upper()
 
-    # Exact-phrase + financial context: prevents matches on PyPI packages,
-    # GitHub repos, or any non-financial content that shares the company name.
+def _build_query(company_name: str, ticker: str) -> str:
+    """Build an exact-phrase NewsAPI query that avoids ambiguous ticker matches."""
+    search_term = company_name if company_name else ticker.upper()
     financial_terms = "(stock OR shares OR earnings OR revenue OR investor OR quarterly OR NYSE OR NASDAQ OR SEC OR market)"
     return f'"{search_term}" AND {financial_terms}'
+
+
+def _relevance_score(title: str, description: str, ticker: str, company_name: str) -> int:
+    """
+    Score 0–10: how specifically an article is about the given company.
+    Checks title and description only — body-only mentions are off-topic noise.
+    Avoids false positives for short ambiguous tickers (A, IT, NOW, WELL).
+    """
+    t = title.lower()
+    d = (description or "").lower()
+    tk = ticker.lower()
+    co_words = [w for w in company_name.lower().split() if len(w) > 2]
+
+    score = 0
+    if len(tk) >= 4 and tk in t:
+        score += 5
+    if co_words and any(w in t for w in co_words):
+        score += 4
+    if len(tk) >= 4 and tk in d:
+        score += 2
+    if co_words and any(w in d for w in co_words):
+        score += 1
+    return score
 
 
 _CATALYST_RULES: list[tuple[str, list[str]]] = [
@@ -82,11 +92,8 @@ def _catalyst_strength(headline: str) -> str:
 def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
     """
     Fetch recent news for a stock and analyze the impact of each headline.
-    Returns headlines tagged positive/negative/neutral with estimated price impact.
+    Returns headlines tagged positive/negative/neutral, filtered for company relevance.
     Uses NewsAPI — requires NEWSAPI_KEY in .env.
-
-    company_name is optional — when omitted the tool looks it up from yfinance
-    so that ambiguous tickers (NOW, IT, A, WELL, etc.) return relevant results.
     """
     try:
         settings = get_settings()
@@ -94,7 +101,8 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
         if not settings.newsapi_key:
             return {"error": "NEWSAPI_KEY not configured. Get a free key at newsapi.org"}
 
-        query = _resolve_query(ticker, company_name)
+        company = _resolve_company_name(ticker, company_name)
+        query = _build_query(company, ticker)
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         url = "https://newsapi.org/v2/everything"
@@ -118,7 +126,7 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             return {"ticker": ticker, "articles_found": 0, "news": [], "summary": "No recent news found"}
 
         news_items = []
-        for article in articles[:15]:
+        for article in articles[:20]:
             title = article.get("title", "")
             description = article.get("description", "")
             published = article.get("publishedAt", "")[:10]
@@ -130,12 +138,12 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 "lawsuit", "investigation", "decline", "fall", "drop", "loss",
                 "miss", "cut", "downgrade", "bearish", "sell", "ban", "fine",
                 "probe", "antitrust", "breach", "hack", "layoff", "warning",
-                "recall", "fraud", "scandal", "crash", "plunge", "tumble"
+                "recall", "fraud", "scandal", "crash", "plunge", "tumble",
             ]
             positive_words = [
                 "beat", "rise", "gain", "profit", "upgrade", "bullish", "buy",
                 "record", "growth", "partnership", "deal", "award", "launch",
-                "surge", "rally", "strong", "exceed", "milestone", "approval"
+                "surge", "rally", "strong", "exceed", "milestone", "approval",
             ]
 
             neg_count = sum(1 for w in negative_words if w in title_lower)
@@ -147,6 +155,8 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 else "neutral"
             )
 
+            relevance = _relevance_score(title, description, ticker, company)
+
             news_items.append({
                 "headline": title,
                 "description": description[:200] if description else "",
@@ -156,11 +166,18 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 "url": url_link,
                 "catalyst_type": _classify_catalyst(title),
                 "catalyst_strength": _catalyst_strength(title),
+                "relevance_score": relevance,
             })
 
-        negative_count = sum(1 for n in news_items if n["sentiment"] == "negative")
-        positive_count = sum(1 for n in news_items if n["sentiment"] == "positive")
-        neutral_count = sum(1 for n in news_items if n["sentiment"] == "neutral")
+        # Drop articles where neither title nor description mention the company
+        relevant = [n for n in news_items if n["relevance_score"] > 0]
+        filtered_count = len(news_items) - len(relevant)
+        # Most relevant first; stable sort preserves recency order within same score
+        relevant.sort(key=lambda n: -n["relevance_score"])
+
+        negative_count = sum(1 for n in relevant if n["sentiment"] == "negative")
+        positive_count = sum(1 for n in relevant if n["sentiment"] == "positive")
+        neutral_count = sum(1 for n in relevant if n["sentiment"] == "neutral")
 
         overall = (
             "predominantly negative" if negative_count > positive_count + neutral_count
@@ -172,14 +189,15 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             "ticker": ticker.upper(),
             "query_used": query,
             "period_days": days,
-            "articles_found": len(news_items),
+            "articles_found": len(relevant),
+            "filtered_count": filtered_count,
             "sentiment_breakdown": {
                 "positive": positive_count,
                 "negative": negative_count,
                 "neutral": neutral_count,
                 "overall": overall,
             },
-            "news": news_items,
+            "news": relevant[:10],
         }
     except Exception as e:
         return {"error": f"Failed to fetch news for {ticker}: {str(e)}"}

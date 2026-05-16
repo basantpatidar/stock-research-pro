@@ -1,7 +1,10 @@
 import type { NewsItem } from "../../types"
 import { T } from "../../theme"
 
-interface Props { news: NewsItem[] }
+interface Props {
+  news: NewsItem[]
+  filteredCount?: number
+}
 
 const sentStyle = {
   positive: { bg: T.greenDim, color: T.green },
@@ -11,24 +14,35 @@ const sentStyle = {
 
 const strengthColor = { HIGH: T.red, MEDIUM: T.amber, LOW: T.text3 }
 
-export function NewsPanel({ news }: Props) {
+export function NewsPanel({ news, filteredCount = 0 }: Props) {
+  const items = news.slice(0, 8)
   return (
     <div>
-      {news.length === 0 && (
-        <div style={{ fontSize: 12, color: T.text3 }}>No recent news found</div>
+      {filteredCount > 0 && (
+        <div style={{ fontSize: 11, color: T.text3, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.amber, flexShrink: 0, display: "inline-block" }} />
+          {filteredCount} off-topic {filteredCount === 1 ? "article" : "articles"} filtered — showing company-specific news only
+        </div>
       )}
-      {news.slice(0, 5).map((item, i) => {
+
+      {items.length === 0 && (
+        <div style={{ fontSize: 12, color: T.text3 }}>No relevant news found</div>
+      )}
+
+      {items.map((item, i) => {
         const s = sentStyle[item.sentiment] ?? sentStyle.neutral
         const sc = item.catalyst_strength ? strengthColor[item.catalyst_strength] : null
+        const isLast = i === items.length - 1
         return (
           <div key={i} style={{
-            paddingBottom: 10, marginBottom: 10,
-            borderBottom: i < news.slice(0, 5).length - 1 ? `1px solid ${T.border}` : "none",
+            paddingBottom: isLast ? 0 : 10,
+            marginBottom: isLast ? 0 : 10,
+            borderBottom: isLast ? "none" : `1px solid ${T.border}`,
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
               <span style={{
                 fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20,
-                background: s.bg, color: s.color, letterSpacing: "0.04em",
+                background: s.bg, color: s.color, letterSpacing: "0.04em", flexShrink: 0,
               }}>
                 {item.sentiment.toUpperCase()}
               </span>
@@ -49,15 +63,26 @@ export function NewsPanel({ news }: Props) {
                   {item.catalyst_strength}
                 </span>
               )}
+              <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>
+                {item.source} · {item.published}
+              </span>
             </div>
-            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.45, marginBottom: 4 }}>
-              <a href={item.url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }}>
+
+            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.45, marginBottom: item.description ? 4 : 0 }}>
+              <a href={item.url} target="_blank" rel="noreferrer"
+                style={{ color: "inherit", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.color = T.blue)}
+                onMouseLeave={e => (e.currentTarget.style.color = "inherit")}
+              >
                 {item.headline}
               </a>
             </div>
-            <div style={{ fontSize: 11, color: T.text3 }}>
-              {item.source} · {item.published}
-            </div>
+
+            {item.description && (
+              <div style={{ fontSize: 11, color: T.text3, lineHeight: 1.4 }}>
+                {item.description}
+              </div>
+            )}
           </div>
         )
       })}

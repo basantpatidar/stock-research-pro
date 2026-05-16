@@ -23,7 +23,7 @@ import EDGARFundamentalsPanel from "../components/research/EDGARFundamentalsPane
 import { CanslimPanel, VCPPanel } from "../components/research/CanslimPanel"
 import { DividendPanel, MoatPanel } from "../components/research/FundamentalsQualityPanels"
 import { T, chgColor, chgDim } from "../theme"
-import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore, SmartMoneyScore } from "../types"
+import type { Tier1Response, PriceData, TechnicalData, TradeMode, PreTradeScore, SmartMoneyScore, NewsItem } from "../types"
 
 type PanelEntry = { loading: boolean; data: any; error: string | null }
 
@@ -258,7 +258,8 @@ export function ResearchPage() {
   const earnings     = tier1?.earnings     && !("error" in tier1.earnings)     ? tier1.earnings     as any           : null
   const fundamentals = tier1?.fundamentals && !("error" in tier1.fundamentals) ? tier1.fundamentals as any           : null
   const shortInt     = tier1?.short_interest && !("error" in tier1.short_interest) ? tier1.short_interest as any     : null
-  const newsData     = tier1?.news         && !("error" in tier1.news)         ? (tier1.news as any).news as any[]   : null
+  const newsData        = tier1?.news && !("error" in tier1.news) ? (tier1.news as any).news as NewsItem[] : null
+  const newsFiltered    = tier1?.news && !("error" in tier1.news) ? ((tier1.news as any).filtered_count as number ?? 0) : 0
 
   // Chart default period — 1d for day trading, 3M for long-term research
   const chartDefault = useMemo(() => {
@@ -572,7 +573,7 @@ export function ResearchPage() {
           <div style={{ marginBottom: 12 }}>
             {newsData && newsData.length > 0 && (
               <ExpandablePanel title="News" tier={1} autoExpand>
-                <NewsPanel news={newsData} />
+                <NewsPanel news={newsData} filteredCount={newsFiltered} />
               </ExpandablePanel>
             )}
             {tier1?.news && "error" in tier1.news && (

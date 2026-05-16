@@ -64,7 +64,7 @@ export function EarningsHistoryPanel({ earnings }: Props) {
   const rows = [...(earnings.earnings_history ?? [])]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5)
-  const total = earnings.beat_count + earnings.miss_count
+  const total = (earnings.beat_count ?? 0) + (earnings.miss_count ?? 0)
   const nextDatePast = isDatePast(earnings.next_earnings_date)
 
   if (rows.length === 0) {
