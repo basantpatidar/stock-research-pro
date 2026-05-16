@@ -12,6 +12,7 @@ services:
       - LOG_DIR=/app/local_debugging
       - TZ=America/New_York
     env_file:
+      - .env.shared
       - .env
     depends_on:
       postgres:
