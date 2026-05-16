@@ -92,11 +92,8 @@ def _catalyst_strength(headline: str) -> str:
 def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
     """
     Fetch recent news for a stock and analyze the impact of each headline.
-    Returns headlines tagged positive/negative/neutral with estimated price impact.
+    Returns headlines tagged positive/negative/neutral, filtered for company relevance.
     Uses NewsAPI — requires NEWSAPI_KEY in .env.
-
-    company_name is optional — when omitted the tool looks it up from yfinance
-    so that ambiguous tickers (NOW, IT, A, WELL, etc.) return relevant results.
     """
     try:
         settings = get_settings()
@@ -104,7 +101,8 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
         if not settings.newsapi_key:
             return {"error": "NEWSAPI_KEY not configured. Get a free key at newsapi.org"}
 
-        query = _resolve_query(ticker, company_name)
+        company = _resolve_company_name(ticker, company_name)
+        query = _build_query(company, ticker)
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         url = "https://newsapi.org/v2/everything"
@@ -128,7 +126,7 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             return {"ticker": ticker, "articles_found": 0, "news": [], "summary": "No recent news found"}
 
         news_items = []
-        for article in articles[:15]:
+        for article in articles[:20]:
             title = article.get("title", "")
             description = article.get("description", "")
             published = article.get("publishedAt", "")[:10]
@@ -140,12 +138,12 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 "lawsuit", "investigation", "decline", "fall", "drop", "loss",
                 "miss", "cut", "downgrade", "bearish", "sell", "ban", "fine",
                 "probe", "antitrust", "breach", "hack", "layoff", "warning",
-                "recall", "fraud", "scandal", "crash", "plunge", "tumble"
+                "recall", "fraud", "scandal", "crash", "plunge", "tumble",
             ]
             positive_words = [
                 "beat", "rise", "gain", "profit", "upgrade", "bullish", "buy",
                 "record", "growth", "partnership", "deal", "award", "launch",
-                "surge", "rally", "strong", "exceed", "milestone", "approval"
+                "surge", "rally", "strong", "exceed", "milestone", "approval",
             ]
 
             neg_count = sum(1 for w in negative_words if w in title_lower)
@@ -157,6 +155,8 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 else "neutral"
             )
 
+            relevance = _relevance_score(title, description, ticker, company)
+
             news_items.append({
                 "headline": title,
                 "description": description[:200] if description else "",
@@ -166,11 +166,18 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
                 "url": url_link,
                 "catalyst_type": _classify_catalyst(title),
                 "catalyst_strength": _catalyst_strength(title),
+                "relevance_score": relevance,
             })
 
-        negative_count = sum(1 for n in news_items if n["sentiment"] == "negative")
-        positive_count = sum(1 for n in news_items if n["sentiment"] == "positive")
-        neutral_count = sum(1 for n in news_items if n["sentiment"] == "neutral")
+        # Drop articles where neither title nor description mention the company
+        relevant = [n for n in news_items if n["relevance_score"] > 0]
+        filtered_count = len(news_items) - len(relevant)
+        # Most relevant first; stable sort preserves recency order within same score
+        relevant.sort(key=lambda n: -n["relevance_score"])
+
+        negative_count = sum(1 for n in relevant if n["sentiment"] == "negative")
+        positive_count = sum(1 for n in relevant if n["sentiment"] == "positive")
+        neutral_count = sum(1 for n in relevant if n["sentiment"] == "neutral")
 
         overall = (
             "predominantly negative" if negative_count > positive_count + neutral_count
@@ -182,14 +189,15 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
             "ticker": ticker.upper(),
             "query_used": query,
             "period_days": days,
-            "articles_found": len(news_items),
+            "articles_found": len(relevant),
+            "filtered_count": filtered_count,
             "sentiment_breakdown": {
                 "positive": positive_count,
                 "negative": negative_count,
                 "neutral": neutral_count,
                 "overall": overall,
             },
-            "news": news_items,
+            "news": relevant[:10],
         }
     except Exception as e:
         return {"error": f"Failed to fetch news for {ticker}: {str(e)}"}
