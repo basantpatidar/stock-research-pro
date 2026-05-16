@@ -4,19 +4,8 @@ from datetime import datetime, timedelta
 from app.config import get_settings
 
 
-def _resolve_query(ticker: str, company_name: str) -> str:
-    """
-    Build the best possible NewsAPI search query for a ticker.
-
-    Priority:
-      1. Caller-supplied company_name  → use as-is (already authoritative)
-      2. yfinance longName             → look it up from the ticker's info
-      3. Fallback                      → ticker symbol only
-
-    The query is quoted ("ServiceNow") so NewsAPI does exact-phrase matching
-    instead of treating each word independently.  This prevents ambiguous
-    tickers like NOW, IT, A, or WELL from matching unrelated articles.
-    """
+def _resolve_company_name(ticker: str, company_name: str) -> str:
+    """Return a clean company name for query building and relevance scoring."""
     if company_name:
         name = company_name
     else:
@@ -27,19 +16,40 @@ def _resolve_query(ticker: str, company_name: str) -> str:
         except Exception:
             name = ""
 
-    # Strip common legal suffixes that add noise to the search
     for suffix in (", Inc.", " Inc.", ", Corp.", " Corp.", ", Ltd.", " Ltd.",
                    ", LLC", " LLC", " Holdings", " Group", " Corporation"):
         name = name.replace(suffix, "")
-    name = name.strip()
+    return name.strip()
 
-    # Use the cleaner of company name vs ticker (prefer name when available)
-    search_term = name if name else ticker.upper()
 
-    # Exact-phrase + financial context: prevents matches on PyPI packages,
-    # GitHub repos, or any non-financial content that shares the company name.
+def _build_query(company_name: str, ticker: str) -> str:
+    """Build an exact-phrase NewsAPI query that avoids ambiguous ticker matches."""
+    search_term = company_name if company_name else ticker.upper()
     financial_terms = "(stock OR shares OR earnings OR revenue OR investor OR quarterly OR NYSE OR NASDAQ OR SEC OR market)"
     return f'"{search_term}" AND {financial_terms}'
+
+
+def _relevance_score(title: str, description: str, ticker: str, company_name: str) -> int:
+    """
+    Score 0–10: how specifically an article is about the given company.
+    Checks title and description only — body-only mentions are off-topic noise.
+    Avoids false positives for short ambiguous tickers (A, IT, NOW, WELL).
+    """
+    t = title.lower()
+    d = (description or "").lower()
+    tk = ticker.lower()
+    co_words = [w for w in company_name.lower().split() if len(w) > 2]
+
+    score = 0
+    if len(tk) >= 4 and tk in t:
+        score += 5
+    if co_words and any(w in t for w in co_words):
+        score += 4
+    if len(tk) >= 4 and tk in d:
+        score += 2
+    if co_words and any(w in d for w in co_words):
+        score += 1
+    return score
 
 
 _CATALYST_RULES: list[tuple[str, list[str]]] = [
