@@ -90,6 +90,7 @@ class ScannerAlert(Base):
     actual_pnl_dollar: Mapped[float | None] = mapped_column(Float, nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String(30), nullable=True)  # target_hit / stop_hit / eod_close
     five_min_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)  # up / down / flat — price direction at entry+5min (#29)
+    loose_gates: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # True = relaxed thresholds; excluded from main analytics / auto-trade
 
 
 class BrokerOrder(Base):

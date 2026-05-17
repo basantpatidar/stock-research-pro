@@ -243,6 +243,7 @@ async def _run_auto_trade_subscriber():
                     ScannerAlert.status == "open",
                     ScannerAlert.signal_type.in_(allowlist),
                     ScannerAlert.entry_time >= _today_et_midnight_utc(),
+                    ScannerAlert.loose_gates.is_not(True),
                     BrokerOrder.id.is_(None),
                 )
                 .order_by(ScannerAlert.entry_time.asc())

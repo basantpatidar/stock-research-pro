@@ -117,7 +117,7 @@ async def _run_dip_scan():
     })
 
 
-async def _run_mcf_scan(force: bool = False):
+async def _run_mcf_scan(force: bool = False, loose: bool = False):
     """Fire MCF (Market Context First) funnel scan every 5 min."""
     import pytz
     from datetime import datetime, timedelta, timezone
@@ -139,18 +139,18 @@ async def _run_mcf_scan(force: bool = False):
     if not force and await should_halt_scanner(get_settings()):
         logger.info("mcf_scan: halted for the day — signal cap reached")
         return
-        
+
     try:
         # 1. Generate scan
-        result = scan_mcf_opportunities(capital=1000.0)
-        
-        # 2. Extract State (Weather + Tide)
+        result = scan_mcf_opportunities(capital=1000.0, loose=loose)
+
+        # 2. Extract State (Weather + Tide) — mode-agnostic raw market data
         state_data = {
             "timestamp": result["timestamp"],
             "weather": result["weather"],
             "tide": result["tide"],
         }
-        
+
         # 3. Save to Cache and DB
         async for db in get_db_direct():
             # Cache the state so frontend can fetch it quickly
@@ -161,8 +161,8 @@ async def _run_mcf_scan(force: bool = False):
                 data=state_data,
                 expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
             )
-            
-            # Save any new alerts
+
+            # Save any new alerts; loose signals tagged so analytics can filter them
             opps = result.get("opportunities", [])
             for opp in opps:
                 alert = ScannerAlert(
@@ -173,18 +173,19 @@ async def _run_mcf_scan(force: bool = False):
                     target_price=opp["target_price"],
                     stop_price=opp["stop_price"],
                     entry_time=datetime.fromisoformat(result["timestamp"]),
-                    score=opp.get("score", 90),
+                    score=opp.get("score", 75 if loose else 90),
                     signals=opp.get("signals", []),
                     capital_used=opp.get("capital_used", 1000.0),
                     source="live",
                     status="open",
+                    loose_gates=loose,
                 )
                 db.add(alert)
-                logger.info("mcf_scan: fired alert %s", opp["ticker"])
-            
+                logger.info("mcf_scan: fired alert %s (loose=%s)", opp["ticker"], loose)
+
             if opps:
                 await db.commit()
-                
+
     except Exception as exc:
         logger.warning("mcf_scan job error: %s", exc)
 
