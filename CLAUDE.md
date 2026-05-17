@@ -2,7 +2,7 @@
 # Read this file first (~100 lines). Then grep docs/ for specifics.
 # Workflow: grep -n "SEC:" docs/<file>.md → pick a line → read from there.
 
-**Doc version:** 1.4 · **Last updated:** 2026-05-16
+**Doc version:** 1.5 · **Last updated:** 2026-05-17
 
 ---
 
@@ -64,6 +64,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Scanner sprint notes + signal type design | local_debugging/dip-scanner-sprint.md | read directly |
 | Uncommitted changes staging log (commit tomorrow) | local_debugging/push_plan.md | read directly |
 | Telegram bot — full sprint plan, commands, architecture, sprint breakdown | local_debugging/telegram_plan.md | read directly |
+| Telegram bot — outbound notifications + scheduled digests | docs/reference/features.md | `SEC:TELEGRAM` |
 
 ---
 
@@ -84,6 +85,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-17 | Telegram bot Sprint 1 (`feat/telegram-notifications`): outbound push notifications only. New `backend/app/services/notifier.py` — async Telegram client with `send_scanner_alert`, `send_watchlist_alert`, `send_daily_report`, `send_pre_market_digest`, `send_text`. Wired into `alert_engine.py` (watchlist strong signals) and `scheduler.py` (MCF alerts after db.commit, EOD summary appended to `_run_eod_dump`, new `_run_pre_market_digest` job Mon-Fri 9:00 AM ET). Config: `telegram_enabled/bot_token/chat_id/poll_interval` in `config.py`. Env: `TELEGRAM_ENABLED=false` + `TELEGRAM_POLL_INTERVAL=5` in `.env.shared`; `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in `.env`. Master switch design — all sends silently no-op when disabled or token missing. SEC:TELEGRAM added to `docs/reference/features.md`. |
 | 2026-05-16 | Telegram bot planned: two-sprint design (Sprint 1 outbound-only, Sprint 2 inbound commands). WhatsApp rejected (paid/ToS issues). Telegram Bot API chosen (free, two-way, official). Default exec mode = saver. Full command set: `/scan`, `/scan loose/mcf/dip`, `/mode saver\|normal\|deep`, `/status`, `/report`, `/research TICKER`, `/watchlist`, `/add`, `/remove`, `/alerts`, `/usage`, `/pause [duration]`, `/resume`, `/help`. Inline keyboard buttons on signal cards. Three scheduled pushes: pre-market 9 AM ET, EOD 4:35 PM ET (extends existing job), weekly Sunday 8 PM ET. File delivery: EOD JSON as Telegram document → forward directly to Claude Code. Architecture: `notifier.py` (outbound) + `telegram_handler.py` (inbound long-poll). Hooks into `alert_engine.py`, `mcf_scanner.py`, `scheduler.py`. New env vars: `TELEGRAM_ENABLED`, `TELEGRAM_POLL_INTERVAL` (in `.env.shared`), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (in `.env`). Full plan in `local_debugging/telegram_plan.md`. |
 | 2026-05-16 | News relevance filtering (`feat/news-relevance-filtering`): reconciled stash WIP (`ac90942b`) onto main. `_resolve_query` in `news.py` split into `_resolve_company_name` + `_build_query` + new `_relevance_score` (0–10, checks title/desc for ticker + company-word matches, avoids short-ticker false positives). `get_news_impact` now scans 20 articles (was 15), scores each, drops `relevance_score == 0` articles, sorts remaining by relevance, caps response at 10, returns `filtered_count`. `NewsPanel` gains `filteredCount` prop — shows amber-dot indicator "X off-topic articles filtered" + description under each headline + source/date in header row. `EarningsHistoryPanel`: `beat_count`/`miss_count` null-coalesced so NaN can't appear. `ResearchPage`: extracts `newsFiltered` from tier1 and passes to `<NewsPanel>`. `NewsItem` type gets `relevance_score?: number`. |
 | 2026-05-16 | MCF loose gate mode + recording: `scan_mcf_opportunities(loose=True)` relaxes tide threshold (−0.30%, 2-of-4 ETFs), volume multiplier (1.05×), support distance (0.50 ATR), target (0.75%), score 75 (vs 90 strict). `POST /mcf-scanner/force-run` accepts `{ loose_gates: bool }` — both paths write to DB; loose alerts tagged `loose_gates=true` on `ScannerAlert`. Migration `a1b2c3d4e5f6` adds `loose_gates` bool column. `GET /mcf-scanner/analytics?loose=bool` separates strict vs loose win rates. `auto_trade.py` filters `loose_gates IS NOT TRUE` so loose signals can never trigger paper/live orders. Frontend: refresh flow unified (always calls `fetchData`), separate Loose Gate Results section with its own win-rate stats, LOOSE badge on alert rows, updated amber banner. SEC:MCF_ROUTES added to docs/reference/api.md. |

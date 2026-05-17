@@ -1,7 +1,7 @@
 # docs/features.md — Execution modes, tiers, guard rails, usage tracking, background jobs
 # Sections: grep -n "SEC:" docs/features.md
 
-**Doc version:** 1.1 · **Last updated:** 2026-05-15
+**Doc version:** 1.2 · **Last updated:** 2026-05-17
 
 # SEC:EXEC_MODES        saver / normal / deep — what each does
 # SEC:TIERS             T1/T2/T3 — when runs, LLM, tools
@@ -12,6 +12,7 @@
 # SEC:CONVERGENCE       Signal convergence score (0-100) logic
 # SEC:ALERTS            Alert system (watchlist + screener)
 # SEC:AUTO_PAPER_TRADE  Auto-paper-trade subscriber (Phase 3 validation harness)
+# SEC:TELEGRAM          Telegram bot — outbound notifications + scheduled digests
 
 ---
 
@@ -393,6 +394,88 @@ options flow, macro environment, news sentiment. All optional — defaults to 0/
 ```json
 { "type": "screener_alert", "ticker", "preset", "title", "body",
   "stock": {ScreenerResult}, "timestamp" }
+```
+
+<!-- SEC:TELEGRAM -->
+## Telegram bot
+
+**Sprint 1 (outbound push only).** Sprint 2 (inbound commands) planned separately.
+
+### Files
+| File | Role |
+|---|---|
+| `backend/app/services/notifier.py` | Async Telegram client — all send functions |
+| `backend/app/config.py` | `telegram_enabled`, `telegram_bot_token`, `telegram_chat_id`, `telegram_poll_interval` |
+
+### Environment variables
+| Var | Where | Default | Notes |
+|---|---|---|---|
+| `TELEGRAM_ENABLED` | `.env.shared` | `false` | Master switch — flip to `true` to activate |
+| `TELEGRAM_POLL_INTERVAL` | `.env.shared` | `5` | Seconds between getUpdates polls (Sprint 2) |
+| `TELEGRAM_BOT_TOKEN` | `.env` (secret) | — | From @BotFather |
+| `TELEGRAM_CHAT_ID` | `.env` (secret) | — | From @userinfobot |
+
+### One-time setup (~5 min)
+1. Telegram → @BotFather → `/newbot` → copy token → paste as `TELEGRAM_BOT_TOKEN` in `.env`
+2. Telegram → @userinfobot → copy the `Id:` number → paste as `TELEGRAM_CHAT_ID` in `.env`
+3. Set `TELEGRAM_ENABLED=true` in `.env.shared`
+4. Restart backend
+
+### notifier.py public API
+```python
+send_text(text)                                              # raw HTML message
+send_scanner_alert(alert: ScannerAlert)                      # MCF / dip signal card
+send_watchlist_alert(ticker, signal, score, price, change_7d) # watchlist eval signal
+send_daily_report(signals_today, wins, losses, open_count, near_misses)
+send_pre_market_digest(vix, spy_bias, watchlist_count, top_tickers)
+```
+All functions are async. All return `bool` (ok/fail). Never raise — failures log at WARNING.
+If `TELEGRAM_ENABLED=false` or token/chat_id are blank, all calls silently return `False`.
+
+### Where notifications fire
+| Event | Trigger point | Function called |
+|---|---|---|
+| MCF scanner alert | `scheduler.py _run_mcf_scan` after db.commit | `send_scanner_alert` |
+| Watchlist strong signal | `alert_engine.py evaluate_watchlist` after db.add | `send_watchlist_alert` |
+| EOD summary | `scheduler.py _run_eod_dump` after subprocess exits | `send_daily_report` |
+| Pre-market brief | `scheduler.py _run_pre_market_digest` at 9:00 AM ET | `send_pre_market_digest` |
+
+### Scheduled jobs (Telegram-related)
+| Job | Time | What sends |
+|---|---|---|
+| `pre_market_digest` | Mon–Fri 9:00 AM ET | VIX + SPY bias + watchlist tickers |
+| `eod_dump` (extended) | Mon–Fri 4:35 PM ET | EOD summary: signals, wins/losses, win rate |
+
+### Message formats
+**Scanner signal:**
+```
+🟢 MCF DIP BUY — NVDA   Score: 90
+Entry $875.00 | Stop $868.00 | Target $884.00
+R/R: 1:1.3 | Gate: STRICT ✓
+```
+Loose-gate alerts use 🟡 and show `Gate: LOOSE ⚠`.
+
+**Watchlist signal:**
+```
+🟢 WATCHLIST — AAPL   Score: 74
+Signal: Buy now
+Price: $182.40 | 7d: ▼5.2%
+```
+
+**EOD summary:**
+```
+📊 EOD Summary — May 17
+Signals fired: 3  (1 still open)
+Wins: 1 | Losses: 1 | Win rate: 50%
+Near misses: 0
+```
+
+**Pre-market brief:**
+```
+☀️ Pre-Market Brief
+VIX: 14.3 | Market bias: Bullish ▲
+Watchlist: 5 active tickers
+Watching: AAPL, NVDA, TSLA, META, MSFT
 ```
 
 Frontend: `AlertToast` component + Zustand `alerts[]`. Persistent connection in `App.tsx` survives page navigation.

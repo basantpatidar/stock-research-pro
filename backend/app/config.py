@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # so an auto-trade run that hits the cap also stops generating more signals.
     scanner_daily_signal_cap: int = Field(default=50)
 
+    # Telegram bot
+    telegram_enabled: bool = Field(default=False)
+    telegram_bot_token: str = Field(default="")
+    telegram_chat_id: str = Field(default="")
+    telegram_poll_interval: int = Field(default=5)
+
     # Logging
     log_dir: str = Field(default="./local_debugging")
 
