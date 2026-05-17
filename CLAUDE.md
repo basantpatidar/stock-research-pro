@@ -2,7 +2,7 @@
 # Read this file first (~100 lines). Then grep docs/ for specifics.
 # Workflow: grep -n "SEC:" docs/<file>.md → pick a line → read from there.
 
-**Doc version:** 1.2 · **Last updated:** 2026-05-16
+**Doc version:** 1.3 · **Last updated:** 2026-05-17
 
 ---
 
@@ -61,7 +61,9 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 | Auto-paper-trade subscriber (Phase 3 validation harness) | docs/features.md | `SEC:AUTO_PAPER_TRADE` |
 | Scanner improvement backlog (Opus review, 30 ideas, priority ranked) | local_debugging/opus_scanner_ideas.md | read directly — no anchor needed |
 | Scanner sprint notes + signal type design | local_debugging/dip-scanner-sprint.md | read directly |
-| Uncommitted changes staging log (commit tomorrow) | local_debugging/plus_plan.md | read directly |
+| Uncommitted changes staging log (commit tomorrow) | local_debugging/push_plan.md | read directly |
+| Telegram bot — full sprint plan, commands, architecture | local_debugging/telegram_plan.md | read directly |
+| Telegram bot — outbound notifications + scheduled digests | docs/reference/features.md | `SEC:TELEGRAM` |
 
 ---
 
@@ -82,6 +84,7 @@ Owner: Basant (Senior Full-Stack Engineer, NJ/NY)
 
 | Date | Change |
 |---|---|
+| 2026-05-17 | Telegram bot Sprint 1 (`feat/telegram-notifications`): outbound push notifications only. New `backend/app/services/notifier.py` — async Telegram client with `send_scanner_alert`, `send_watchlist_alert`, `send_daily_report`, `send_pre_market_digest`, `send_text`. Wired into `alert_engine.py` (watchlist strong signals) and `scheduler.py` (MCF alerts after db.commit, EOD summary appended to `_run_eod_dump`, new `_run_pre_market_digest` job Mon-Fri 9:00 AM ET). Config: `telegram_enabled/bot_token/chat_id/poll_interval` in `config.py`. Env: `TELEGRAM_ENABLED=false` + `TELEGRAM_POLL_INTERVAL=5` in `.env.shared`; `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in `.env`. Master switch design — all sends silently no-op when disabled or token missing. SEC:TELEGRAM added to `docs/reference/features.md`. |
 | 2026-05-16 | News relevance filtering (`feat/news-relevance-filtering`): reconciled stash WIP (`ac90942b`) onto main. `_resolve_query` in `news.py` split into `_resolve_company_name` + `_build_query` + new `_relevance_score` (0–10, checks title/desc for ticker + company-word matches, avoids short-ticker false positives). `get_news_impact` now scans 20 articles (was 15), scores each, drops `relevance_score == 0` articles, sorts remaining by relevance, caps response at 10, returns `filtered_count`. `NewsPanel` gains `filteredCount` prop — shows amber-dot indicator "X off-topic articles filtered" + description under each headline + source/date in header row. `EarningsHistoryPanel`: `beat_count`/`miss_count` null-coalesced so NaN can't appear. `ResearchPage`: extracts `newsFiltered` from tier1 and passes to `<NewsPanel>`. `NewsItem` type gets `relevance_score?: number`. |
 | 2026-05-16 | Two-file env config split (`feat/env-config-split`): added `.env.shared` (committed, propagates via `git pull`) containing all shared tuning knobs — `MODEL_TYPE`, `BROKER`/`BROKER_MODE`, all `TRADE_*`, `AUTO_TRADE_*`, `SCANNER_*`, `CACHE_TTL_*`, usage limits, `ENVIRONMENT`, `USAGE_FILE`. Secrets + machine-specific values stay in `.env` (gitignored). `docker-compose.yml` now loads `env_file: [.env.shared, .env]`; Pydantic `Settings.Config.env_file` updated to `(".env.shared", ".env")`. `.env.example` slimmed to credentials-only template with a pointer to `.env.shared`. `docs/development/dev.md` SEC:ENV_VARS rewritten with two-file table + per-file snippets. Critical Rule #3 updated to reference `.env.shared`. |
 | 2026-05-15 | Scanner log portability fix (`fix/scanner-log-portability`): the heartbeat + near-miss JSONL writers default their path relative to the source file — inside the Docker container that resolved to `/local_debugging` (ephemeral, never on the host), so on the laptop the logs were silently lost and `eod_dump.py` reported `log_exists: false`. `docker-compose.yml` now sets `SCANNER_HEARTBEAT_LOG` + `NEAR_MISS_LOG` to `/app/local_debugging/*` (the host bind mount); both documented in `.env.example` + `docs/dev.md` SEC:ENV_VARS (leave blank for local runs). Also: dip-scanner live score gate is now env-tunable via `SCANNER_SCORE_THRESHOLD` (default 72, unchanged behaviour) — wired into `_score_etf` and the backfill `_append` gate so live + backtest stay aligned; `/dip-scanner/config` now reports the real threshold (was hardcoded 65). Teed up for a 72→70 trial during market hours — flip the env, restart, no rebuild. New `_run_eod_dump` APScheduler job (CronTrigger, Mon-Fri 4:35 PM ET) subprocesses `local_debugging/eod_dump.py` so the Docker-only laptop generates the daily `eod_signals/<date>.json` with no manual `docker compose exec`; script located via `LOG_DIR`. Manual run still works: `docker compose exec backend python local_debugging/eod_dump.py [--date YYYY-MM-DD]`. |

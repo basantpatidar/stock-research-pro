@@ -164,6 +164,7 @@ async def _run_mcf_scan(force: bool = False):
             
             # Save any new alerts
             opps = result.get("opportunities", [])
+            new_alerts = []
             for opp in opps:
                 alert = ScannerAlert(
                     id=uuid.uuid4(),
@@ -180,10 +181,14 @@ async def _run_mcf_scan(force: bool = False):
                     status="open",
                 )
                 db.add(alert)
+                new_alerts.append(alert)
                 logger.info("mcf_scan: fired alert %s", opp["ticker"])
-            
-            if opps:
+
+            if new_alerts:
                 await db.commit()
+                from app.services import notifier
+                for alert in new_alerts:
+                    await notifier.send_scanner_alert(alert)
                 
     except Exception as exc:
         logger.warning("mcf_scan job error: %s", exc)
@@ -403,6 +408,66 @@ async def _run_eod_dump():
     except Exception as exc:
         logger.warning("eod_dump job error: %s", exc)
 
+    # Send EOD Telegram summary — best-effort, runs regardless of eod_dump result
+    try:
+        from sqlalchemy import select, func, and_
+        from app.db.database import get_db_direct
+        from app.db.models import ScannerAlert
+        from app.services import notifier
+        import pytz
+        today_et = datetime.now(pytz.timezone("America/New_York")).date()
+        today_start = datetime.combine(today_et, datetime.min.time()).replace(tzinfo=timezone.utc)
+        async for db in get_db_direct():
+            rows = (await db.execute(
+                select(ScannerAlert).where(ScannerAlert.entry_time >= today_start)
+            )).scalars().all()
+        wins = sum(1 for r in rows if r.status == "win")
+        losses = sum(1 for r in rows if r.status == "loss")
+        open_count = sum(1 for r in rows if r.status == "open")
+        await notifier.send_daily_report(
+            signals_today=len(rows),
+            wins=wins,
+            losses=losses,
+            open_count=open_count,
+            near_misses=0,
+        )
+    except Exception as exc:
+        logger.warning("eod Telegram summary error: %s", exc)
+
+
+async def _run_pre_market_digest():
+    """Send a pre-market morning brief to Telegram."""
+    from app.services import notifier
+    from app.db.database import get_db_direct
+    from app.db.models import WatchlistItem
+    from sqlalchemy import select
+    try:
+        import yfinance as yf
+        vix = yf.Ticker("^VIX").fast_info.get("last_price")
+        spy = yf.Ticker("SPY").fast_info
+        spy_price = spy.get("last_price", 0)
+        spy_prev = spy.get("previous_close", spy_price)
+        spy_chg = spy_price - spy_prev
+        spy_bias = "Bullish ▲" if spy_chg > 0 else "Bearish ▼" if spy_chg < 0 else "Flat"
+    except Exception:
+        vix, spy_bias = None, "Unknown"
+
+    try:
+        async for db in get_db_direct():
+            items = (await db.execute(
+                select(WatchlistItem).where(WatchlistItem.is_active == True)
+            )).scalars().all()
+        tickers = [i.ticker for i in items]
+    except Exception:
+        tickers = []
+
+    await notifier.send_pre_market_digest(
+        vix=vix,
+        spy_bias=spy_bias,
+        watchlist_count=len(tickers),
+        top_tickers=tickers,
+    )
+
 
 def get_scheduler() -> AsyncIOScheduler:
     global _scheduler
@@ -489,6 +554,7 @@ def start_scheduler():
     # EOD signal dump — Mon-Fri 4:35 PM ET, after the 3:45 PM resolution pass
     # has closed every open alert. Writes local_debugging/eod_signals/<date>.json
     # so the Docker-only laptop produces the daily report with no manual step.
+    # Also sends a Telegram EOD summary if TELEGRAM_ENABLED=true.
     import pytz
     scheduler.add_job(
         _run_eod_dump,
@@ -502,6 +568,19 @@ def start_scheduler():
         misfire_grace_time=3600,
     )
 
+    # Pre-market Telegram brief — Mon-Fri 9:00 AM ET (TELEGRAM_ENABLED gates the send)
+    scheduler.add_job(
+        _run_pre_market_digest,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour=9, minute=0,
+            timezone=pytz.timezone("America/New_York"),
+        ),
+        id="pre_market_digest",
+        name="Pre-market Telegram brief",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
     scheduler.start()
     logger.info(
         f"Scheduler started — watchlist every {settings.watchlist_alert_interval_minutes}min, "
@@ -509,7 +588,8 @@ def start_scheduler():
         f"dip scanner every 5min, "
         f"auto-trade every {settings.auto_trade_poll_seconds}s "
         f"(enabled={settings.auto_trade_enabled}), "
-        f"eod dump 4:35 PM ET Mon-Fri"
+        f"eod dump + Telegram summary 4:35 PM ET Mon-Fri, "
+        f"pre-market brief 9:00 AM ET Mon-Fri (telegram={settings.telegram_enabled})"
     )
 
 

@@ -133,6 +133,19 @@ async def evaluate_watchlist():
                     )
                     db.add(alert)
 
+                    # Push to Telegram
+                    try:
+                        from app.services import notifier
+                        await notifier.send_watchlist_alert(
+                            ticker=item.ticker,
+                            signal=signal,
+                            score=score,
+                            price=current_price or 0.0,
+                            change_7d=change_7d,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Telegram watchlist alert failed: {e}")
+
                     # Broadcast via WebSocket
                     try:
                         from app.api.alerts import broadcast
