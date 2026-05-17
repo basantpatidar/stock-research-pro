@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(default="")
     telegram_chat_id: str = Field(default="")
     telegram_poll_interval: int = Field(default=5)
+    telegram_invite_code: str = Field(default="")
 
     # Logging
     log_dir: str = Field(default="./local_debugging")
