@@ -49,7 +49,7 @@ def _get_weather() -> dict:
         
     return weather
 
-def _get_tide() -> dict:
+def _get_tide(loose: bool = False) -> dict:
     """
     Layer 2: Tide (Intraday breadth correlation and momentum fading)
     """
@@ -62,7 +62,7 @@ def _get_tide() -> dict:
         "etf_data": {}
     }
     
-    down_threshold_pct = -0.75
+    down_threshold_pct = -0.30 if loose else -0.75
     down_count = 0
     fading_count = 0
     
@@ -95,8 +95,9 @@ def _get_tide() -> dict:
         tide["down_count"] = int(down_count)
         tide["fading_count"] = int(fading_count)
         
-        # Gates: 3 of 4 must be down significantly, 2 of 4 must have fading momentum
-        tide["correlated_selling"] = bool(down_count >= 3)
+        # Gates: 3 of 4 must be down significantly (2 if loose), 2 of 4 must have fading momentum
+        req_down = 2 if loose else 3
+        tide["correlated_selling"] = bool(down_count >= req_down)
         tide["momentum_fading"] = bool(fading_count >= 2)
         
         if tide["correlated_selling"] and tide["momentum_fading"]:
@@ -108,7 +109,7 @@ def _get_tide() -> dict:
         
     return tide
 
-def _detect_rejection_candle(candle: dict, prev_candle: dict) -> bool:
+def _detect_rejection_candle(candle: dict, prev_candle: dict, loose: bool = False) -> bool:
     """
     High-volume Hammer or Bullish Engulfing.
     """
@@ -122,7 +123,8 @@ def _detect_rejection_candle(candle: dict, prev_candle: dict) -> bool:
     prev_open = prev_candle.get("open", 0)
     prev_vol = prev_candle.get("volume", 0)
     
-    if vol < prev_vol * 1.2: # Must be higher volume than previous
+    vol_mult = 1.05 if loose else 1.2
+    if vol < prev_vol * vol_mult: # Must be higher volume than previous
         return False
         
     candle_range = high - low
@@ -141,7 +143,7 @@ def _detect_rejection_candle(candle: dict, prev_candle: dict) -> bool:
             
     return False
 
-def _evaluate_setup(ticker: str, price_data: dict, atr: float, vwap: float) -> dict | None:
+def _evaluate_setup(ticker: str, price_data: dict, atr: float, vwap: float, loose: bool = False) -> dict | None:
     """
     Layer 3: Setup (Price near support + Rejection Candle)
     """
@@ -163,16 +165,18 @@ def _evaluate_setup(ticker: str, price_data: dict, atr: float, vwap: float) -> d
     nearest_support = min(supports, key=lambda s: abs(current_price - s))
     dist_to_support = abs(current_price - nearest_support)
     
-    # Must be near support (within 0.35 * ATR)
-    if dist_to_support > 0.35 * atr:
+    # Must be near support (within 0.35 * ATR, or 0.50 if loose)
+    dist_limit = 0.50 if loose else 0.35
+    if dist_to_support > dist_limit * atr:
         return None
         
     # Check rejection candle
-    if not _detect_rejection_candle(candles[-1], candles[-2]):
+    if not _detect_rejection_candle(candles[-1], candles[-2], loose):
         return None
         
-    # Target 1% strict, or structural resistance (VWAP) if closer
-    target = round(current_price * 1.01, 2)
+    # Target 1% strict (0.75% if loose), or structural resistance (VWAP) if closer
+    target_mult = 1.0075 if loose else 1.01
+    target = round(current_price * target_mult, 2)
     if vwap > current_price and vwap < target:
         target = round(vwap, 2)
         
@@ -188,7 +192,7 @@ def _evaluate_setup(ticker: str, price_data: dict, atr: float, vwap: float) -> d
         "signals": ["Near Support", "Bullish Rejection Candle", "Volume Confirmation"]
     }
 
-def scan_mcf_opportunities(capital: float = 1000.0) -> dict:
+def scan_mcf_opportunities(capital: float = 1000.0, loose: bool = False) -> dict:
     """
     Main MCF Scan Orchestrator
     """
@@ -199,7 +203,7 @@ def scan_mcf_opportunities(capital: float = 1000.0) -> dict:
     opportunities = []
     
     if weather["status"] == "pass":
-        tide = _get_tide()
+        tide = _get_tide(loose)
         if tide["status"] == "pass":
             # Proceed to Layer 3 for all Tier 1 + 2 ETFs
             from app.tools.dip_scanner import ETF_TIERS
@@ -229,10 +233,10 @@ def scan_mcf_opportunities(capital: float = 1000.0) -> dict:
                         "pivots": {"S1": current_price * 0.99, "S2": current_price * 0.98} # Approximation if missing
                     }
                     
-                    setup = _evaluate_setup(tk, price_data, atr, vwap)
+                    setup = _evaluate_setup(tk, price_data, atr, vwap, loose)
                     if setup:
                         setup["signal_type"] = "mcf_dip_buy"
-                        setup["score"] = 90 # High conviction by design
+                        setup["score"] = 75 if loose else 90  # loose = relaxed gates, lower conviction
                         setup["capital_used"] = capital
                         setup["source"] = "live"
                         opportunities.append(setup)
@@ -243,5 +247,6 @@ def scan_mcf_opportunities(capital: float = 1000.0) -> dict:
         "timestamp": timestamp,
         "weather": weather,
         "tide": tide,
-        "opportunities": opportunities
+        "opportunities": opportunities,
+        "loose_gates_active": loose
     }

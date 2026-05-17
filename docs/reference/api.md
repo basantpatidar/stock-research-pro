@@ -1,7 +1,7 @@
 # docs/api.md — All HTTP endpoints, request/response shapes, auth
 # Sections: grep -n "SEC:" docs/api.md
 
-**Doc version:** 1.0 · **Last updated:** 2026-05-14
+**Doc version:** 1.1 · **Last updated:** 2026-05-16
 
 # SEC:AUTH          API key pattern
 # SEC:V1_ROUTES     Original research, watchlist, screener, alerts, macro
@@ -267,6 +267,68 @@ Request:  { "tiers": [1], "days": 60 }
 Response: { "status": "started", "tickers": [...], "days": 60, "message": "..." }
 ```
 Runs in background via `BackgroundTasks`. **Destructive**: clears all existing `source == "backtest"` rows before replaying scanner logic — so re-runs always reflect the latest scoring rules. Replays over the last N days of 5-min yfinance data; outcomes simulated by walking forward bars (target_hit / stop_hit / eod_close).
+
+---
+
+<!-- SEC:MCF_ROUTES -->
+## MCF Scanner Routes (prefix `/mcf-scanner`)
+
+### Force-run / diagnostic scan
+`POST /mcf-scanner/force-run`
+```json
+Request (optional body):  { "loose_gates": false }
+Response (strict mode):   { "status": "success", "message": "Scan complete" }
+Response (loose mode):    { "status": "success", "message": "Diagnostic scan complete", "result": <McfResult> }
+```
+
+`loose_gates: true` runs the scanner with relaxed Layer 2 + Layer 3 thresholds and **returns the result directly in the response** — nothing is written to the DB or analytics. Strict mode (default) delegates to `_run_mcf_scan` which writes `ScannerAlert` rows.
+
+**Loose gate thresholds vs strict:**
+| Gate | Strict | Loose |
+|---|---|---|
+| Tide down threshold | −0.75% | −0.30% |
+| ETFs required down | 3 of 4 | 2 of 4 |
+| Volume multiplier (rejection candle) | 1.2× | 1.05× |
+| Distance to support | 0.35 × ATR | 0.50 × ATR |
+| Profit target | 1.00% | 0.75% |
+
+**Isolation guarantee:** loose signals are persisted to `ScannerAlert` with `loose_gates=true`. They are excluded from main win-rate analytics (default `?loose=false` filter) and are blocked from auto-trade (`auto_trade.py` filters `loose_gates IS NOT TRUE`). Use `GET /mcf-scanner/analytics?loose=true` to view loose-only performance. The response includes `"loose_gates": true` so callers can confirm which mode fired.
+
+### Current state (cached)
+`GET /mcf-scanner/state`
+```json
+Response: {
+  "status": "pass|fail|waiting",
+  "weather": { "spy_trend": "up|down|flat", "vix": 18.4, "status": "pass|fail" },
+  "tide": { "correlated_selling": true, "momentum_fading": true,
+            "down_count": 3, "fading_count": 2, "status": "pass|fail",
+            "etf_data": { "SPY": {...}, "QQQ": {...}, "IWM": {...}, "DIA": {...} } },
+  "opportunities": [...],   // Layer 3 setups; empty until weather + tide both pass
+  "timestamp": "2026-05-16T14:32:00Z",
+  "loose_gates_active": false
+}
+```
+Reads from `data_cache` DB table (key `MCF / state`). Returns a `"waiting"` stub if the background job hasn't run yet.
+
+### Analytics (win/loss history)
+`GET /mcf-scanner/analytics?loose=false`
+
+Query param `loose` (bool, default `false`): `false` = strict signals only (`loose_gates IS NOT TRUE`); `true` = loose-gate signals only (`loose_gates == true`).
+
+```json
+Response: {
+  "total_signals": 12, "wins": 8, "losses": 4,
+  "win_rate_pct": 66.7,
+  "avg_win_pct": 0.95, "avg_loss_pct": -0.48,
+  "expected_value_pct": 0.474, "expected_value_dollar": 4.74,
+  "loose_gates": false,
+  "recent_alerts": [
+    { "ticker", "entry_time", "entry_price", "target_price", "stop_price",
+      "outcome_price", "actual_pnl_pct", "actual_pnl_dollar", "status", "resolved_by", "loose_gates" }
+  ]
+}
+```
+Filters `signal_type == "mcf_dip_buy"` and `status != "open"`. The `loose_gates` field on each alert row lets callers distinguish origin even in mixed queries. Score for loose signals: 75 (vs 90 strict).
 
 ---
 
