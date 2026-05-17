@@ -1,9 +1,7 @@
 import logging
-import uuid
-from datetime import datetime, timezone
-import asyncio
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -16,11 +14,15 @@ from app.services.scheduler import _run_mcf_scan
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mcf-scanner", tags=["mcf-scanner"])
 
+class McfScanRequest(BaseModel):
+    loose_gates: bool = False
+
 @router.post("/force-run")
-async def force_mcf_scan(_: str = Depends(verify_api_key)):
-    """Manually trigger the MCF scanner."""
-    await _run_mcf_scan(force=True)
-    return {"status": "success", "message": "Scan complete"}
+async def force_mcf_scan(req: McfScanRequest = McfScanRequest(), _: str = Depends(verify_api_key)):
+    """Manually trigger the MCF scanner. loose_gates=true persists results tagged for separate analytics."""
+    await _run_mcf_scan(force=True, loose=req.loose_gates)
+    msg = "Loose scan complete — results saved with loose_gates=true" if req.loose_gates else "Scan complete"
+    return {"status": "success", "message": msg, "loose_gates": req.loose_gates}
 
 @router.get("/state")
 async def get_mcf_state(
@@ -46,19 +48,20 @@ async def get_mcf_state(
 
 @router.get("/analytics")
 async def mcf_analytics(
+    loose: bool = Query(False, description="true = loose-gate signals only; false (default) = strict signals only"),
     db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_api_key)
 ):
-    """
-    Fetch win/loss stats for the MCF scanner signals.
-    """
+    """Win/loss stats for MCF signals. Default: strict only. ?loose=true: loose-gate only."""
+    loose_filter = (ScannerAlert.loose_gates == True) if loose else (ScannerAlert.loose_gates.is_not(True))
     try:
         rows = (await db.execute(
             select(ScannerAlert)
             .where(
                 and_(
                     ScannerAlert.signal_type == "mcf_dip_buy",
-                    ScannerAlert.status != "open"
+                    ScannerAlert.status != "open",
+                    loose_filter,
                 )
             )
             .order_by(ScannerAlert.entry_time.desc())
@@ -75,6 +78,7 @@ async def mcf_analytics(
             "losses": 0,
             "expected_value_dollar": None,
             "recent_alerts": [],
+            "loose_gates": loose,
         }
 
     wins = [r for r in rows if r.status == "win"]
@@ -99,6 +103,7 @@ async def mcf_analytics(
             "actual_pnl_dollar": r.actual_pnl_dollar,
             "status": r.status,
             "resolved_by": r.resolved_by,
+            "loose_gates": bool(r.loose_gates),
         }
         for r in rows[:20]
     ]
@@ -113,4 +118,5 @@ async def mcf_analytics(
         "expected_value_pct": round(ev_pct, 3),
         "expected_value_dollar": round(ev_dollar, 2),
         "recent_alerts": recent,
+        "loose_gates": loose,
     }
