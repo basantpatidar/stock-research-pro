@@ -139,6 +139,20 @@ class BrokerOrder(Base):
     )
 
 
+class TelegramUser(Base):
+    """Registered Telegram users. Populated via /start <invite_code> in the bot."""
+
+    __tablename__ = "telegram_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chat_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class StockDataCache(Base):
     """Caches slow-changing yfinance data keyed by (ticker, data_type).
 
