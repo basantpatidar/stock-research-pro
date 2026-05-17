@@ -1,7 +1,7 @@
 # docs/features.md — Execution modes, tiers, guard rails, usage tracking, background jobs
 # Sections: grep -n "SEC:" docs/features.md
 
-**Doc version:** 1.2 · **Last updated:** 2026-05-17
+**Doc version:** 1.3 · **Last updated:** 2026-05-17
 
 # SEC:EXEC_MODES        saver / normal / deep — what each does
 # SEC:TIERS             T1/T2/T3 — when runs, LLM, tools
@@ -12,7 +12,7 @@
 # SEC:CONVERGENCE       Signal convergence score (0-100) logic
 # SEC:ALERTS            Alert system (watchlist + screener)
 # SEC:AUTO_PAPER_TRADE  Auto-paper-trade subscriber (Phase 3 validation harness)
-# SEC:TELEGRAM          Telegram bot — outbound notifications + scheduled digests
+# SEC:TELEGRAM          Telegram bot — multi-user, registration, commands, admin
 
 ---
 
@@ -399,27 +399,40 @@ options flow, macro environment, news sentiment. All optional — defaults to 0/
 <!-- SEC:TELEGRAM -->
 ## Telegram bot
 
-**Sprint 1 (outbound push only).** Sprint 2 (inbound commands) planned separately.
+**Sprint 1 (outbound) + Sprint 2 (inbound commands + multi-user) — both shipped.**
 
 ### Files
 | File | Role |
 |---|---|
-| `backend/app/services/notifier.py` | Async Telegram client — all send functions |
-| `backend/app/config.py` | `telegram_enabled`, `telegram_bot_token`, `telegram_chat_id`, `telegram_poll_interval` |
+| `backend/app/services/notifier.py` | Async Telegram client — broadcast to all active DB users |
+| `backend/app/services/telegram_handler.py` | Long-poll loop + command router + registration |
+| `backend/app/db/models.py` | `TelegramUser` model |
+| `backend/migrations/versions/c3d4e5f6a7b8_create_telegram_users.py` | Migration |
+| `backend/app/main.py` | `start_polling()` / `stop_polling()` in lifespan |
 
 ### Environment variables
 | Var | Where | Default | Notes |
 |---|---|---|---|
 | `TELEGRAM_ENABLED` | `.env.shared` | `false` | Master switch — flip to `true` to activate |
-| `TELEGRAM_POLL_INTERVAL` | `.env.shared` | `5` | Seconds between getUpdates polls (Sprint 2) |
+| `TELEGRAM_POLL_INTERVAL` | `.env.shared` | `5` | Seconds between getUpdates polls |
 | `TELEGRAM_BOT_TOKEN` | `.env` (secret) | — | From @BotFather |
-| `TELEGRAM_CHAT_ID` | `.env` (secret) | — | From @userinfobot |
+| `TELEGRAM_CHAT_ID` | `.env` (secret) | — | Owner chat_id — auto-admin on first /start |
+| `TELEGRAM_INVITE_CODE` | `.env` (secret) | — | Share privately; anyone with it can register |
 
-### One-time setup (~5 min)
-1. Telegram → @BotFather → `/newbot` → copy token → paste as `TELEGRAM_BOT_TOKEN` in `.env`
-2. Telegram → @userinfobot → copy the `Id:` number → paste as `TELEGRAM_CHAT_ID` in `.env`
-3. Set `TELEGRAM_ENABLED=true` in `.env.shared`
-4. Restart backend
+### One-time setup
+1. Telegram → @BotFather → `/newbot` → copy token → `TELEGRAM_BOT_TOKEN` in `.env`
+2. Telegram → @userinfobot → copy `Id:` number → `TELEGRAM_CHAT_ID` in `.env`
+3. Set a secret `TELEGRAM_INVITE_CODE` in `.env` (e.g. `srp-2026-abc`)
+4. Set `TELEGRAM_ENABLED=true` in `.env.shared` and restart backend
+5. Send `/start srp-2026-abc` to your bot — you're registered as admin
+
+### Inviting other users
+Share the bot username (`@stockresearchpro_bot`) + the invite code privately.
+They send `/start <code>` → registered, get all broadcasts. You see them via `/users`.
+
+### Multi-user model
+`telegram_users` table stores all registered users. `notifier.py` queries active users
+and sends to all. Owner's `TELEGRAM_CHAT_ID` auto-gets `is_admin=True` on registration.
 
 ### notifier.py public API
 ```python

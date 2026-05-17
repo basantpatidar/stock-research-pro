@@ -57,8 +57,12 @@ async def lifespan(app: FastAPI):
 
     start_scheduler()
 
+    from app.services.telegram_handler import start_polling, stop_polling
+    start_polling()
+
     yield
 
+    stop_polling()
     stop_scheduler()
     logger.info("Stock Research Pro shutdown complete")
 
