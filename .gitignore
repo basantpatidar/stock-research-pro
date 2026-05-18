@@ -69,7 +69,6 @@ backend/tests
 # brainstorms, ideas, todos — stays local. Drop them in local_debugging/ (above)
 # or use one of the suffixes below.
 ideas.md
-todo.md
 docs/*-sprint.md
 docs/*_critique*.md
 docs/*_proposal*.md
