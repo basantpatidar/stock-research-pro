@@ -1,1 +1,1 @@
-from app.tools.core_tools import get_options_signals
+from app.tools.core_tools import get_options_signals  # noqa: F401

@@ -1,7 +1,8 @@
-from langchain_core.tools import tool
-import requests
 import re
 import time
+
+import requests
+from langchain_core.tools import tool
 
 _HEADERS = {"User-Agent": "StockResearchPro research@stockresearchpro.local"}
 _SEARCH_URL = "https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&dateRange=custom&startdt={start}&enddt={end}&forms=10-K&hits.hits._source=period_of_report,file_date,entity_name,file_num"
@@ -19,7 +20,9 @@ def _get_cik(ticker: str) -> str | None:
             r = requests.get(_TICKERS_URL, headers=_HEADERS, timeout=10)
             if r.ok:
                 data = r.json()
-                _ticker_cik_cache = {v["ticker"].upper(): str(v["cik_str"]).zfill(10) for v in data.values()}
+                _ticker_cik_cache = {
+                    v["ticker"].upper(): str(v["cik_str"]).zfill(10) for v in data.values()
+                }
         except Exception:
             pass
     return _ticker_cik_cache.get(ticker.upper())
@@ -41,12 +44,14 @@ def _get_recent_10k_filings(cik: str, limit: int = 2) -> list[dict]:
     results = []
     for i, form in enumerate(forms):
         if form in ("10-K", "10-K/A") and len(results) < limit:
-            results.append({
-                "accession": accessions[i].replace("-", ""),
-                "accession_raw": accessions[i],
-                "date": dates[i],
-                "primary_doc": docs[i],
-            })
+            results.append(
+                {
+                    "accession": accessions[i].replace("-", ""),
+                    "accession_raw": accessions[i],
+                    "date": dates[i],
+                    "primary_doc": docs[i],
+                }
+            )
     return results
 
 
@@ -70,7 +75,7 @@ def _fetch_risk_factors(cik: str, accession: str, filename: str) -> str:
             return text[:3000]  # fallback to beginning
         start = match.start()
         # Find next major item (Item 1B, Item 2, etc.)
-        end_match = re.search(r"(?i)item\s+1b|item\s+2[\.\s]+", text[start+200:])
+        end_match = re.search(r"(?i)item\s+1b|item\s+2[\.\s]+", text[start + 200 :])
         end = start + 200 + end_match.start() if end_match else start + 6000
         return text[start:end][:5000]
     except Exception:
@@ -79,8 +84,9 @@ def _fetch_risk_factors(cik: str, accession: str, filename: str) -> str:
 
 def _llm_diff(current_text: str, prior_text: str, ticker: str) -> dict:
     try:
-        from app.llm.factory import get_llm_with_fallback
         from app.config import Settings
+        from app.llm.factory import get_llm_with_fallback
+
         settings = Settings()
         llm = get_llm_with_fallback(settings)
         prompt = f"""You are analyzing SEC 10-K risk factor changes for {ticker}.
@@ -109,12 +115,17 @@ Respond in this exact JSON format:
         response = llm.invoke(prompt)
         content = response.content if hasattr(response, "content") else str(response)
         import json
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
         return {"summary": content[:500], "trajectory": "STABLE", "trajectory_color": "neutral"}
     except Exception as e:
-        return {"error": f"LLM diff failed: {str(e)}", "trajectory": "UNKNOWN", "trajectory_color": "neutral"}
+        return {
+            "error": f"LLM diff failed: {str(e)}",
+            "trajectory": "UNKNOWN",
+            "trajectory_color": "neutral",
+        }
 
 
 @tool
@@ -130,13 +141,19 @@ def get_risk_factor_changes(ticker: str) -> dict:
 
         filings = _get_recent_10k_filings(cik, limit=2)
         if len(filings) < 2:
-            return {"error": f"Need at least 2 10-K filings for {ticker} to compare — only found {len(filings)}"}
+            return {
+                "error": f"Need at least 2 10-K filings for {ticker} to compare — only found {len(filings)}"
+            }
 
         current_filing = filings[0]
         prior_filing = filings[1]
 
-        current_text = _fetch_risk_factors(cik.lstrip("0"), current_filing["accession"], current_filing["primary_doc"])
-        prior_text = _fetch_risk_factors(cik.lstrip("0"), prior_filing["accession"], prior_filing["primary_doc"])
+        current_text = _fetch_risk_factors(
+            cik.lstrip("0"), current_filing["accession"], current_filing["primary_doc"]
+        )
+        prior_text = _fetch_risk_factors(
+            cik.lstrip("0"), prior_filing["accession"], prior_filing["primary_doc"]
+        )
 
         if not current_text or not prior_text:
             return {"error": f"Could not extract risk factors from EDGAR filings for {ticker}"}

@@ -1,7 +1,8 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
-import yfinance as yf
 import numpy as np
+import yfinance as yf
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 # Top 5 sector peers by GICS sector (yfinance sector name → tickers)
 _SECTOR_PEERS: dict[str, list[str]] = {
@@ -20,16 +21,28 @@ _SECTOR_PEERS: dict[str, list[str]] = {
 }
 
 
-def _dcf(fcf_history: list[float], growth_rate: float, discount_rate: float, terminal_growth: float = 0.025, years: int = 5) -> dict:
+def _dcf(
+    fcf_history: list[float],
+    growth_rate: float,
+    discount_rate: float,
+    terminal_growth: float = 0.025,
+    years: int = 5,
+) -> dict:
     if not fcf_history or fcf_history[-1] <= 0:
         return {}
     base_fcf = fcf_history[-1]
     scenarios = {}
-    for label, g in [("bear", growth_rate * 0.5), ("base", growth_rate), ("bull", growth_rate * 1.5)]:
+    for label, g in [
+        ("bear", growth_rate * 0.5),
+        ("base", growth_rate),
+        ("bull", growth_rate * 1.5),
+    ]:
         pv = 0.0
         for n in range(1, years + 1):
             pv += base_fcf * (1 + g) ** n / (1 + discount_rate) ** n
-        terminal = base_fcf * (1 + g) ** years * (1 + terminal_growth) / (discount_rate - terminal_growth)
+        terminal = (
+            base_fcf * (1 + g) ** years * (1 + terminal_growth) / (discount_rate - terminal_growth)
+        )
         pv += terminal / (1 + discount_rate) ** years
         scenarios[label] = round(pv, 0)
     return scenarios
@@ -53,8 +66,16 @@ def get_valuation(ticker: str) -> dict:
                 for col in cf.columns:
                     row = cf.get("Free Cash Flow") if "Free Cash Flow" in cf.index else None
                     if row is None:
-                        ocf = cf.loc["Operating Cash Flow"].get(col, 0) if "Operating Cash Flow" in cf.index else 0
-                        capex = cf.loc["Capital Expenditure"].get(col, 0) if "Capital Expenditure" in cf.index else 0
+                        ocf = (
+                            cf.loc["Operating Cash Flow"].get(col, 0)
+                            if "Operating Cash Flow" in cf.index
+                            else 0
+                        )
+                        capex = (
+                            cf.loc["Capital Expenditure"].get(col, 0)
+                            if "Capital Expenditure" in cf.index
+                            else 0
+                        )
                         fcf = float(ocf or 0) + float(capex or 0)
                     else:
                         fcf = float(row.get(col, 0) or 0)
@@ -81,7 +102,9 @@ def get_valuation(ticker: str) -> dict:
         growth = min(max(rev_cagr or 0.08, 0.03), 0.30)
         wacc = 0.10
         dcf_total = _dcf(fcf_history, growth, wacc)
-        dcf_per_share = {k: round(v / shares, 2) for k, v in dcf_total.items()} if dcf_total and shares else {}
+        dcf_per_share = (
+            {k: round(v / shares, 2) for k, v in dcf_total.items()} if dcf_total and shares else {}
+        )
 
         # ── Graham Number ────────────────────────────────────────────────────────
         eps = info.get("trailingEps") or info.get("epsCurrentYear")
@@ -105,18 +128,24 @@ def get_valuation(ticker: str) -> dict:
         peers = []
         if peer_tickers:
             try:
-                peer_data = yf.download(peer_tickers, period="1d", auto_adjust=True, progress=False)
+                yf.download(peer_tickers, period="1d", auto_adjust=True, progress=False)
                 for pt in peer_tickers:
                     try:
                         pi = yf.Ticker(pt).info
-                        peers.append({
-                            "ticker": pt,
-                            "pe_ratio": pi.get("trailingPE"),
-                            "ps_ratio": pi.get("priceToSalesTrailing12Months"),
-                            "ev_ebitda": pi.get("enterpriseToEbitda"),
-                            "peg_ratio": pi.get("pegRatio"),
-                            "market_cap_b": round(pi.get("marketCap", 0) / 1e9, 1) if pi.get("marketCap") else None,
-                        })
+                        peers.append(
+                            {
+                                "ticker": pt,
+                                "pe_ratio": pi.get("trailingPE"),
+                                "ps_ratio": pi.get("priceToSalesTrailing12Months"),
+                                "ev_ebitda": pi.get("enterpriseToEbitda"),
+                                "peg_ratio": pi.get("pegRatio"),
+                                "market_cap_b": (
+                                    round(pi.get("marketCap", 0) / 1e9, 1)
+                                    if pi.get("marketCap")
+                                    else None
+                                ),
+                            }
+                        )
                     except Exception:
                         pass
             except Exception:
@@ -137,7 +166,7 @@ def get_valuation(ticker: str) -> dict:
                 peer_verdict = f"PREMIUM vs peers ({-discount_pct:.0f}% P/E premium)"
                 peer_verdict_color = "red"
             else:
-                peer_verdict = f"FAIR VALUE vs peers (P/E within 15% of median)"
+                peer_verdict = "FAIR VALUE vs peers (P/E within 15% of median)"
                 peer_verdict_color = "neutral"
 
         return {

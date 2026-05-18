@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timezone
 import asyncio
+from datetime import datetime, timezone
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import verify_api_key
 from app.db.database import get_db
 from app.db.models import ScreenerPreset
-from app.auth import verify_api_key
 from app.tools.remaining_tools import run_screener
 
 router = APIRouter(prefix="/screener", tags=["screener"])
@@ -20,8 +20,8 @@ class ScreenerFilters(BaseModel):
     min_price_drop_pct: float = 10.0
     sector: str = "all"
     max_pe: float = 0.0
-    universe: str = "sp500"        # sp500 | nasdaq100 | etfs | mega | legacy
-    limit: int = 50                # max tickers to fetch (hard-capped at 150)
+    universe: str = "sp500"  # sp500 | nasdaq100 | etfs | mega | legacy
+    limit: int = 50  # max tickers to fetch (hard-capped at 150)
 
 
 class SavePresetRequest(BaseModel):
@@ -47,7 +47,7 @@ async def run_screener_now(
                 "max_pe": filters.max_pe,
                 "universe": filters.universe,
                 "limit": filters.limit,
-            }
+            },
         )
         return result
     except Exception as e:
@@ -77,10 +77,7 @@ async def get_presets(
     _: str = Depends(verify_api_key),
 ):
     """Get all saved screener presets."""
-    result = await db.execute(
-        select(ScreenerPreset)
-        .order_by(ScreenerPreset.created_at.desc())
-    )
+    result = await db.execute(select(ScreenerPreset).order_by(ScreenerPreset.created_at.desc()))
     presets = result.scalars().all()
     return {
         "presets": [
@@ -104,18 +101,14 @@ async def run_preset(
     _: str = Depends(verify_api_key),
 ):
     """Run a saved preset by ID."""
-    result = await db.execute(
-        select(ScreenerPreset).where(ScreenerPreset.id == preset_id)
-    )
+    result = await db.execute(select(ScreenerPreset).where(ScreenerPreset.id == preset_id))
     preset = result.scalar_one_or_none()
     if not preset:
         raise HTTPException(status_code=404, detail="Preset not found")
 
     filters = preset.filters
     try:
-        screener_result = await asyncio.to_thread(
-            run_screener.invoke, filters
-        )
+        screener_result = await asyncio.to_thread(run_screener.invoke, filters)
         preset.last_run = datetime.now(timezone.utc)
         await db.commit()
         return screener_result
@@ -130,9 +123,7 @@ async def toggle_auto_monitor(
     _: str = Depends(verify_api_key),
 ):
     """Toggle background auto-monitoring for a preset."""
-    result = await db.execute(
-        select(ScreenerPreset).where(ScreenerPreset.id == preset_id)
-    )
+    result = await db.execute(select(ScreenerPreset).where(ScreenerPreset.id == preset_id))
     preset = result.scalar_one_or_none()
     if not preset:
         raise HTTPException(status_code=404, detail="Preset not found")

@@ -467,6 +467,7 @@ export interface PiotroskiCheck {
 
 export interface EarningsQualityResult {
   ticker: string
+  error?: string
   overall: CompositeVerdict
   piotroski: {
     score: number

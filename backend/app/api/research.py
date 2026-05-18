@@ -1,21 +1,22 @@
+import asyncio
+import json
+import logging
+import threading
+from typing import Any, Literal
+
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import Literal, Any
 from langchain_core.messages import HumanMessage
-import json
-import asyncio
-import threading
-import logging
-import numpy as np
+from pydantic import BaseModel
 
 from app.agent.graph import get_agent
 from app.auth import verify_api_key
-from app.tools.price import get_price
-from app.tools.technicals import get_technicals
 from app.tools.analyst import get_analyst_consensus
 from app.tools.earnings import get_earnings
 from app.tools.news import get_news_impact
+from app.tools.price import get_price
+from app.tools.technicals import get_technicals
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def _sanitize(obj: Any) -> Any:
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     return obj
+
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -59,7 +61,9 @@ async def run_research(
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
-    question = request.question or f"Give me a full research brief on {ticker}. Mode: {request.mode}."
+    question = (
+        request.question or f"Give me a full research brief on {ticker}. Mode: {request.mode}."
+    )
 
     try:
         agent = get_agent()
@@ -70,7 +74,7 @@ async def run_research(
                 "ticker": ticker,
                 "mode": request.mode,
                 "research_depth": request.depth,
-            }
+            },
         )
 
         messages = result.get("messages", [])
@@ -85,7 +89,10 @@ async def run_research(
     except Exception as e:
         msg = str(e).lower()
         if "quota" in msg or "rate" in msg or "429" in msg or "exhausted" in msg:
-            raise HTTPException(status_code=429, detail="LLM quota exhausted — all providers failed. Try again later.")
+            raise HTTPException(
+                status_code=429,
+                detail="LLM quota exhausted — all providers failed. Try again later.",
+            )
         raise HTTPException(status_code=500, detail=f"Research failed: {str(e)}")
 
 
@@ -133,14 +140,16 @@ async def get_research_data(
         if "error" in news:
             logger.warning("news error for %s: %s", sym, news["error"])
 
-        return _sanitize({
-            "ticker": sym,
-            "price": price,
-            "technicals": technicals,
-            "analyst": analyst,
-            "earnings": earnings,
-            "news": news,
-        })
+        return _sanitize(
+            {
+                "ticker": sym,
+                "price": price,
+                "technicals": technicals,
+                "analyst": analyst,
+                "earnings": earnings,
+                "news": news,
+            }
+        )
     except Exception as e:
         logger.exception("research/data failed for %s", sym)
         raise HTTPException(status_code=500, detail=f"Data fetch failed: {str(e)}")
@@ -171,12 +180,14 @@ async def stream_research(
 
             def run_agent():
                 try:
-                    for event in get_agent().stream({
-                        "messages": [HumanMessage(content=question)],
-                        "ticker": ticker,
-                        "mode": mode,
-                        "research_depth": depth,
-                    }):
+                    for event in get_agent().stream(
+                        {
+                            "messages": [HumanMessage(content=question)],
+                            "ticker": ticker,
+                            "mode": mode,
+                            "research_depth": depth,
+                        }
+                    ):
                         loop.call_soon_threadsafe(q.put_nowait, event)
                 except Exception as e:
                     loop.call_soon_threadsafe(q.put_nowait, {"__error__": str(e)})

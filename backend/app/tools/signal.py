@@ -13,6 +13,7 @@ Composite thresholds:
 """
 
 from __future__ import annotations
+
 from typing import Literal
 
 Verdict = Literal["STRONG_BUY", "BUY", "HOLD", "SELL", "AVOID", "RISK_FLAG"]
@@ -54,7 +55,13 @@ def composite_verdict(signals: list[dict]) -> dict:
     """
     contributions = [s.get("score_contribution", 0.0) for s in signals if s]
     if not contributions:
-        return {"verdict": "HOLD", "conviction": "LOW", "score": 0.0, "signal_count": 0, "agree_count": 0}
+        return {
+            "verdict": "HOLD",
+            "conviction": "LOW",
+            "score": 0.0,
+            "signal_count": 0,
+            "agree_count": 0,
+        }
 
     score = sum(contributions) / len(contributions)
     score = round(score, 2)
@@ -72,7 +79,9 @@ def composite_verdict(signals: list[dict]) -> dict:
 
     # Conviction = how many signals agree with the composite direction
     direction_score = 1 if score > 0 else -1 if score < 0 else 0
-    agree = sum(1 for c in contributions if (c > 0) == (direction_score > 0) and direction_score != 0)
+    agree = sum(
+        1 for c in contributions if (c > 0) == (direction_score > 0) and direction_score != 0
+    )
     agree_pct = agree / len(contributions) if contributions else 0
 
     if agree_pct >= 0.8:
@@ -96,9 +105,9 @@ def composite_verdict(signals: list[dict]) -> dict:
 # Convenience: map verdict to human label and colour
 VERDICT_META = {
     "STRONG_BUY": {"label": "▲▲ STRONG BUY", "color": "#00ff88"},
-    "BUY":        {"label": "▲ BUY",          "color": "#22cc66"},
-    "HOLD":       {"label": "→ HOLD",          "color": "#ffaa00"},
-    "SELL":       {"label": "▼ SELL",          "color": "#ff6644"},
-    "AVOID":      {"label": "▼▼ AVOID",        "color": "#ff2222"},
-    "RISK_FLAG":  {"label": "⚠ RISK",          "color": "#ff4400"},
+    "BUY": {"label": "▲ BUY", "color": "#22cc66"},
+    "HOLD": {"label": "→ HOLD", "color": "#ffaa00"},
+    "SELL": {"label": "▼ SELL", "color": "#ff6644"},
+    "AVOID": {"label": "▼▼ AVOID", "color": "#ff2222"},
+    "RISK_FLAG": {"label": "⚠ RISK", "color": "#ff4400"},
 }

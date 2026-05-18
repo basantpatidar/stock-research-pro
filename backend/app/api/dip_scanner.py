@@ -4,15 +4,21 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import yfinance as yf
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_, delete
+from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import verify_api_key
 from app.db.database import get_db
 from app.db.models import ScannerAlert
-from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _backfill_ticker, SESSION_WINDOWS, SCORE_THRESHOLD
+from app.tools.dip_scanner import (
+    ETF_TIERS,
+    SCORE_THRESHOLD,
+    SESSION_WINDOWS,
+    _backfill_ticker,
+    scan_dip_opportunities,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dip-scanner", tags=["dip-scanner"])
@@ -33,6 +39,7 @@ class BackfillRequest(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_tickers(tiers: list[int]) -> list[str]:
     tickers = []
@@ -56,18 +63,21 @@ async def _save_alert(db: AsyncSession, opp: dict) -> None:
     if source == "live":
         cutoff = entry_ts - timedelta(minutes=DEDUP_WINDOW_MINUTES)
         existing = await db.execute(
-            select(ScannerAlert.id).where(
+            select(ScannerAlert.id)
+            .where(
                 and_(
                     ScannerAlert.ticker == opp["ticker"],
                     ScannerAlert.source == "live",
                     ScannerAlert.entry_time >= cutoff,
                 )
-            ).limit(1)
+            )
+            .limit(1)
         )
         if existing.scalar_one_or_none() is not None:
             logger.info(
                 "dedup-skip: %s within %dmin of prior alert",
-                opp["ticker"], DEDUP_WINDOW_MINUTES,
+                opp["ticker"],
+                DEDUP_WINDOW_MINUTES,
             )
             return
 
@@ -96,6 +106,7 @@ async def _save_alert(db: AsyncSession, opp: dict) -> None:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.post("/scan")
 async def scan(
@@ -138,7 +149,12 @@ async def get_config(_: str = Depends(verify_api_key)):
         "session_windows": {k: v["label"] for k, v in SESSION_WINDOWS.items()},
         "default_capital": DEFAULT_CAPITAL,
         "score_threshold": SCORE_THRESHOLD,
-        "trading_hours_et": {"regular_open": "9:40 AM", "regular_close": "4:00 PM", "pre_market": "4:00 AM", "after_hours_close": "8:00 PM"},
+        "trading_hours_et": {
+            "regular_open": "9:40 AM",
+            "regular_close": "4:00 PM",
+            "pre_market": "4:00 AM",
+            "after_hours_close": "8:00 PM",
+        },
     }
 
 
@@ -149,19 +165,30 @@ async def analytics(
 ):
     """Win/loss stats across all recorded alerts (backtest + live)."""
     from fastapi import HTTPException
+
     try:
-        rows = (await db.execute(
-            select(ScannerAlert).where(ScannerAlert.status != "open")
-            .order_by(ScannerAlert.entry_time.desc())
-        )).scalars().all()
+        rows = (
+            (
+                await db.execute(
+                    select(ScannerAlert)
+                    .where(ScannerAlert.status != "open")
+                    .order_by(ScannerAlert.entry_time.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
     except Exception as exc:
         logger.error("analytics query failed — migrations may be missing: %s", exc)
-        raise HTTPException(status_code=500, detail="scanner_alerts table not ready — run: make migrate")
+        raise HTTPException(
+            status_code=500, detail="scanner_alerts table not ready — run: make migrate"
+        )
 
     if not rows:
         return {
             "total_signals": 0,
-            "wins": 0, "losses": 0,
+            "wins": 0,
+            "losses": 0,
             "win_rate_pct": None,
             "avg_win_pct": None,
             "avg_loss_pct": None,
@@ -180,7 +207,9 @@ async def analytics(
 
     win_rate = len(wins) / total * 100 if total else 0
     avg_win = sum(r.actual_pnl_pct for r in wins if r.actual_pnl_pct) / len(wins) if wins else 0
-    avg_loss = sum(r.actual_pnl_pct for r in losses if r.actual_pnl_pct) / len(losses) if losses else 0
+    avg_loss = (
+        sum(r.actual_pnl_pct for r in losses if r.actual_pnl_pct) / len(losses) if losses else 0
+    )
     ev_pct = (win_rate / 100 * avg_win) + ((1 - win_rate / 100) * avg_loss)
     ev_dollar = ev_pct / 100 * DEFAULT_CAPITAL
 
@@ -238,8 +267,12 @@ async def analytics(
             by_signal_type[st] = {}
         if cell_key not in by_signal_type[st]:
             by_signal_type[st][cell_key] = {
-                "ticker": tk, "session": sw,
-                "signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0,
+                "ticker": tk,
+                "session": sw,
+                "signals": 0,
+                "wins": 0,
+                "losses": 0,
+                "pnl_sum": 0.0,
             }
         cell = by_signal_type[st][cell_key]
         cell["signals"] += 1
@@ -290,13 +323,17 @@ async def analytics(
         t = d["wins"] + d["losses"]
         d["win_rate_pct"] = round(d["wins"] / t * 100, 1) if t else None
         d["ev_pct"] = round(d["pnl_sum"] / t, 3) if t else None
-        d["ev_dollar"] = round(d["ev_pct"] / 100 * DEFAULT_CAPITAL, 2) if d["ev_pct"] is not None else None
+        d["ev_dollar"] = (
+            round(d["ev_pct"] / 100 * DEFAULT_CAPITAL, 2) if d["ev_pct"] is not None else None
+        )
         d.pop("pnl_sum")
 
     # Score band breakdown — shows if higher scores actually win more (guides threshold decisions)
-    score_bands = {"72-79": {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0},
-                   "80-89": {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0},
-                   "90+":   {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0}}
+    score_bands = {
+        "72-79": {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0},
+        "80-89": {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0},
+        "90+": {"signals": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0},
+    }
     for r in rows:
         s = r.score or 0
         band = "90+" if s >= 90 else ("80-89" if s >= 80 else "72-79")
@@ -317,10 +354,12 @@ async def analytics(
     running = 0.0
     for r in reversed(rows):
         running += r.actual_pnl_dollar or 0
-        cumulative.append({
-            "date": r.entry_time.isoformat() if r.entry_time else None,
-            "cumulative_pnl": round(running, 2),
-        })
+        cumulative.append(
+            {
+                "date": r.entry_time.isoformat() if r.entry_time else None,
+                "cumulative_pnl": round(running, 2),
+            }
+        )
 
     data_sources = list({r.source for r in rows})
     live_count = sum(1 for r in rows if r.source == "live")
@@ -367,19 +406,25 @@ async def similar_setups(
     _: str = Depends(verify_api_key),
 ):
     """Last N closed signals for the same ticker + session window (#17 — reference cases)."""
-    rows = (await db.execute(
-        select(ScannerAlert)
-        .where(
-            and_(
-                ScannerAlert.ticker == ticker.upper(),
-                ScannerAlert.session_window == session,
-                ScannerAlert.signal_type == signal_type,
-                ScannerAlert.status != "open",
+    rows = (
+        (
+            await db.execute(
+                select(ScannerAlert)
+                .where(
+                    and_(
+                        ScannerAlert.ticker == ticker.upper(),
+                        ScannerAlert.session_window == session,
+                        ScannerAlert.signal_type == signal_type,
+                        ScannerAlert.status != "open",
+                    )
+                )
+                .order_by(ScannerAlert.entry_time.desc())
+                .limit(limit)
             )
         )
-        .order_by(ScannerAlert.entry_time.desc())
-        .limit(limit)
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return {
         "ticker": ticker.upper(),
@@ -409,12 +454,18 @@ async def ticker_history(
     _: str = Depends(verify_api_key),
 ):
     """All past scanner_alerts for a ticker, newest first."""
-    rows = (await db.execute(
-        select(ScannerAlert)
-        .where(ScannerAlert.ticker == ticker.upper())
-        .order_by(ScannerAlert.entry_time.desc())
-        .limit(limit)
-    )).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(ScannerAlert)
+                .where(ScannerAlert.ticker == ticker.upper())
+                .order_by(ScannerAlert.entry_time.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "ticker": ticker.upper(),
@@ -457,9 +508,9 @@ async def backfill(
     tickers = _get_tickers(request.tiers)
 
     # Clear existing backtest records so re-seed always reflects the latest logic
-    deleted = (await db.execute(
-        delete(ScannerAlert).where(ScannerAlert.source == "backtest")
-    )).rowcount
+    deleted = (
+        await db.execute(delete(ScannerAlert).where(ScannerAlert.source == "backtest"))
+    ).rowcount
     await db.commit()
     if deleted:
         logger.info("backfill: cleared %d existing backtest records", deleted)
@@ -541,31 +592,46 @@ async def analyze_signal(
 ):
     """LLM plain-English analysis of a scanner signal — click-triggered, ~500 tokens."""
     import json as _json
+
     from langchain_core.messages import HumanMessage
+
     from app.config import get_settings
     from app.llm.factory import get_llm_with_fallback
 
     # Pull historical win/loss stats for this ticker + signal_type from the DB
-    history_rows = (await db.execute(
-        select(ScannerAlert).where(
-            and_(
-                ScannerAlert.ticker == request.ticker.upper(),
-                ScannerAlert.signal_type == request.signal_type,
-                ScannerAlert.status.in_(["win", "loss"]),
+    history_rows = (
+        (
+            await db.execute(
+                select(ScannerAlert)
+                .where(
+                    and_(
+                        ScannerAlert.ticker == request.ticker.upper(),
+                        ScannerAlert.signal_type == request.signal_type,
+                        ScannerAlert.status.in_(["win", "loss"]),
+                    )
+                )
+                .order_by(ScannerAlert.entry_time.desc())
+                .limit(30)
             )
-        ).order_by(ScannerAlert.entry_time.desc()).limit(30)
-    )).scalars().all()
+        )
+        .scalars()
+        .all()
+    )
 
     h_total = len(history_rows)
     h_wins = [r for r in history_rows if r.status == "win"]
     h_losses = [r for r in history_rows if r.status == "loss"]
     win_rate = round(len(h_wins) / h_total * 100, 1) if h_total else None
     avg_win = round(sum(r.actual_pnl_pct or 0 for r in h_wins) / len(h_wins), 2) if h_wins else None
-    avg_loss = round(sum(r.actual_pnl_pct or 0 for r in h_losses) / len(h_losses), 2) if h_losses else None
+    avg_loss = (
+        round(sum(r.actual_pnl_pct or 0 for r in h_losses) / len(h_losses), 2) if h_losses else None
+    )
 
     signal_type_label = {
-        "dip_buy": "Dip Buy", "orb_breakout": "ORB Breakout",
-        "vwap_reclaim": "VWAP Reclaim", "failed_breakdown": "Failed Breakdown",
+        "dip_buy": "Dip Buy",
+        "orb_breakout": "ORB Breakout",
+        "vwap_reclaim": "VWAP Reclaim",
+        "failed_breakdown": "Failed Breakdown",
     }.get(request.signal_type, request.signal_type)
 
     history_line = (
@@ -575,7 +641,9 @@ async def analyze_signal(
     )
     reasons = (request.top_reasons or request.signals)[:5]
     rsi_note = "oversold — sellers may be exhausted" if request.rsi_5m < 35 else "neutral"
-    rvol_note = "elevated — real institutional participation" if request.rvol > 1.3 else "light activity"
+    rvol_note = (
+        "elevated — real institutional participation" if request.rvol > 1.3 else "light activity"
+    )
 
     prompt = f"""You are a concise trading signal analyst. Explain this ETF scanner signal to a retail trader who may not know technical analysis. Be practical and direct — no fluff.
 
@@ -626,10 +694,22 @@ Reply with ONLY this JSON — no other text:
             "tokens_used": 500,
         }
     except Exception as exc:
-        logger.warning("analyze_signal LLM failed for %s — using rule-based fallback: %s", request.ticker, exc)
-        verdict = "FAVORABLE" if request.score >= 80 else "MIXED" if request.score >= 65 else "UNFAVORABLE"
-        exhaustion = "sellers appear to be running out of steam" if request.rsi_5m < 35 else "sellers are still active"
-        participation = "with real institutional participation" if request.rvol > 1.3 else "on light volume"
+        logger.warning(
+            "analyze_signal LLM failed for %s — using rule-based fallback: %s", request.ticker, exc
+        )
+        verdict = (
+            "FAVORABLE"
+            if request.score >= 80
+            else "MIXED" if request.score >= 65 else "UNFAVORABLE"
+        )
+        exhaustion = (
+            "sellers appear to be running out of steam"
+            if request.rsi_5m < 35
+            else "sellers are still active"
+        )
+        participation = (
+            "with real institutional participation" if request.rvol > 1.3 else "on light volume"
+        )
         return {
             "ticker": request.ticker.upper(),
             "verdict": verdict,
@@ -657,9 +737,9 @@ def _fetch_intraday(ticker: str) -> list[dict]:
     return [
         {
             "time": idx.isoformat(),
-            "open":  round(float(row["Open"]),  2),
-            "high":  round(float(row["High"]),  2),
-            "low":   round(float(row["Low"]),   2),
+            "open": round(float(row["Open"]), 2),
+            "high": round(float(row["High"]), 2),
+            "low": round(float(row["Low"]), 2),
             "close": round(float(row["Close"]), 2),
         }
         for idx, row in df.iterrows()
@@ -683,13 +763,19 @@ async def weekly_pnl(
     monday = today - timedelta(days=today.weekday())
     week_start = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc)
 
-    rows = (await db.execute(
-        select(ScannerAlert).where(
-            ScannerAlert.status.in_(["win", "loss"]),
-            ScannerAlert.source == "live",
-            ScannerAlert.entry_time >= week_start,
+    rows = (
+        (
+            await db.execute(
+                select(ScannerAlert).where(
+                    ScannerAlert.status.in_(["win", "loss"]),
+                    ScannerAlert.source == "live",
+                    ScannerAlert.entry_time >= week_start,
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     total_pnl = sum(r.actual_pnl_dollar or 0 for r in rows)
     wins = [r for r in rows if r.status == "win"]

@@ -26,6 +26,7 @@ def get_broker(settings: "Settings") -> BaseBroker:
 
     if provider == "alpaca":
         from app.brokers.alpaca import AlpacaBroker
+
         return AlpacaBroker(
             api_key=settings.alpaca_api_key,
             api_secret=settings.alpaca_api_secret,
@@ -47,4 +48,5 @@ def get_broker_cached() -> BaseBroker:
     Restart the backend after rotating ALPACA_* keys or changing BROKER_MODE.
     """
     from app.config import get_settings
+
     return get_broker(get_settings())

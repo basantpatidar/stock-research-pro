@@ -1,7 +1,7 @@
-from langchain_core.tools import tool
 import requests
-from app.config import get_settings
+from langchain_core.tools import tool
 
+from app.config import get_settings
 
 SECTOR_IMPACT_MAP = {
     "oil": {
@@ -71,9 +71,15 @@ def get_geopolitical_events(query: str = "geopolitical market risk") -> dict:
 
                         title_lower = title.lower()
                         severity = "medium"
-                        if any(w in title_lower for w in ["war", "attack", "blockade", "invasion", "crisis"]):
+                        if any(
+                            w in title_lower
+                            for w in ["war", "attack", "blockade", "invasion", "crisis"]
+                        ):
                             severity = "critical"
-                        elif any(w in title_lower for w in ["sanctions", "ban", "tariff", "probe", "investigation"]):
+                        elif any(
+                            w in title_lower
+                            for w in ["sanctions", "ban", "tariff", "probe", "investigation"]
+                        ):
                             severity = "high"
 
                         impacted = []
@@ -84,14 +90,16 @@ def get_geopolitical_events(query: str = "geopolitical market risk") -> dict:
                         elif any(w in title_lower for w in ["trade", "tariff", "china"]):
                             impacted = SECTOR_IMPACT_MAP["trade"]["high_impact"]
 
-                        events.append({
-                            "title": title,
-                            "source": article.get("source", {}).get("name", ""),
-                            "published": article.get("publishedAt", "")[:10],
-                            "severity": severity,
-                            "impacted_sectors": impacted,
-                            "url": article.get("url", ""),
-                        })
+                        events.append(
+                            {
+                                "title": title,
+                                "source": article.get("source", {}).get("name", ""),
+                                "published": article.get("publishedAt", "")[:10],
+                                "severity": severity,
+                                "impacted_sectors": impacted,
+                                "url": article.get("url", ""),
+                            }
+                        )
                 except Exception:
                     continue
 
@@ -108,9 +116,9 @@ def get_geopolitical_events(query: str = "geopolitical market risk") -> dict:
         high = [e for e in unique_events if e["severity"] == "high"]
 
         market_stress = (
-            "HIGH — critical geopolitical events active" if critical
-            else "ELEVATED — significant events in play" if high
-            else "NORMAL"
+            "HIGH — critical geopolitical events active"
+            if critical
+            else "ELEVATED — significant events in play" if high else "NORMAL"
         )
 
         return {

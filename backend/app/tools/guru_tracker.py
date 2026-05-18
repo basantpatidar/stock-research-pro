@@ -1,8 +1,8 @@
-from langchain_core.tools import tool
-import requests
 import re
 import time
-from datetime import datetime
+
+import requests
+from langchain_core.tools import tool
 
 _HEADERS = {"User-Agent": "StockResearchPro research@stockresearchpro.local"}
 _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
@@ -26,7 +26,9 @@ def _get_latest_13f_accession(cik: str) -> tuple[str, str] | tuple[None, None]:
     """Returns (accession_no, filing_date) of latest 13F-HR."""
     try:
         time.sleep(0.12)
-        r = requests.get(_SUBMISSIONS_URL.format(cik=cik.lstrip("0").zfill(10)), headers=_HEADERS, timeout=12)
+        r = requests.get(
+            _SUBMISSIONS_URL.format(cik=cik.lstrip("0").zfill(10)), headers=_HEADERS, timeout=12
+        )
         if not r.ok:
             return None, None
         data = r.json()
@@ -73,8 +75,9 @@ def _search_13f_for_ticker(cik_raw: str, accession: str, target_ticker: str) -> 
         ticker_upper = target_ticker.upper()
         # 13F XML has <nameOfIssuer> and holdings
         entries = re.findall(
-            r'<nameOfIssuer>([^<]+)</nameOfIssuer>.*?<value>(\d+)</value>.*?<sshPrnamt>(\d+)</sshPrnamt>',
-            content, re.DOTALL | re.IGNORECASE
+            r"<nameOfIssuer>([^<]+)</nameOfIssuer>.*?<value>(\d+)</value>.*?<sshPrnamt>(\d+)</sshPrnamt>",
+            content,
+            re.DOTALL | re.IGNORECASE,
         )
         for entry in entries:
             name, value_thousands, shares = entry
@@ -107,13 +110,15 @@ def get_guru_holdings(ticker: str) -> dict:
                 continue
             holding = _search_13f_for_ticker(cik, accession, sym)
             if holding:
-                holdings.append({
-                    "guru": guru_name,
-                    "filing_date": filing_date,
-                    "shares": holding["shares"],
-                    "market_value_m": round(holding["market_value_k"] / 1000, 1),
-                    "issuer_name": holding["issuer_name"],
-                })
+                holdings.append(
+                    {
+                        "guru": guru_name,
+                        "filing_date": filing_date,
+                        "shares": holding["shares"],
+                        "market_value_m": round(holding["market_value_k"] / 1000, 1),
+                        "issuer_name": holding["issuer_name"],
+                    }
+                )
 
         if holdings:
             verdict = f"Held by {len(holdings)} guru(s)"

@@ -1,6 +1,8 @@
-from langchain_core.tools import tool
-import requests
 from datetime import datetime, timedelta
+
+import requests
+from langchain_core.tools import tool
+
 from app.config import get_settings
 
 
@@ -11,13 +13,25 @@ def _resolve_company_name(ticker: str, company_name: str) -> str:
     else:
         try:
             from app.tools._yf_client import get_ticker
+
             info = get_ticker(ticker).info
             name = info.get("longName") or info.get("shortName") or ""
         except Exception:
             name = ""
 
-    for suffix in (", Inc.", " Inc.", ", Corp.", " Corp.", ", Ltd.", " Ltd.",
-                   ", LLC", " LLC", " Holdings", " Group", " Corporation"):
+    for suffix in (
+        ", Inc.",
+        " Inc.",
+        ", Corp.",
+        " Corp.",
+        ", Ltd.",
+        " Ltd.",
+        ", LLC",
+        " LLC",
+        " Holdings",
+        " Group",
+        " Corporation",
+    ):
         name = name.replace(suffix, "")
     return name.strip()
 
@@ -53,22 +67,70 @@ def _relevance_score(title: str, description: str, ticker: str, company_name: st
 
 
 _CATALYST_RULES: list[tuple[str, list[str]]] = [
-    ("Earnings Beat/Miss",   ["beat", "miss", "earnings", "eps", "quarterly results", "revenue beat", "revenue miss"]),
-    ("Analyst Upgrade",      ["upgrade", "outperform", "overweight", "buy rating", "price target raised", "target raised"]),
-    ("Analyst Downgrade",    ["downgrade", "underperform", "underweight", "sell rating", "price target cut", "target cut"]),
-    ("FDA / Regulatory",     ["fda", "approval", "approved", "cleared", "rejected", "clinical trial", "drug"]),
-    ("Contract / Deal",      ["contract", "deal", "partnership", "agreement", "awarded", "signed"]),
-    ("Product Launch",       ["launch", "unveiled", "announced", "new product", "release"]),
-    ("Insider Buy",          ["insider buy", "insider purchase", "executive buy", "ceo buy"]),
-    ("Legal / Regulatory",   ["lawsuit", "investigation", "probe", "antitrust", "fine", "penalty", "fraud", "sec"]),
-    ("Macro Headwind",       ["tariff", "fed", "interest rate", "inflation", "recession", "gdp", "jobs report"]),
-    ("Layoffs / Restructure",["layoff", "restructur", "job cut", "workforce reduction", "downsiz"]),
-    ("M&A",                  ["acqui", "merger", "takeover", "buyout", "bid for"]),
-    ("Earnings Warning",     ["warning", "guidance cut", "lowered guidance", "below expectations", "profit warning"]),
+    (
+        "Earnings Beat/Miss",
+        ["beat", "miss", "earnings", "eps", "quarterly results", "revenue beat", "revenue miss"],
+    ),
+    (
+        "Analyst Upgrade",
+        [
+            "upgrade",
+            "outperform",
+            "overweight",
+            "buy rating",
+            "price target raised",
+            "target raised",
+        ],
+    ),
+    (
+        "Analyst Downgrade",
+        [
+            "downgrade",
+            "underperform",
+            "underweight",
+            "sell rating",
+            "price target cut",
+            "target cut",
+        ],
+    ),
+    (
+        "FDA / Regulatory",
+        ["fda", "approval", "approved", "cleared", "rejected", "clinical trial", "drug"],
+    ),
+    ("Contract / Deal", ["contract", "deal", "partnership", "agreement", "awarded", "signed"]),
+    ("Product Launch", ["launch", "unveiled", "announced", "new product", "release"]),
+    ("Insider Buy", ["insider buy", "insider purchase", "executive buy", "ceo buy"]),
+    (
+        "Legal / Regulatory",
+        ["lawsuit", "investigation", "probe", "antitrust", "fine", "penalty", "fraud", "sec"],
+    ),
+    (
+        "Macro Headwind",
+        ["tariff", "fed", "interest rate", "inflation", "recession", "gdp", "jobs report"],
+    ),
+    (
+        "Layoffs / Restructure",
+        ["layoff", "restructur", "job cut", "workforce reduction", "downsiz"],
+    ),
+    ("M&A", ["acqui", "merger", "takeover", "buyout", "bid for"]),
+    (
+        "Earnings Warning",
+        ["warning", "guidance cut", "lowered guidance", "below expectations", "profit warning"],
+    ),
 ]
 
-_STRENGTH_HIGH = ["beat", "raised", "upgrade", "approval", "contract", "merger", "acqui", "record", "fda approved"]
-_STRENGTH_LOW  = ["watch", "consider", "analyst note", "report says", "could", "may"]
+_STRENGTH_HIGH = [
+    "beat",
+    "raised",
+    "upgrade",
+    "approval",
+    "contract",
+    "merger",
+    "acqui",
+    "record",
+    "fda approved",
+]
+_STRENGTH_LOW = ["watch", "consider", "analyst note", "report says", "could", "may"]
 
 
 def _classify_catalyst(headline: str) -> str:
@@ -123,7 +185,12 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
 
         articles = data.get("articles", [])
         if not articles:
-            return {"ticker": ticker, "articles_found": 0, "news": [], "summary": "No recent news found"}
+            return {
+                "ticker": ticker,
+                "articles_found": 0,
+                "news": [],
+                "summary": "No recent news found",
+            }
 
         news_items = []
         for article in articles[:20]:
@@ -135,39 +202,78 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
 
             title_lower = title.lower()
             negative_words = [
-                "lawsuit", "investigation", "decline", "fall", "drop", "loss",
-                "miss", "cut", "downgrade", "bearish", "sell", "ban", "fine",
-                "probe", "antitrust", "breach", "hack", "layoff", "warning",
-                "recall", "fraud", "scandal", "crash", "plunge", "tumble",
+                "lawsuit",
+                "investigation",
+                "decline",
+                "fall",
+                "drop",
+                "loss",
+                "miss",
+                "cut",
+                "downgrade",
+                "bearish",
+                "sell",
+                "ban",
+                "fine",
+                "probe",
+                "antitrust",
+                "breach",
+                "hack",
+                "layoff",
+                "warning",
+                "recall",
+                "fraud",
+                "scandal",
+                "crash",
+                "plunge",
+                "tumble",
             ]
             positive_words = [
-                "beat", "rise", "gain", "profit", "upgrade", "bullish", "buy",
-                "record", "growth", "partnership", "deal", "award", "launch",
-                "surge", "rally", "strong", "exceed", "milestone", "approval",
+                "beat",
+                "rise",
+                "gain",
+                "profit",
+                "upgrade",
+                "bullish",
+                "buy",
+                "record",
+                "growth",
+                "partnership",
+                "deal",
+                "award",
+                "launch",
+                "surge",
+                "rally",
+                "strong",
+                "exceed",
+                "milestone",
+                "approval",
             ]
 
             neg_count = sum(1 for w in negative_words if w in title_lower)
             pos_count = sum(1 for w in positive_words if w in title_lower)
 
             sentiment = (
-                "negative" if neg_count > pos_count
-                else "positive" if pos_count > neg_count
-                else "neutral"
+                "negative"
+                if neg_count > pos_count
+                else "positive" if pos_count > neg_count else "neutral"
             )
 
             relevance = _relevance_score(title, description, ticker, company)
 
-            news_items.append({
-                "headline": title,
-                "description": description[:200] if description else "",
-                "source": source,
-                "published": published,
-                "sentiment": sentiment,
-                "url": url_link,
-                "catalyst_type": _classify_catalyst(title),
-                "catalyst_strength": _catalyst_strength(title),
-                "relevance_score": relevance,
-            })
+            news_items.append(
+                {
+                    "headline": title,
+                    "description": description[:200] if description else "",
+                    "source": source,
+                    "published": published,
+                    "sentiment": sentiment,
+                    "url": url_link,
+                    "catalyst_type": _classify_catalyst(title),
+                    "catalyst_strength": _catalyst_strength(title),
+                    "relevance_score": relevance,
+                }
+            )
 
         # Drop articles where neither title nor description mention the company
         relevant = [n for n in news_items if n["relevance_score"] > 0]
@@ -180,9 +286,13 @@ def get_news_impact(ticker: str, company_name: str = "", days: int = 7) -> dict:
         neutral_count = sum(1 for n in relevant if n["sentiment"] == "neutral")
 
         overall = (
-            "predominantly negative" if negative_count > positive_count + neutral_count
-            else "predominantly positive" if positive_count > negative_count + neutral_count
-            else "mixed"
+            "predominantly negative"
+            if negative_count > positive_count + neutral_count
+            else (
+                "predominantly positive"
+                if positive_count > negative_count + neutral_count
+                else "mixed"
+            )
         )
 
         return {

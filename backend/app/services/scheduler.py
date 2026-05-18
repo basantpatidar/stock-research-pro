@@ -9,6 +9,7 @@ from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -36,23 +37,32 @@ def _write_heartbeat(record: dict) -> None:
 
 # ── Dip scanner background jobs ───────────────────────────────────────────────
 
+
 async def _run_dip_scan():
     """Fire dip-buy alerts every 5 min during market hours. Zero LLM calls."""
     import pytz
-    from app.tools.dip_scanner import ETF_TIERS, scan_dip_opportunities, _get_session_window, SESSION_WINDOWS
+
     from app.api.alerts import broadcast
     from app.services.trading.auto_trade import should_halt_scanner
+    from app.tools.dip_scanner import (
+        ETF_TIERS,
+        SESSION_WINDOWS,
+        _get_session_window,
+        scan_dip_opportunities,
+    )
 
     et_tz = pytz.timezone("America/New_York")
     now_et = datetime.now(et_tz)
     window = _get_session_window(now_et)
     if SESSION_WINDOWS.get(window, {}).get("score_delta") is None:
-        _write_heartbeat({
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "ts_et":  now_et.isoformat(),
-            "status": "skipped_closed",
-            "window": window,
-        })
+        _write_heartbeat(
+            {
+                "ts_utc": datetime.now(timezone.utc).isoformat(),
+                "ts_et": now_et.isoformat(),
+                "status": "skipped_closed",
+                "window": window,
+            }
+        )
         return  # outside trading hours — heartbeat still recorded
 
     # Daily-signal halt — once today's scanner_alerts >= cap, stop firing.
@@ -70,27 +80,31 @@ async def _run_dip_scan():
         result = scan_dip_opportunities(tickers, capital=1000.0)
         best = result.get("best")
         if best:
-            await broadcast({
-                "type": "dip_buy_alert",
-                "ticker": best["ticker"],
-                "score": best["score"],
-                "entry_price": best["entry_price"],
-                "target_price": best["target_price"],
-                "stop_price": best["stop_price"],
-                "expected_profit_dollar": best.get("expected_profit_dollar"),
-                "max_risk_dollar": best.get("max_risk_dollar"),
-                "risk_reward_ratio": best.get("risk_reward_ratio"),
-                "capital_used": best.get("capital_used", 1000.0),
-                "signals": best.get("signals", []),
-                "session_window": best.get("session_window_label", best.get("session_window")),
-                "vix": best.get("vix"),
-                "title": f"{best['ticker']} Dip Buy — Entry Zone (score {best['score']})",
-                "body": f"{best['ticker']} near support. Signals: {', '.join(best.get('signals', [])[:3])}",
-                "timestamp": result.get("timestamp"),
-            })
+            await broadcast(
+                {
+                    "type": "dip_buy_alert",
+                    "ticker": best["ticker"],
+                    "score": best["score"],
+                    "entry_price": best["entry_price"],
+                    "target_price": best["target_price"],
+                    "stop_price": best["stop_price"],
+                    "expected_profit_dollar": best.get("expected_profit_dollar"),
+                    "max_risk_dollar": best.get("max_risk_dollar"),
+                    "risk_reward_ratio": best.get("risk_reward_ratio"),
+                    "capital_used": best.get("capital_used", 1000.0),
+                    "signals": best.get("signals", []),
+                    "session_window": best.get("session_window_label", best.get("session_window")),
+                    "vix": best.get("vix"),
+                    "title": f"{best['ticker']} Dip Buy — Entry Zone (score {best['score']})",
+                    "body": f"{best['ticker']} near support. Signals: {', '.join(best.get('signals', [])[:3])}",
+                    "timestamp": result.get("timestamp"),
+                }
+            )
             logger.info(
                 "dip_scan: fired alert %s score=%d window=%s",
-                best["ticker"], best["score"], best.get("session_window"),
+                best["ticker"],
+                best["score"],
+                best.get("session_window"),
             )
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
@@ -98,35 +112,43 @@ async def _run_dip_scan():
 
     best = result.get("best") if isinstance(result, dict) else None
     candidates = (
-        len(result.get("opportunities", []))
-        + len(result.get("orb_opportunities", []))
-        + len(result.get("vwap_opportunities", []))
-        + len(result.get("failed_breakdown_opportunities", []))
-    ) if isinstance(result, dict) else 0
-    _write_heartbeat({
-        "ts_utc":       datetime.now(timezone.utc).isoformat(),
-        "ts_et":        now_et.isoformat(),
-        "status":       "error" if error else "ok",
-        "window":       window,
-        "tickers":      tickers,
-        "candidates":   candidates,
-        "best_ticker":  best.get("ticker") if best else None,
-        "best_score":   best.get("score")  if best else None,
-        "duration_ms":  int((time.monotonic() - t0) * 1000),
-        "error":        error,
-    })
+        (
+            len(result.get("opportunities", []))
+            + len(result.get("orb_opportunities", []))
+            + len(result.get("vwap_opportunities", []))
+            + len(result.get("failed_breakdown_opportunities", []))
+        )
+        if isinstance(result, dict)
+        else 0
+    )
+    _write_heartbeat(
+        {
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "ts_et": now_et.isoformat(),
+            "status": "error" if error else "ok",
+            "window": window,
+            "tickers": tickers,
+            "candidates": candidates,
+            "best_ticker": best.get("ticker") if best else None,
+            "best_score": best.get("score") if best else None,
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "error": error,
+        }
+    )
 
 
 async def _run_mcf_scan(force: bool = False, loose: bool = False):
     """Fire MCF (Market Context First) funnel scan every 5 min."""
-    import pytz
+    import uuid
     from datetime import datetime, timedelta, timezone
-    from app.tools.mcf_scanner import scan_mcf_opportunities
+
+    import pytz
+
     from app.db.database import get_db_direct
+    from app.db.models import ScannerAlert
     from app.services.data_cache import set_stock_cache
     from app.services.trading.auto_trade import should_halt_scanner
-    from app.db.models import ScannerAlert
-    import uuid
+    from app.tools.mcf_scanner import scan_mcf_opportunities
 
     # Run check
     et_tz = pytz.timezone("America/New_York")
@@ -159,7 +181,7 @@ async def _run_mcf_scan(force: bool = False, loose: bool = False):
                 ticker="MCF",
                 data_type="state",
                 data=state_data,
-                expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
             )
 
             # Save any new alerts; loose signals tagged so analytics can filter them
@@ -188,12 +210,13 @@ async def _run_mcf_scan(force: bool = False, loose: bool = False):
             if new_alerts:
                 await db.commit()
                 from app.services import notifier
+
                 for alert in new_alerts:
                     await notifier.send_scanner_alert(alert)
 
-
     except Exception as exc:
         logger.warning("mcf_scan job error: %s", exc)
+
 
 def _compute_fmd(bars, entry_time, entry_price: float) -> tuple[str | None, str]:
     """Forward 5-min direction. Returns (fmd, reason). fmd is None if can't compute.
@@ -203,6 +226,7 @@ def _compute_fmd(bars, entry_time, entry_price: float) -> tuple[str | None, str]
     bars-index may also be tz-naive in some yfinance versions — normalize.
     """
     from datetime import timedelta
+
     import pandas as pd
 
     if bars is None:
@@ -249,10 +273,12 @@ async def _resolve_open_alerts():
     last 7 days that still have null fmd (e.g., live dip_buy resolutions where
     the original yfinance fetch failed).
     """
+    from datetime import datetime, timedelta, timezone
+
     import pytz
-    from datetime import datetime, timezone, timedelta
     import yfinance as yf
-    from sqlalchemy import select, or_, and_
+    from sqlalchemy import and_, or_, select
+
     from app.db.database import get_db_direct
     from app.db.models import ScannerAlert
 
@@ -266,40 +292,47 @@ async def _resolve_open_alerts():
     # creation. Frees capital from dead-money trades that would otherwise drift
     # to ~breakeven by EOD (the dominant 2026-05-08 dip_buy failure mode).
     TIME_STOP_MINUTES = {
-        "dip_buy":          25,
-        "orb_breakout":     60,
-        "vwap_reclaim":     20,
+        "dip_buy": 25,
+        "orb_breakout": 60,
+        "vwap_reclaim": 20,
         "failed_breakdown": 30,
     }
 
     try:
         async for db in get_db_direct():
-            rows = (await db.execute(
-                select(ScannerAlert).where(
-                    or_(
-                        ScannerAlert.status == "open",
-                        and_(
-                            ScannerAlert.five_min_direction.is_(None),
-                            ScannerAlert.entry_time >= fmd_backfill_horizon,
-                            ScannerAlert.status.in_(("win", "loss")),
-                        ),
+            rows = (
+                (
+                    await db.execute(
+                        select(ScannerAlert).where(
+                            or_(
+                                ScannerAlert.status == "open",
+                                and_(
+                                    ScannerAlert.five_min_direction.is_(None),
+                                    ScannerAlert.entry_time >= fmd_backfill_horizon,
+                                    ScannerAlert.status.in_(("win", "loss")),
+                                ),
+                            )
+                        )
                     )
                 )
-            )).scalars().all()
+                .scalars()
+                .all()
+            )
 
             if not rows:
                 return
 
             open_rows = [r for r in rows if r.status == "open"]
-            fmd_rows  = [r for r in rows if r.five_min_direction is None]
+            fmd_rows = [r for r in rows if r.five_min_direction is None]
 
-            tickers_needed = list({r.ticker for r in rows})
             prices: dict[str, float] = {}
             if open_rows:
                 for ticker in {r.ticker for r in open_rows}:
                     try:
                         info = yf.Ticker(ticker).fast_info
-                        prices[ticker] = float(info.get("lastPrice") or info.get("regularMarketPrice") or 0)
+                        prices[ticker] = float(
+                            info.get("lastPrice") or info.get("regularMarketPrice") or 0
+                        )
                     except Exception as exc:
                         logger.debug("fast_info failed for %s: %s", ticker, exc)
 
@@ -336,7 +369,9 @@ async def _resolve_open_alerts():
                     # Time stop — fire before EOD so the row resolves while the
                     # market is still open (capital frees for next setup).
                     time_stop_min = TIME_STOP_MINUTES.get(row.signal_type or "dip_buy", 25)
-                    age_min = (now_utc - row.entry_time).total_seconds() / 60 if row.entry_time else 0
+                    age_min = (
+                        (now_utc - row.entry_time).total_seconds() / 60 if row.entry_time else 0
+                    )
                     if age_min >= time_stop_min and not eod_cutoff:
                         row.status = "win" if price > row.entry_price else "loss"
                         row.outcome_price = price
@@ -349,8 +384,12 @@ async def _resolve_open_alerts():
                         continue
 
                 row.outcome_time = now_utc
-                row.actual_pnl_pct = round((row.outcome_price - row.entry_price) / row.entry_price * 100, 3)
-                row.actual_pnl_dollar = round(row.actual_pnl_pct / 100 * (row.capital_used or 1000.0), 2)
+                row.actual_pnl_pct = round(
+                    (row.outcome_price - row.entry_price) / row.entry_price * 100, 3
+                )
+                row.actual_pnl_dollar = round(
+                    row.actual_pnl_pct / 100 * (row.capital_used or 1000.0), 2
+                )
 
             # Compute / backfill fmd for any row missing it (covers freshly-resolved
             # opens AND historical closed rows within the 7-day horizon)
@@ -364,7 +403,9 @@ async def _resolve_open_alerts():
                 else:
                     logger.debug(
                         "fmd skip ticker=%s entry=%s reason=%s",
-                        row.ticker, row.entry_time, reason,
+                        row.ticker,
+                        row.entry_time,
+                        reason,
                     )
 
             await db.commit()
@@ -387,9 +428,7 @@ async def _run_eod_dump():
     import subprocess
     import sys
 
-    log_dir = os.getenv("LOG_DIR") or str(
-        Path(__file__).resolve().parents[3] / "local_debugging"
-    )
+    log_dir = os.getenv("LOG_DIR") or str(Path(__file__).resolve().parents[3] / "local_debugging")
     script = Path(log_dir) / "eod_dump.py"
     if not script.exists():
         logger.warning("eod_dump: script not found at %s — skipping", script)
@@ -406,23 +445,33 @@ async def _run_eod_dump():
             lines = (proc.stdout or "").strip().splitlines()
             logger.info("eod_dump: report generated — %s", lines[-1].strip() if lines else "ok")
         else:
-            logger.warning("eod_dump: failed rc=%d — %s", proc.returncode, (proc.stderr or "")[-400:])
+            logger.warning(
+                "eod_dump: failed rc=%d — %s", proc.returncode, (proc.stderr or "")[-400:]
+            )
     except Exception as exc:
         logger.warning("eod_dump job error: %s", exc)
 
     # Send EOD Telegram summary — best-effort, runs regardless of eod_dump result
     try:
-        from sqlalchemy import select, func, and_
+        import pytz
+        from sqlalchemy import select
+
         from app.db.database import get_db_direct
         from app.db.models import ScannerAlert
         from app.services import notifier
-        import pytz
+
         today_et = datetime.now(pytz.timezone("America/New_York")).date()
         today_start = datetime.combine(today_et, datetime.min.time()).replace(tzinfo=timezone.utc)
         async for db in get_db_direct():
-            rows = (await db.execute(
-                select(ScannerAlert).where(ScannerAlert.entry_time >= today_start)
-            )).scalars().all()
+            rows = (
+                (
+                    await db.execute(
+                        select(ScannerAlert).where(ScannerAlert.entry_time >= today_start)
+                    )
+                )
+                .scalars()
+                .all()
+            )
         wins = sum(1 for r in rows if r.status == "win")
         losses = sum(1 for r in rows if r.status == "loss")
         open_count = sum(1 for r in rows if r.status == "open")
@@ -439,12 +488,15 @@ async def _run_eod_dump():
 
 async def _run_pre_market_digest():
     """Send a pre-market morning brief to Telegram."""
-    from app.services import notifier
+    from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import WatchlistItem
-    from sqlalchemy import select
+    from app.services import notifier
+
     try:
         import yfinance as yf
+
         vix = yf.Ticker("^VIX").fast_info.get("last_price")
         spy = yf.Ticker("SPY").fast_info
         spy_price = spy.get("last_price", 0)
@@ -456,9 +508,11 @@ async def _run_pre_market_digest():
 
     try:
         async for db in get_db_direct():
-            items = (await db.execute(
-                select(WatchlistItem).where(WatchlistItem.is_active == True)
-            )).scalars().all()
+            items = (
+                (await db.execute(select(WatchlistItem).where(WatchlistItem.is_active.is_(True))))
+                .scalars()
+                .all()
+            )
         tickers = [i.ticker for i in items]
     except Exception:
         tickers = []
@@ -544,6 +598,7 @@ def start_scheduler():
     # it self-skips when the flag is off, so flipping the env requires only
     # a restart, not a job-graph change.
     from app.services.trading.auto_trade import _run_auto_trade_subscriber
+
     scheduler.add_job(
         _run_auto_trade_subscriber,
         trigger=IntervalTrigger(seconds=settings.auto_trade_poll_seconds),
@@ -558,10 +613,13 @@ def start_scheduler():
     # so the Docker-only laptop produces the daily report with no manual step.
     # Also sends a Telegram EOD summary if TELEGRAM_ENABLED=true.
     import pytz
+
     scheduler.add_job(
         _run_eod_dump,
         trigger=CronTrigger(
-            day_of_week="mon-fri", hour=16, minute=35,
+            day_of_week="mon-fri",
+            hour=16,
+            minute=35,
             timezone=pytz.timezone("America/New_York"),
         ),
         id="eod_dump",
@@ -574,7 +632,9 @@ def start_scheduler():
     scheduler.add_job(
         _run_pre_market_digest,
         trigger=CronTrigger(
-            day_of_week="mon-fri", hour=9, minute=0,
+            day_of_week="mon-fri",
+            hour=9,
+            minute=0,
             timezone=pytz.timezone("America/New_York"),
         ),
         id="pre_market_digest",

@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
 from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -33,7 +34,9 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="")
 
     # Data sources
-    fred_api_key: str = Field(default="")   # free key: https://fred.stlouisfed.org/docs/api/api_key.html
+    fred_api_key: str = Field(
+        default=""
+    )  # free key: https://fred.stlouisfed.org/docs/api/api_key.html
     newsapi_key: str = Field(default="")
     reddit_client_id: str = Field(default="")
     reddit_client_secret: str = Field(default="")
@@ -41,7 +44,9 @@ class Settings(BaseSettings):
 
     # App
     api_key: str = Field(default="dev-secret-key-change-in-production")
-    database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@localhost:5432/stockresearch")
+    database_url: str = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/stockresearch"
+    )
     redis_url: str = Field(default="redis://localhost:6379")
     environment: str = Field(default="development")
 
@@ -56,7 +61,9 @@ class Settings(BaseSettings):
     broker_mode: str = Field(default="paper", description="paper | live")
     alpaca_api_key: str = Field(default="")
     alpaca_api_secret: str = Field(default="")
-    alpaca_base_url: str = Field(default="", description="optional override; auto-resolved from broker_mode if blank")
+    alpaca_base_url: str = Field(
+        default="", description="optional override; auto-resolved from broker_mode if blank"
+    )
 
     # Trade risk caps — enforced server-side at the API layer (see
     # services/trading/limits.py once Phase 2 lands). Frontend cannot bypass.
@@ -66,7 +73,9 @@ class Settings(BaseSettings):
     trade_daily_order_count_cap: int = Field(default=50)
     # Auto-trade — off until Phase 3 sign-off, even then gated per signal type
     auto_trade_enabled: bool = Field(default=False)
-    auto_trade_signal_types: str = Field(default="", description="comma-separated allowlist; empty = none")
+    auto_trade_signal_types: str = Field(
+        default="", description="comma-separated allowlist; empty = none"
+    )
     # Auto-trade subscriber poll interval (seconds). Short enough that scanner-
     # alert → broker submit stays sub-minute, long enough to avoid hammering DB.
     auto_trade_poll_seconds: int = Field(default=30)
@@ -86,20 +95,26 @@ class Settings(BaseSettings):
     log_dir: str = Field(default="./local_debugging")
 
     # Cache TTLs — stock data (days)
-    cache_ttl_earnings_fallback_days: int = Field(default=30)  # fallback when next_earnings_date unknown
-    cache_ttl_fundamentals_days: int = Field(default=30)       # quarterly — P/E, margins, FCF
-    cache_ttl_analyst_days: int = Field(default=1)             # price targets update weekly/sporadic
-    cache_ttl_short_interest_days: int = Field(default=7)      # FINRA bi-weekly; 7d is safe
-    cache_ttl_earnings_quality_days: int = Field(default=30)   # Piotroski/Beneish/Altman — quarterly
+    cache_ttl_earnings_fallback_days: int = Field(
+        default=30
+    )  # fallback when next_earnings_date unknown
+    cache_ttl_fundamentals_days: int = Field(default=30)  # quarterly — P/E, margins, FCF
+    cache_ttl_analyst_days: int = Field(default=1)  # price targets update weekly/sporadic
+    cache_ttl_short_interest_days: int = Field(default=7)  # FINRA bi-weekly; 7d is safe
+    cache_ttl_earnings_quality_days: int = Field(default=30)  # Piotroski/Beneish/Altman — quarterly
     # Cache TTLs — stock data (hours)
-    cache_ttl_news_hours: float = Field(default=0.5)           # 30 min — stale news is misleading
-    cache_ttl_congressional_hours: int = Field(default=24)     # sporadic STOCK Act filings
+    cache_ttl_news_hours: float = Field(default=0.5)  # 30 min — stale news is misleading
+    cache_ttl_congressional_hours: int = Field(default=24)  # sporadic STOCK Act filings
     # Cache TTLs — LLM results (hours)
-    cache_ttl_llm_short_hours: float = Field(default=0.5)      # intraday: convergence, sentiment, risk/reward
-    cache_ttl_llm_tier2_hours: float = Field(default=2.0)      # general tier2 fallback
-    cache_ttl_llm_tier3_hours: int = Field(default=24)         # daily: price_forecast, bull/bear, cascade
-    cache_ttl_llm_backtest_hours: int = Field(default=168)     # 7 days — historical data is stable
-    cache_ttl_llm_personas_hours: int = Field(default=168)     # 7 days — investment thesis changes slowly
+    cache_ttl_llm_short_hours: float = Field(
+        default=0.5
+    )  # intraday: convergence, sentiment, risk/reward
+    cache_ttl_llm_tier2_hours: float = Field(default=2.0)  # general tier2 fallback
+    cache_ttl_llm_tier3_hours: int = Field(default=24)  # daily: price_forecast, bull/bear, cascade
+    cache_ttl_llm_backtest_hours: int = Field(default=168)  # 7 days — historical data is stable
+    cache_ttl_llm_personas_hours: int = Field(
+        default=168
+    )  # 7 days — investment thesis changes slowly
 
     class Config:
         env_file = (".env.shared", ".env")

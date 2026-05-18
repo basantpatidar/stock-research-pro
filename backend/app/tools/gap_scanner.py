@@ -3,8 +3,10 @@ Pre-Market Gap Scanner — Sprint 10.
 Scans a list of tickers for pre/post-market gaps vs previous close.
 Pure yfinance math, 0 tokens.
 """
-from app.tools._yf_client import get_ticker
+
 from datetime import datetime, timezone
+
+from app.tools._yf_client import get_ticker
 
 
 def _float_class(float_shares: int | None) -> str:
@@ -40,23 +42,23 @@ def scan_gaps(tickers: list[str], threshold_pct: float = 2.0) -> dict:
     for ticker in tickers:
         try:
             stock = get_ticker(ticker)
-            info  = stock.info
+            info = stock.info
 
-            prev_close   = info.get("regularMarketPreviousClose") or info.get("previousClose")
-            pre_price    = info.get("preMarketPrice")
-            post_price   = info.get("postMarketPrice")
+            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            pre_price = info.get("preMarketPrice")
+            post_price = info.get("postMarketPrice")
             market_state = info.get("marketState", "REGULAR")
 
             # Pick the most relevant extended-hours price
             if market_state in ("PRE", "PREPRE"):
                 ext_price = pre_price
-                session   = "pre-market"
+                session = "pre-market"
             elif market_state in ("POST", "POSTPOST"):
                 ext_price = post_price
-                session   = "after-hours"
+                session = "after-hours"
             else:
                 ext_price = pre_price or post_price
-                session   = "pre-market" if pre_price else "after-hours"
+                session = "pre-market" if pre_price else "after-hours"
 
             if not ext_price or not prev_close or prev_close <= 0:
                 continue
@@ -66,32 +68,34 @@ def scan_gaps(tickers: list[str], threshold_pct: float = 2.0) -> dict:
                 continue
 
             # Volume ratio (today vs 10-day avg) — signal of unusual activity
-            vol     = info.get("regularMarketVolume") or info.get("volume")
+            vol = info.get("regularMarketVolume") or info.get("volume")
             avg_vol = info.get("averageVolume") or info.get("averageDailyVolume10Day")
             vol_ratio = round(vol / avg_vol, 2) if vol and avg_vol and avg_vol > 0 else None
 
-            gaps.append({
-                "ticker":           ticker.upper(),
-                "company_name":     info.get("longName", ticker),
-                "gap_pct":          gap_pct,
-                "direction":        "up" if gap_pct > 0 else "down",
-                "prev_close":       round(prev_close, 2),
-                "ext_price":        round(ext_price, 2),
-                "session":          session,
-                "gap_type":         _gap_type(info),
-                "float_shares":     info.get("floatShares"),
-                "float_class":      _float_class(info.get("floatShares")),
-                "vol_ratio":        vol_ratio,
-                "market_cap":       info.get("marketCap"),
-            })
+            gaps.append(
+                {
+                    "ticker": ticker.upper(),
+                    "company_name": info.get("longName", ticker),
+                    "gap_pct": gap_pct,
+                    "direction": "up" if gap_pct > 0 else "down",
+                    "prev_close": round(prev_close, 2),
+                    "ext_price": round(ext_price, 2),
+                    "session": session,
+                    "gap_type": _gap_type(info),
+                    "float_shares": info.get("floatShares"),
+                    "float_class": _float_class(info.get("floatShares")),
+                    "vol_ratio": vol_ratio,
+                    "market_cap": info.get("marketCap"),
+                }
+            )
         except Exception:
             continue
 
     gaps.sort(key=lambda x: abs(x["gap_pct"]), reverse=True)
 
     return {
-        "gaps":          gaps,
-        "scanned":       len(tickers),
+        "gaps": gaps,
+        "scanned": len(tickers),
         "threshold_pct": threshold_pct,
-        "timestamp":     datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

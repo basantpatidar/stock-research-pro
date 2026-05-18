@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
+
 from app.tools._yf_client import get_ticker
-import requests
 
 
 @tool
@@ -35,7 +35,9 @@ def get_macro_environment() -> dict:
 
                     prev = float(hist["Close"].iloc[-2]) if n >= 2 else current
                     week_ago = float(hist["Close"].iloc[-6]) if n >= 6 else prev
-                    month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    month_ago = (
+                        float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    )
                     three_m_ago = float(hist["Close"].iloc[0])
 
                     results[name] = {
@@ -51,17 +53,27 @@ def get_macro_environment() -> dict:
 
         vix_val = results.get("vix", {}).get("current", 0)
         environment = (
-            "RISK-OFF — extreme fear" if vix_val > 30
-            else "RISK-OFF — elevated fear" if vix_val > 20
-            else "NEUTRAL — moderate volatility" if vix_val > 15
-            else "RISK-ON — low fear"
+            "RISK-OFF — extreme fear"
+            if vix_val > 30
+            else (
+                "RISK-OFF — elevated fear"
+                if vix_val > 20
+                else "NEUTRAL — moderate volatility" if vix_val > 15 else "RISK-ON — low fear"
+            )
         )
 
         rec = (
-            "Reduce position sizes significantly. Widen stop losses." if vix_val > 30
-            else "Trade smaller. Be selective. Avoid new long positions in weak sectors." if vix_val > 20
-            else "Normal sizing acceptable. Standard risk management applies." if vix_val > 15
-            else "Favorable conditions for new positions."
+            "Reduce position sizes significantly. Widen stop losses."
+            if vix_val > 30
+            else (
+                "Trade smaller. Be selective. Avoid new long positions in weak sectors."
+                if vix_val > 20
+                else (
+                    "Normal sizing acceptable. Standard risk management applies."
+                    if vix_val > 15
+                    else "Favorable conditions for new positions."
+                )
+            )
         )
 
         return {
@@ -113,21 +125,29 @@ def get_sector_heatmap() -> dict:
                         return round(((current - base) / base) * 100, 2) if base else 0.0
 
                     prev_day = float(hist["Close"].iloc[-2]) if n >= 2 else current
-                    week_start = float(hist["Close"].iloc[-6]) if n >= 6 else float(hist["Close"].iloc[0])
-                    month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    week_start = (
+                        float(hist["Close"].iloc[-6]) if n >= 6 else float(hist["Close"].iloc[0])
+                    )
+                    month_ago = (
+                        float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                    )
                     three_m_ago = float(hist["Close"].iloc[0])
 
                     change_5d = _chg(week_start)
-                    sectors.append({
-                        "sector": sector_name,
-                        "etf": etf,
-                        "change_1d_pct": _chg(prev_day),
-                        "change_5d_pct": change_5d,
-                        "change_7d_pct": change_5d,
-                        "change_1m_pct": _chg(month_ago),
-                        "change_3m_pct": _chg(three_m_ago),
-                        "trend": "up" if change_5d > 0.5 else "down" if change_5d < -0.5 else "flat",
-                    })
+                    sectors.append(
+                        {
+                            "sector": sector_name,
+                            "etf": etf,
+                            "change_1d_pct": _chg(prev_day),
+                            "change_5d_pct": change_5d,
+                            "change_7d_pct": change_5d,
+                            "change_1m_pct": _chg(month_ago),
+                            "change_3m_pct": _chg(three_m_ago),
+                            "trend": (
+                                "up" if change_5d > 0.5 else "down" if change_5d < -0.5 else "flat"
+                            ),
+                        }
+                    )
             except Exception:
                 continue
 
@@ -207,19 +227,31 @@ def get_price_forecast(ticker: str) -> dict:
             "earnings_growth": growth,
             "forecast_inputs": {
                 "days_signal": (
-                    "oversold — technical bounce likely" if rsi < 30
-                    else "overbought — pullback possible" if rsi > 70
-                    else "neutral — no strong technical signal"
+                    "oversold — technical bounce likely"
+                    if rsi < 30
+                    else (
+                        "overbought — pullback possible"
+                        if rsi > 70
+                        else "neutral — no strong technical signal"
+                    )
                 ),
                 "weeks_signal": (
-                    "bullish — above long-term MA" if above_200
-                    else "bearish — below long-term MA" if above_200 is False
-                    else "insufficient data"
+                    "bullish — above long-term MA"
+                    if above_200
+                    else (
+                        "bearish — below long-term MA"
+                        if above_200 is False
+                        else "insufficient data"
+                    )
                 ),
                 "quarter_signal": (
-                    "bullish — analysts see significant upside" if upside and upside > 15
-                    else "bearish — analysts see downside" if upside and upside < -5
-                    else "neutral — limited analyst upside"
+                    "bullish — analysts see significant upside"
+                    if upside and upside > 15
+                    else (
+                        "bearish — analysts see downside"
+                        if upside and upside < -5
+                        else "neutral — limited analyst upside"
+                    )
                 ),
             },
         }
@@ -250,7 +282,6 @@ def get_risk_reward(ticker: str, entry_price: float = 0.0) -> dict:
 
         target = info.get("targetMeanPrice")
         if not target:
-            high_52 = float(hist["High"].max())
             target = round(current * 1.15, 2)
 
         stop_loss = round(support * 0.99, 2)
@@ -268,11 +299,17 @@ def get_risk_reward(ticker: str, entry_price: float = 0.0) -> dict:
             "potential_loss_pct": round((price - stop_loss) / price * 100, 1),
             "risk_reward_ratio": rr_ratio,
             "trade_quality": (
-                "excellent" if rr_ratio and rr_ratio >= 4
-                else "good" if rr_ratio and rr_ratio >= 3
-                else "acceptable" if rr_ratio and rr_ratio >= 2
-                else "poor — skip this trade" if rr_ratio
-                else "unable to calculate"
+                "excellent"
+                if rr_ratio and rr_ratio >= 4
+                else (
+                    "good"
+                    if rr_ratio and rr_ratio >= 3
+                    else (
+                        "acceptable"
+                        if rr_ratio and rr_ratio >= 2
+                        else "poor — skip this trade" if rr_ratio else "unable to calculate"
+                    )
+                )
             ),
         }
     except Exception as e:
@@ -302,6 +339,7 @@ def run_screener(
     """
     try:
         from app.tools.universe import get_universe
+
         # Resolve universe; cap to 150 max so a "limit=99999" can't DOS the API
         ticker_pool = get_universe(universe)
         screen_count = max(1, min(int(limit), 150))
@@ -332,7 +370,9 @@ def run_screener(
 
                 prev_day = float(hist["Close"].iloc[-2]) if n >= 2 else current
                 week_ago = float(hist["Close"].iloc[-6]) if n >= 6 else float(hist["Close"].iloc[0])
-                month_ago = float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                month_ago = (
+                    float(hist["Close"].iloc[-22]) if n >= 22 else float(hist["Close"].iloc[0])
+                )
                 three_m_ago = float(hist["Close"].iloc[0])
 
                 drop_pct = _chg(week_ago)
@@ -345,19 +385,21 @@ def run_screener(
                     if sector.lower() not in stock_sector:
                         continue
 
-                results.append({
-                    "ticker": ticker,
-                    "company": info.get("longName", ticker),
-                    "price": round(current, 2),
-                    "change_1d_pct": _chg(prev_day),
-                    "change_7d_pct": drop_pct,
-                    "change_1m_pct": _chg(month_ago),
-                    "change_3m_pct": _chg(three_m_ago),
-                    "market_cap_b": round(market_cap / 1_000_000_000, 1),
-                    "avg_volume": int(avg_vol),
-                    "sector": info.get("sector", "Unknown"),
-                    "pe_ratio": info.get("trailingPE"),
-                })
+                results.append(
+                    {
+                        "ticker": ticker,
+                        "company": info.get("longName", ticker),
+                        "price": round(current, 2),
+                        "change_1d_pct": _chg(prev_day),
+                        "change_7d_pct": drop_pct,
+                        "change_1m_pct": _chg(month_ago),
+                        "change_3m_pct": _chg(three_m_ago),
+                        "market_cap_b": round(market_cap / 1_000_000_000, 1),
+                        "avg_volume": int(avg_vol),
+                        "sector": info.get("sector", "Unknown"),
+                        "pe_ratio": info.get("trailingPE"),
+                    }
+                )
             except Exception:
                 continue
 
@@ -400,81 +442,195 @@ def get_convergence_score(
     if rsi > 0:
         if rsi < 30:
             score += 12
-            signals.append({"signal": "RSI", "value": f"{rsi} — oversold", "direction": "bullish", "points": 12})
+            signals.append(
+                {
+                    "signal": "RSI",
+                    "value": f"{rsi} — oversold",
+                    "direction": "bullish",
+                    "points": 12,
+                }
+            )
         elif rsi > 70:
             score -= 12
-            signals.append({"signal": "RSI", "value": f"{rsi} — overbought", "direction": "bearish", "points": -12})
+            signals.append(
+                {
+                    "signal": "RSI",
+                    "value": f"{rsi} — overbought",
+                    "direction": "bearish",
+                    "points": -12,
+                }
+            )
         else:
-            signals.append({"signal": "RSI", "value": f"{rsi} — neutral", "direction": "neutral", "points": 0})
+            signals.append(
+                {"signal": "RSI", "value": f"{rsi} — neutral", "direction": "neutral", "points": 0}
+            )
 
     if analyst_consensus:
         ac = analyst_consensus.lower()
         if "strong buy" in ac or "buy" in ac:
             score += 10
-            signals.append({"signal": "Analyst consensus", "value": analyst_consensus, "direction": "bullish", "points": 10})
+            signals.append(
+                {
+                    "signal": "Analyst consensus",
+                    "value": analyst_consensus,
+                    "direction": "bullish",
+                    "points": 10,
+                }
+            )
         elif "sell" in ac:
             score -= 10
-            signals.append({"signal": "Analyst consensus", "value": analyst_consensus, "direction": "bearish", "points": -10})
+            signals.append(
+                {
+                    "signal": "Analyst consensus",
+                    "value": analyst_consensus,
+                    "direction": "bearish",
+                    "points": -10,
+                }
+            )
 
     if sentiment:
         s = sentiment.lower()
         if "bullish" in s:
             score += 8
-            signals.append({"signal": "Social sentiment", "value": sentiment, "direction": "bullish", "points": 8})
+            signals.append(
+                {
+                    "signal": "Social sentiment",
+                    "value": sentiment,
+                    "direction": "bullish",
+                    "points": 8,
+                }
+            )
         elif "bearish" in s:
             score -= 8
-            signals.append({"signal": "Social sentiment", "value": sentiment, "direction": "bearish", "points": -8})
+            signals.append(
+                {
+                    "signal": "Social sentiment",
+                    "value": sentiment,
+                    "direction": "bearish",
+                    "points": -8,
+                }
+            )
 
     if macd_signal:
         if "bullish" in macd_signal.lower():
             score += 8
-            signals.append({"signal": "MACD", "value": macd_signal, "direction": "bullish", "points": 8})
+            signals.append(
+                {"signal": "MACD", "value": macd_signal, "direction": "bullish", "points": 8}
+            )
         elif "bearish" in macd_signal.lower():
             score -= 8
-            signals.append({"signal": "MACD", "value": macd_signal, "direction": "bearish", "points": -8})
+            signals.append(
+                {"signal": "MACD", "value": macd_signal, "direction": "bearish", "points": -8}
+            )
 
     if insider_signal:
         if "bullish" in insider_signal.lower() or "buying" in insider_signal.lower():
             score += 15
-            signals.append({"signal": "Insider activity", "value": insider_signal, "direction": "bullish", "points": 15})
+            signals.append(
+                {
+                    "signal": "Insider activity",
+                    "value": insider_signal,
+                    "direction": "bullish",
+                    "points": 15,
+                }
+            )
         elif "bearish" in insider_signal.lower() or "selling" in insider_signal.lower():
             score -= 10
-            signals.append({"signal": "Insider activity", "value": insider_signal, "direction": "bearish", "points": -10})
+            signals.append(
+                {
+                    "signal": "Insider activity",
+                    "value": insider_signal,
+                    "direction": "bearish",
+                    "points": -10,
+                }
+            )
 
     if options_signal:
         if "bullish" in options_signal.lower():
             score += 8
-            signals.append({"signal": "Options flow", "value": options_signal, "direction": "bullish", "points": 8})
+            signals.append(
+                {
+                    "signal": "Options flow",
+                    "value": options_signal,
+                    "direction": "bullish",
+                    "points": 8,
+                }
+            )
         elif "bearish" in options_signal.lower() or "put heavy" in options_signal.lower():
             score -= 8
-            signals.append({"signal": "Options flow", "value": options_signal, "direction": "bearish", "points": -8})
+            signals.append(
+                {
+                    "signal": "Options flow",
+                    "value": options_signal,
+                    "direction": "bearish",
+                    "points": -8,
+                }
+            )
 
     if macro_environment:
         m = macro_environment.lower()
         if "risk-off" in m or "extreme fear" in m:
             score -= 15
-            signals.append({"signal": "Macro environment", "value": macro_environment, "direction": "bearish", "points": -15})
+            signals.append(
+                {
+                    "signal": "Macro environment",
+                    "value": macro_environment,
+                    "direction": "bearish",
+                    "points": -15,
+                }
+            )
         elif "risk-on" in m:
             score += 8
-            signals.append({"signal": "Macro environment", "value": macro_environment, "direction": "bullish", "points": 8})
+            signals.append(
+                {
+                    "signal": "Macro environment",
+                    "value": macro_environment,
+                    "direction": "bullish",
+                    "points": 8,
+                }
+            )
 
     if news_sentiment:
         n = news_sentiment.lower()
         if "positive" in n:
             score += 7
-            signals.append({"signal": "News sentiment", "value": news_sentiment, "direction": "bullish", "points": 7})
+            signals.append(
+                {
+                    "signal": "News sentiment",
+                    "value": news_sentiment,
+                    "direction": "bullish",
+                    "points": 7,
+                }
+            )
         elif "negative" in n:
             score -= 7
-            signals.append({"signal": "News sentiment", "value": news_sentiment, "direction": "bearish", "points": -7})
+            signals.append(
+                {
+                    "signal": "News sentiment",
+                    "value": news_sentiment,
+                    "direction": "bearish",
+                    "points": -7,
+                }
+            )
 
     score = max(0, min(100, score))
 
     label = (
-        "Strong buy — high conviction" if score >= 75
-        else "Buy — good setup" if score >= 60
-        else "Weak buy — wait for better entry" if score >= 50
-        else "Neutral — insufficient signal" if score >= 40
-        else "Avoid — bearish signals dominant"
+        "Strong buy — high conviction"
+        if score >= 75
+        else (
+            "Buy — good setup"
+            if score >= 60
+            else (
+                "Weak buy — wait for better entry"
+                if score >= 50
+                else (
+                    "Neutral — insufficient signal"
+                    if score >= 40
+                    else "Avoid — bearish signals dominant"
+                )
+            )
+        )
     )
 
     return {
@@ -496,6 +652,7 @@ def get_trends(ticker: str, company_name: str = "") -> dict:
     """
     try:
         from pytrends.request import TrendReq
+
         pytrends = TrendReq(hl="en-US", tz=360)
         kw = company_name if company_name else ticker
         pytrends.build_payload([kw], timeframe="now 7-d", geo="US")

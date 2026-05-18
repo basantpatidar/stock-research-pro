@@ -36,9 +36,9 @@ def _stock_data_ttl_days(data_type: str) -> float:
 
 def _llm_ttl_hours(tool_name: str) -> float:
     s = get_settings()
-    short = s.cache_ttl_llm_short_hours   # 0.5h — intraday signals that move with price
-    tier2 = s.cache_ttl_llm_tier2_hours   # 2h  — general tier2 fallback
-    tier3 = s.cache_ttl_llm_tier3_hours   # 24h — daily analysis
+    short = s.cache_ttl_llm_short_hours  # 0.5h — intraday signals that move with price
+    tier2 = s.cache_ttl_llm_tier2_hours  # 2h  — general tier2 fallback
+    tier3 = s.cache_ttl_llm_tier3_hours  # 24h — daily analysis
     return {
         # 30-min window — recalculate as price/news changes throughout the day
         "get_convergence_score": short,
@@ -82,6 +82,7 @@ def stock_data_expiry(data_type: str) -> datetime:
 
 
 # ── StockDataCache ────────────────────────────────────────────────────────────
+
 
 async def get_stock_cache(db: AsyncSession | None, ticker: str, data_type: str) -> dict | None:
     if db is None:
@@ -159,6 +160,7 @@ async def set_stock_cache(
 
 
 # ── ResearchCache (LLM results) ───────────────────────────────────────────────
+
 
 async def get_llm_cache(db: AsyncSession | None, ticker: str, tool_name: str) -> dict | None:
     if db is None:

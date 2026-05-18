@@ -10,6 +10,7 @@ _API = "https://api.telegram.org/bot{token}/{method}"
 
 def _cfg() -> tuple[bool, str, str]:
     from app.config import get_settings
+
     s = get_settings()
     return s.telegram_enabled, s.telegram_bot_token or "", s.telegram_chat_id or ""
 
@@ -24,12 +25,20 @@ async def _get_active_chat_ids() -> list[str]:
         return []
     try:
         from sqlalchemy import select
+
         from app.db.database import get_db_direct
         from app.db.models import TelegramUser
+
         async for db in get_db_direct():
-            rows = (await db.execute(
-                select(TelegramUser.chat_id).where(TelegramUser.is_active == True)
-            )).scalars().all()
+            rows = (
+                (
+                    await db.execute(
+                        select(TelegramUser.chat_id).where(TelegramUser.is_active.is_(True))
+                    )
+                )
+                .scalars()
+                .all()
+            )
         if rows:
             return list(rows)
     except Exception as exc:
@@ -65,6 +74,7 @@ async def _broadcast(method: str, payload: dict) -> bool:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 async def send_to(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
     """Send a message to a specific chat_id (used by command handler for replies)."""
     return await _post_to(chat_id, "sendMessage", {"text": text, "parse_mode": parse_mode})
@@ -97,7 +107,9 @@ async def send_scanner_alert(alert) -> bool:
     return await _broadcast("sendMessage", {"text": text, "parse_mode": "HTML"})
 
 
-async def send_watchlist_alert(ticker: str, signal: str, score: int, price: float, change_7d: float) -> bool:
+async def send_watchlist_alert(
+    ticker: str, signal: str, score: int, price: float, change_7d: float
+) -> bool:
     """Broadcast a watchlist signal alert to all active users."""
     emoji = "🟢" if score >= 70 else "🔴"
     arrow = "▲" if change_7d >= 0 else "▼"
@@ -109,7 +121,9 @@ async def send_watchlist_alert(ticker: str, signal: str, score: int, price: floa
     return await _broadcast("sendMessage", {"text": text, "parse_mode": "HTML"})
 
 
-async def send_daily_report(signals_today: int, wins: int, losses: int, open_count: int, near_misses: int) -> bool:
+async def send_daily_report(
+    signals_today: int, wins: int, losses: int, open_count: int, near_misses: int
+) -> bool:
     """Broadcast EOD daily summary to all active users."""
     resolved = wins + losses
     win_rate = f"{round(wins / resolved * 100)}%" if resolved > 0 else "N/A"
@@ -123,7 +137,9 @@ async def send_daily_report(signals_today: int, wins: int, losses: int, open_cou
     return await _broadcast("sendMessage", {"text": text, "parse_mode": "HTML"})
 
 
-async def send_pre_market_digest(vix: float | None, spy_bias: str, watchlist_count: int, top_tickers: list[str]) -> bool:
+async def send_pre_market_digest(
+    vix: float | None, spy_bias: str, watchlist_count: int, top_tickers: list[str]
+) -> bool:
     """Broadcast pre-market morning brief to all active users."""
     vix_str = f"{vix:.1f}" if vix is not None else "N/A"
     tickers_str = ", ".join(top_tickers[:5]) if top_tickers else "none"

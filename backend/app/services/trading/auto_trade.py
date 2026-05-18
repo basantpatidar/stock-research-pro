@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
-from datetime import datetime, time, timezone
+from datetime import datetime, time
 from typing import TYPE_CHECKING
 
 import pytz
@@ -55,6 +54,7 @@ _ET = pytz.timezone("America/New_York")
 
 # ── Time helpers ──────────────────────────────────────────────────────────────
 
+
 def _today_et_midnight_utc() -> datetime:
     """Today's midnight ET as a tz-aware UTC datetime — same anchor the risk
     limits use, so 'today' means the same thing in both places."""
@@ -73,6 +73,7 @@ def _is_market_hours_et() -> bool:
 
 
 # ── Scanner halt ──────────────────────────────────────────────────────────────
+
 
 async def count_alerts_today(db: AsyncSession) -> int:
     """Count of `scanner_alerts` rows with entry_time >= today-midnight-ET.
@@ -101,6 +102,7 @@ async def should_halt_scanner(settings: "Settings") -> bool:
 
 # ── Allowlist ─────────────────────────────────────────────────────────────────
 
+
 def _parse_allowlist(raw: str) -> set[str]:
     """`AUTO_TRADE_SIGNAL_TYPES` is comma-separated. Empty = nothing fires
     (intentional — auto-trade is opt-in *per signal type*, not en-bloc)."""
@@ -108,6 +110,7 @@ def _parse_allowlist(raw: str) -> set[str]:
 
 
 # ── Order submission ──────────────────────────────────────────────────────────
+
 
 def _alert_to_order_request(alert: ScannerAlert, capital: float) -> PlaceOrderRequest | None:
     """Convert a ScannerAlert into a bracket limit order. Returns None when
@@ -156,9 +159,11 @@ async def submit_order_for_alert(
 
     # Idempotency — if this alert already produced an order, don't double-submit.
     # client_order_id = f"auto-{alert.id}" makes this both DB- and broker-safe.
-    existing = (await db.scalars(
-        select(BrokerOrder).where(BrokerOrder.client_order_id == req.client_order_id)
-    )).one_or_none()
+    existing = (
+        await db.scalars(
+            select(BrokerOrder).where(BrokerOrder.client_order_id == req.client_order_id)
+        )
+    ).one_or_none()
     if existing is not None:
         return existing, None
 
@@ -205,6 +210,7 @@ async def submit_order_for_alert(
 
 
 # ── Subscriber loop ───────────────────────────────────────────────────────────
+
 
 async def _run_auto_trade_subscriber():
     """Scheduler tick — scan open alerts, fire orders for the ones we haven't
@@ -258,14 +264,18 @@ async def _run_auto_trade_subscriber():
                         await db.commit()
                         logger.info(
                             "auto_trade: submitted order for alert %s (%s) — client_order_id=%s",
-                            alert.id, alert.ticker, row.client_order_id,
+                            alert.id,
+                            alert.ticker,
+                            row.client_order_id,
                         )
                     else:
                         # Roll back the in-progress row insert before next alert
                         await db.rollback()
                         logger.info(
                             "auto_trade: skipped alert %s (%s) — %s",
-                            alert.id, alert.ticker, reason,
+                            alert.id,
+                            alert.ticker,
+                            reason,
                         )
                         # Daily count cap → stop processing for the rest of the tick
                         if reason == "daily_order_count_cap_reached":

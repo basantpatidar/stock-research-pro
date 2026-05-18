@@ -1,31 +1,84 @@
 import yfinance as yf
-import pandas as pd
-import numpy as np
 
 # Representative S&P 500 proxy — 6 stocks per sector, 11 sectors
 _PROXY_TICKERS = [
     # Technology
-    "AAPL", "MSFT", "NVDA", "GOOGL", "META", "AVGO",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "GOOGL",
+    "META",
+    "AVGO",
     # Financials
-    "JPM", "BAC", "GS", "V", "MA", "BRK-B",
+    "JPM",
+    "BAC",
+    "GS",
+    "V",
+    "MA",
+    "BRK-B",
     # Healthcare
-    "UNH", "JNJ", "LLY", "ABBV", "MRK", "TMO",
+    "UNH",
+    "JNJ",
+    "LLY",
+    "ABBV",
+    "MRK",
+    "TMO",
     # Consumer Discretionary
-    "AMZN", "TSLA", "HD", "MCD", "NKE", "BKNG",
+    "AMZN",
+    "TSLA",
+    "HD",
+    "MCD",
+    "NKE",
+    "BKNG",
     # Industrials
-    "CAT", "HON", "UPS", "GE", "RTX", "DE",
+    "CAT",
+    "HON",
+    "UPS",
+    "GE",
+    "RTX",
+    "DE",
     # Communication Services
-    "NFLX", "DIS", "CMCSA", "T", "VZ", "CHTR",
+    "NFLX",
+    "DIS",
+    "CMCSA",
+    "T",
+    "VZ",
+    "CHTR",
     # Energy
-    "XOM", "CVX", "COP", "SLB", "EOG", "OXY",
+    "XOM",
+    "CVX",
+    "COP",
+    "SLB",
+    "EOG",
+    "OXY",
     # Consumer Staples
-    "PG", "KO", "PEP", "WMT", "COST", "CL",
+    "PG",
+    "KO",
+    "PEP",
+    "WMT",
+    "COST",
+    "CL",
     # Utilities
-    "NEE", "DUK", "SO", "D", "AEP", "EXC",
+    "NEE",
+    "DUK",
+    "SO",
+    "D",
+    "AEP",
+    "EXC",
     # Materials
-    "LIN", "APD", "SHW", "ECL", "NEM", "FCX",
+    "LIN",
+    "APD",
+    "SHW",
+    "ECL",
+    "NEM",
+    "FCX",
     # Real Estate
-    "AMT", "PLD", "CCI", "EQIX", "PSA", "O",
+    "AMT",
+    "PLD",
+    "CCI",
+    "EQIX",
+    "PSA",
+    "O",
 ]
 
 

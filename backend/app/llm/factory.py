@@ -1,11 +1,12 @@
 from langchain_core.language_models import BaseChatModel
+
 from app.config import Settings
 
 # Free-tier requests-per-second for each provider (sourced from provider docs)
 _FREE_TIER_RPS = {
-    "gemini":    4 / 60,   # 5 RPM limit → stay at 4
-    "groq":     25 / 60,   # 30 RPM limit → stay at 25
-    "cerebras": 25 / 60,   # 30 RPM limit → stay at 25
+    "gemini": 4 / 60,  # 5 RPM limit → stay at 4
+    "groq": 25 / 60,  # 30 RPM limit → stay at 25
+    "cerebras": 25 / 60,  # 30 RPM limit → stay at 25
     "openrouter": 5 / 60,  # varies by model; conservative default
 }
 
@@ -18,6 +19,7 @@ def _rate_limiter(provider: str, settings: Settings):
     if rps is None:
         return None
     from langchain_core.rate_limiters import InMemoryRateLimiter
+
     return InMemoryRateLimiter(requests_per_second=rps)
 
 
@@ -31,6 +33,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "groq":
             from langchain_groq import ChatGroq
+
             return ChatGroq(
                 model=model,
                 api_key=settings.groq_api_key,
@@ -41,6 +44,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "ollama":
             from langchain_ollama import ChatOllama
+
             return ChatOllama(
                 model=model,
                 temperature=0.1,
@@ -48,6 +52,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "gemini":
             from langchain_google_genai import ChatGoogleGenerativeAI
+
             return ChatGoogleGenerativeAI(
                 model=model,
                 google_api_key=settings.gemini_api_key,
@@ -58,6 +63,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "claude":
             from langchain_anthropic import ChatAnthropic
+
             return ChatAnthropic(
                 model=model,
                 api_key=settings.anthropic_api_key,
@@ -67,6 +73,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "openai":
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 api_key=settings.openai_api_key,
@@ -76,6 +83,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "openrouter":
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 base_url="https://openrouter.ai/api/v1",
@@ -87,6 +95,7 @@ def _build_llm(provider: str, model: str, settings: Settings) -> BaseChatModel:
 
         case "cerebras":
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 base_url="https://api.cerebras.ai/v1",
@@ -162,6 +171,5 @@ def get_llm_with_fallback(settings: Settings, task: str = "agent") -> BaseChatMo
     if not built:
         raise RuntimeError("All LLM providers failed — no valid model could be constructed.")
 
-    from langchain_core.runnables import RunnableWithFallbacks
     primary, *fallbacks = built
     return primary.with_fallbacks(fallbacks) if fallbacks else primary

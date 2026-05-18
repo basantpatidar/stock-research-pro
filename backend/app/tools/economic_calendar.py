@@ -1,19 +1,20 @@
-import httpx
 from datetime import date, timedelta
-from app.config import get_settings
 
+import httpx
+
+from app.config import get_settings
 
 # Curated high-impact FRED release IDs
 _RELEASES = {
-    326: {"name": "FOMC Meeting",        "impact": "high"},
-    10:  {"name": "CPI",                 "impact": "high"},
-    50:  {"name": "Jobs Report (NFP)",   "impact": "high"},
-    53:  {"name": "GDP",                 "impact": "high"},
-    54:  {"name": "PCE / Personal Income","impact": "high"},
-    46:  {"name": "PPI",                 "impact": "medium"},
-    82:  {"name": "Retail Sales",        "impact": "medium"},
-    175: {"name": "Consumer Sentiment",  "impact": "medium"},
-    22:  {"name": "Housing Starts",      "impact": "medium"},
+    326: {"name": "FOMC Meeting", "impact": "high"},
+    10: {"name": "CPI", "impact": "high"},
+    50: {"name": "Jobs Report (NFP)", "impact": "high"},
+    53: {"name": "GDP", "impact": "high"},
+    54: {"name": "PCE / Personal Income", "impact": "high"},
+    46: {"name": "PPI", "impact": "medium"},
+    82: {"name": "Retail Sales", "impact": "medium"},
+    175: {"name": "Consumer Sentiment", "impact": "medium"},
+    22: {"name": "Housing Starts", "impact": "medium"},
 }
 
 
@@ -54,12 +55,14 @@ def get_economic_calendar(days_ahead: int = 14) -> dict:
                 continue
             seen.add(key)
             meta = _RELEASES[rid]
-            events.append({
-                "date": item["date"],
-                "name": meta["name"],
-                "impact": meta["impact"],
-                "days_until": (date.fromisoformat(item["date"]) - today).days,
-            })
+            events.append(
+                {
+                    "date": item["date"],
+                    "name": meta["name"],
+                    "impact": meta["impact"],
+                    "days_until": (date.fromisoformat(item["date"]) - today).days,
+                }
+            )
 
         return {
             "events": events,
