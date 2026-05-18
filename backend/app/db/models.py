@@ -2,8 +2,18 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -29,7 +39,7 @@ class ScreenerPreset(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    filters: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    filters: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
     auto_monitor: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -58,7 +68,7 @@ class ResearchCache(Base):
     ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     # tool name, e.g. "get_convergence_score" — widened from 20 to support all tool names
     mode: Mapped[str] = mapped_column(String(100), nullable=False)
-    result: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    result: Mapped[Any] = mapped_column(JSON, nullable=False)
     cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -70,14 +80,14 @@ class ScannerAlert(Base):
 
     __tablename__ = "scanner_alerts"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
     target_price: Mapped[float] = mapped_column(Float, nullable=False)
     stop_price: Mapped[float] = mapped_column(Float, nullable=False)
     entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    signals: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    signals: Mapped[Any] = mapped_column(JSON, nullable=True)
     session_window: Mapped[str | None] = mapped_column(String(30), nullable=True)
     vix_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
     capital_used: Mapped[float] = mapped_column(Float, default=1000.0)
@@ -119,7 +129,7 @@ class BrokerOrder(Base):
 
     __tablename__ = "broker_orders"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     broker: Mapped[str] = mapped_column(String(20), nullable=False)
     broker_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(10), nullable=False)  # paper | live — frozen for audit
@@ -144,7 +154,7 @@ class BrokerOrder(Base):
         String(20), nullable=False, default="manual"
     )  # manual | scanner_alert
     scanner_alert_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
+        Uuid(as_uuid=True), nullable=True, index=True
     )
     # We generate this UUID on the frontend so retries are idempotent on the
     # broker side. Unique constraint catches accidental double-clicks.
@@ -158,7 +168,7 @@ class TelegramUser(Base):
 
     __tablename__ = "telegram_users"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chat_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -186,7 +196,7 @@ class StockDataCache(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     data_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    data: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    data: Mapped[Any] = mapped_column(JSON, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
