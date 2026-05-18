@@ -1,7 +1,7 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 import pandas as pd
-import numpy as np
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 @tool
@@ -43,7 +43,8 @@ def get_vcp_pattern(ticker: str) -> dict:
             "label": "Stage 2 Uptrend (Price > 150d > 200d SMA)",
             "detail": (
                 f"Price ${current:.2f} vs 150d ${ma150:.2f} vs 200d ${ma200:.2f}"
-                if ma150 and ma200 else "Insufficient data for 200d MA"
+                if ma150 and ma200
+                else "Insufficient data for 200d MA"
             ),
         }
 
@@ -68,9 +69,18 @@ def get_vcp_pattern(ticker: str) -> dict:
         rs_detail = "RS not computed"
         try:
             import yfinance as yf
+
             spy = yf.Ticker("SPY").history(period="1y")["Close"]
-            stk_ret = float(closes.pct_change(252).dropna().iloc[-1]) if len(closes) >= 252 else float(closes.pct_change(len(closes)-1).iloc[-1])
-            spy_ret = float(spy.pct_change(252).dropna().iloc[-1]) if len(spy) >= 252 else float(spy.pct_change(len(spy)-1).iloc[-1])
+            stk_ret = (
+                float(closes.pct_change(252).dropna().iloc[-1])
+                if len(closes) >= 252
+                else float(closes.pct_change(len(closes) - 1).iloc[-1])
+            )
+            spy_ret = (
+                float(spy.pct_change(252).dropna().iloc[-1])
+                if len(spy) >= 252
+                else float(spy.pct_change(len(spy) - 1).iloc[-1])
+            )
             rs_proxy = min(99, max(0, int(50 + (stk_ret - spy_ret) * 100)))
             rs_pass = rs_proxy >= 70
             rs_detail = f"RS proxy: {rs_proxy}/99 (need ≥70)"
@@ -83,11 +93,14 @@ def get_vcp_pattern(ticker: str) -> dict:
         vcp_detail = "Not enough data"
         contraction_count = 0
         try:
-            tr = pd.concat([
-                highs - lows,
-                (highs - closes.shift()).abs(),
-                (lows - closes.shift()).abs(),
-            ], axis=1).max(axis=1)
+            tr = pd.concat(
+                [
+                    highs - lows,
+                    (highs - closes.shift()).abs(),
+                    (lows - closes.shift()).abs(),
+                ],
+                axis=1,
+            ).max(axis=1)
             atr_recent = float(tr.rolling(10).mean().iloc[-1])
             atr_mid = float(tr.rolling(10).mean().iloc[-20])
             atr_early = float(tr.rolling(10).mean().iloc[-40]) if len(tr) >= 40 else atr_mid

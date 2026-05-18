@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends
-from app.auth import verify_api_key
-from app.tools.remaining_tools import get_macro_environment, get_sector_heatmap
-from app.tools.geopolitical import get_geopolitical_events
-from app.tools.fred_macro import get_fred_macro
-from app.tools.fear_greed import get_fear_greed
-from app.tools.economic_calendar import get_economic_calendar
-from app.tools.market_breadth import get_market_breadth
 import asyncio
+
+from fastapi import APIRouter, Depends
+
+from app.auth import verify_api_key
+from app.tools.economic_calendar import get_economic_calendar
+from app.tools.fear_greed import get_fear_greed
+from app.tools.fred_macro import get_fred_macro
+from app.tools.geopolitical import get_geopolitical_events
+from app.tools.market_breadth import get_market_breadth
+from app.tools.remaining_tools import get_macro_environment, get_sector_heatmap
 
 router = APIRouter(prefix="/macro", tags=["macro"])
 
@@ -29,8 +31,7 @@ async def sector_heatmap(_: str = Depends(verify_api_key)):
 async def geopolitical_events(_: str = Depends(verify_api_key)):
     """Fetch active geopolitical events and their market impact."""
     result = await asyncio.to_thread(
-        get_geopolitical_events.invoke,
-        {"query": "geopolitical market risk war sanctions trade"}
+        get_geopolitical_events.invoke, {"query": "geopolitical market risk war sanctions trade"}
     )
     return result
 
@@ -69,10 +70,7 @@ async def all_macro(_: str = Depends(verify_api_key)):
     env, sectors, geo, fred, fear_greed, calendar, breadth = await asyncio.gather(
         asyncio.to_thread(get_macro_environment.invoke, {}),
         asyncio.to_thread(get_sector_heatmap.invoke, {}),
-        asyncio.to_thread(
-            get_geopolitical_events.invoke,
-            {"query": "geopolitical market risk"}
-        ),
+        asyncio.to_thread(get_geopolitical_events.invoke, {"query": "geopolitical market risk"}),
         asyncio.to_thread(get_fred_macro.invoke, {}),
         asyncio.to_thread(get_fear_greed),
         asyncio.to_thread(get_economic_calendar),

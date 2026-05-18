@@ -30,20 +30,28 @@ _poll_task: asyncio.Task | None = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _token() -> str:
     from app.config import get_settings
+
     return get_settings().telegram_bot_token or ""
+
 
 def _invite_code() -> str:
     from app.config import get_settings
+
     return get_settings().telegram_invite_code or ""
+
 
 def _owner_chat_id() -> str:
     from app.config import get_settings
+
     return get_settings().telegram_chat_id or ""
+
 
 def _enabled() -> bool:
     from app.config import get_settings
+
     return get_settings().telegram_enabled
 
 
@@ -66,30 +74,38 @@ async def _reply(chat_id: str, text: str) -> None:
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
+
 async def _get_user(chat_id: str):
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import TelegramUser
+
     try:
         async for db in get_db_direct():
-            row = (await db.execute(
-                select(TelegramUser).where(TelegramUser.chat_id == chat_id)
-            )).scalar_one_or_none()
+            row = (
+                await db.execute(select(TelegramUser).where(TelegramUser.chat_id == chat_id))
+            ).scalar_one_or_none()
             return row
     except Exception:
         return None
 
 
-async def _register_user(chat_id: str, username: str | None, display_name: str | None) -> tuple[bool, bool]:
+async def _register_user(
+    chat_id: str, username: str | None, display_name: str | None
+) -> tuple[bool, bool]:
     """Register a new user. Returns (already_existed, is_admin)."""
+    import uuid
+
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import TelegramUser
-    import uuid
+
     async for db in get_db_direct():
-        existing = (await db.execute(
-            select(TelegramUser).where(TelegramUser.chat_id == chat_id)
-        )).scalar_one_or_none()
+        existing = (
+            await db.execute(select(TelegramUser).where(TelegramUser.chat_id == chat_id))
+        ).scalar_one_or_none()
 
         if existing:
             if not existing.is_active:
@@ -98,7 +114,7 @@ async def _register_user(chat_id: str, username: str | None, display_name: str |
             return True, existing.is_admin
 
         # First user or owner chat_id → auto-admin
-        is_admin = (chat_id == _owner_chat_id())
+        is_admin = chat_id == _owner_chat_id()
         user = TelegramUser(
             id=uuid.uuid4(),
             chat_id=chat_id,
@@ -114,21 +130,29 @@ async def _register_user(chat_id: str, username: str | None, display_name: str |
 
 async def _get_all_users():
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import TelegramUser
+
     async for db in get_db_direct():
-        return (await db.execute(select(TelegramUser).order_by(TelegramUser.registered_at))).scalars().all()
+        return (
+            (await db.execute(select(TelegramUser).order_by(TelegramUser.registered_at)))
+            .scalars()
+            .all()
+        )
     return []
 
 
 async def _set_active(chat_id: str, active: bool) -> bool:
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import TelegramUser
+
     async for db in get_db_direct():
-        row = (await db.execute(
-            select(TelegramUser).where(TelegramUser.chat_id == chat_id)
-        )).scalar_one_or_none()
+        row = (
+            await db.execute(select(TelegramUser).where(TelegramUser.chat_id == chat_id))
+        ).scalar_one_or_none()
         if not row:
             return False
         row.is_active = active
@@ -139,12 +163,14 @@ async def _set_active(chat_id: str, active: bool) -> bool:
 
 async def _set_admin(chat_id: str, is_admin: bool) -> bool:
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import TelegramUser
+
     async for db in get_db_direct():
-        row = (await db.execute(
-            select(TelegramUser).where(TelegramUser.chat_id == chat_id)
-        )).scalar_one_or_none()
+        row = (
+            await db.execute(select(TelegramUser).where(TelegramUser.chat_id == chat_id))
+        ).scalar_one_or_none()
         if not row:
             return False
         row.is_admin = is_admin
@@ -157,11 +183,14 @@ async def _set_admin(chat_id: str, is_admin: bool) -> bool:
 
 _sessions: dict[str, dict] = {}
 
+
 def _get_mode(chat_id: str) -> str:
     return _sessions.get(chat_id, {}).get("exec_mode", "saver")
 
+
 def _set_mode(chat_id: str, mode: str) -> None:
     _sessions.setdefault(chat_id, {})["exec_mode"] = mode
+
 
 def _is_paused(chat_id: str) -> bool:
     until = _sessions.get(chat_id, {}).get("paused_until")
@@ -169,8 +198,10 @@ def _is_paused(chat_id: str) -> bool:
         return True
     return False
 
+
 def _pause(chat_id: str, until: datetime) -> None:
     _sessions.setdefault(chat_id, {})["paused_until"] = until
+
 
 def _resume(chat_id: str) -> None:
     _sessions.get(chat_id, {}).pop("paused_until", None)
@@ -178,7 +209,10 @@ def _resume(chat_id: str) -> None:
 
 # ── Command handlers ──────────────────────────────────────────────────────────
 
-async def _cmd_start(chat_id: str, username: str | None, display_name: str | None, args: str) -> None:
+
+async def _cmd_start(
+    chat_id: str, username: str | None, display_name: str | None, args: str
+) -> None:
     code = args.strip()
     expected = _invite_code()
 
@@ -194,14 +228,16 @@ async def _cmd_start(chat_id: str, username: str | None, display_name: str | Non
     name = display_name or username or "there"
 
     if already:
-        await _reply(chat_id, f"✅ You're already registered, {name}! Send /help to see available commands.")
+        await _reply(
+            chat_id, f"✅ You're already registered, {name}! Send /help to see available commands."
+        )
     else:
         admin_note = "\n\n👑 You have been granted <b>admin access</b>." if is_admin else ""
         await _reply(
             chat_id,
             f"🎉 Welcome, <b>{name}</b>! You're now registered.\n\n"
             f"You'll receive signal alerts, EOD reports, and pre-market briefs.{admin_note}\n\n"
-            f"Send /help to see all available commands."
+            f"Send /help to see all available commands.",
         )
 
 
@@ -240,23 +276,31 @@ async def _cmd_help(chat_id: str, user) -> None:
 
 
 async def _cmd_status(chat_id: str) -> None:
-    from datetime import date
     import pytz
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from app.db.database import get_db_direct
     from app.db.models import ScannerAlert
 
     et_tz = pytz.timezone("America/New_York")
     now_et = datetime.now(et_tz)
-    market_open = (now_et.weekday() < 5) and (9 * 60 + 30 <= now_et.hour * 60 + now_et.minute < 16 * 60)
+    market_open = (now_et.weekday() < 5) and (
+        9 * 60 + 30 <= now_et.hour * 60 + now_et.minute < 16 * 60
+    )
     market_str = "🟢 Open" if market_open else "🔴 Closed"
 
     try:
-        today_start = datetime.combine(now_et.date(), datetime.min.time()).replace(tzinfo=timezone.utc)
+        today_start = datetime.combine(now_et.date(), datetime.min.time()).replace(
+            tzinfo=timezone.utc
+        )
         async for db in get_db_direct():
-            count = (await db.execute(
-                select(func.count()).select_from(ScannerAlert).where(ScannerAlert.entry_time >= today_start)
-            )).scalar_one()
+            count = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(ScannerAlert)
+                    .where(ScannerAlert.entry_time >= today_start)
+                )
+            ).scalar_one()
     except Exception:
         count = 0
 
@@ -275,7 +319,10 @@ async def _cmd_mode(chat_id: str, args: str) -> None:
     valid = {"saver", "normal", "deep"}
     arg = args.strip().lower()
     if not arg:
-        await _reply(chat_id, f"Current exec mode: <b>{_get_mode(chat_id)}</b>\n\nChange with: /mode saver | /mode normal | /mode deep")
+        await _reply(
+            chat_id,
+            f"Current exec mode: <b>{_get_mode(chat_id)}</b>\n\nChange with: /mode saver | /mode normal | /mode deep",
+        )
         return
     if arg not in valid:
         await _reply(chat_id, f"❌ Unknown mode <code>{arg}</code>. Choose: saver, normal, deep")
@@ -294,6 +341,7 @@ async def _cmd_scan(chat_id: str, args: str) -> None:
     await _reply(chat_id, f"🔍 Running {'loose-gate ' if loose else ''}MCF scan...")
     try:
         from app.services.scheduler import _run_mcf_scan
+
         await _run_mcf_scan(force=True, loose=loose)
         await _reply(chat_id, "✅ Scan complete. Any signals will be pushed as alerts.")
     except Exception as exc:
@@ -307,13 +355,20 @@ async def _cmd_alerts(chat_id: str, args: str) -> None:
         n = 5
 
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import ScannerAlert
 
     async for db in get_db_direct():
-        rows = (await db.execute(
-            select(ScannerAlert).order_by(ScannerAlert.entry_time.desc()).limit(n)
-        )).scalars().all()
+        rows = (
+            (
+                await db.execute(
+                    select(ScannerAlert).order_by(ScannerAlert.entry_time.desc()).limit(n)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     if not rows:
         await _reply(chat_id, "No signals found.")
@@ -333,11 +388,13 @@ async def _cmd_alerts(chat_id: str, args: str) -> None:
 async def _cmd_usage(chat_id: str) -> None:
     try:
         from app.services.usage.tracker import UsageTracker
+
         tracker = UsageTracker()
         today = await tracker.get_today()
         tokens = today.get("tokens", 0)
         calls = today.get("api_calls", 0)
         from app.config import get_settings
+
         s = get_settings()
         token_pct = round(tokens / s.token_daily_limit * 100) if s.token_daily_limit else 0
         call_pct = round(calls / s.api_calls_daily_limit * 100) if s.api_calls_daily_limit else 0
@@ -353,12 +410,16 @@ async def _cmd_usage(chat_id: str) -> None:
 
 async def _cmd_watchlist(chat_id: str) -> None:
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import WatchlistItem
+
     async for db in get_db_direct():
-        items = (await db.execute(
-            select(WatchlistItem).where(WatchlistItem.is_active == True)
-        )).scalars().all()
+        items = (
+            (await db.execute(select(WatchlistItem).where(WatchlistItem.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
     if not items:
         await _reply(chat_id, "Your watchlist is empty. Add tickers with /add TICKER")
         return
@@ -374,14 +435,17 @@ async def _cmd_add(chat_id: str, args: str) -> None:
     if not ticker:
         await _reply(chat_id, "Usage: /add TICKER")
         return
+    import uuid
+
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import WatchlistItem
-    import uuid
+
     async for db in get_db_direct():
-        existing = (await db.execute(
-            select(WatchlistItem).where(WatchlistItem.ticker == ticker)
-        )).scalar_one_or_none()
+        existing = (
+            await db.execute(select(WatchlistItem).where(WatchlistItem.ticker == ticker))
+        ).scalar_one_or_none()
         if existing:
             if not existing.is_active:
                 existing.is_active = True
@@ -401,12 +465,18 @@ async def _cmd_remove_ticker(chat_id: str, args: str) -> None:
         await _reply(chat_id, "Usage: /remove_ticker TICKER")
         return
     from sqlalchemy import select
+
     from app.db.database import get_db_direct
     from app.db.models import WatchlistItem
+
     async for db in get_db_direct():
-        item = (await db.execute(
-            select(WatchlistItem).where(WatchlistItem.ticker == ticker, WatchlistItem.is_active == True)
-        )).scalar_one_or_none()
+        item = (
+            await db.execute(
+                select(WatchlistItem).where(
+                    WatchlistItem.ticker == ticker, WatchlistItem.is_active.is_(True)
+                )
+            )
+        ).scalar_one_or_none()
         if not item:
             await _reply(chat_id, f"ℹ️ {ticker} not found in watchlist.")
             return
@@ -416,14 +486,13 @@ async def _cmd_remove_ticker(chat_id: str, args: str) -> None:
 
 
 async def _cmd_pause(chat_id: str, args: str) -> None:
-    from datetime import timedelta
     durations = {"30m": 30, "1h": 60, "2h": 120, "4h": 240, "8h": 480}
     arg = args.strip().lower() or "2h"
     minutes = durations.get(arg, 120)
     until = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    from datetime import timedelta
     until = until.replace(second=0, microsecond=0)
     import datetime as dt
+
     until = datetime.now(timezone.utc) + dt.timedelta(minutes=minutes)
     _pause(chat_id, until)
     await _reply(chat_id, f"🔕 Notifications paused for <b>{arg}</b>. Send /resume to re-enable.")
@@ -435,6 +504,7 @@ async def _cmd_resume(chat_id: str) -> None:
 
 
 # ── Admin commands ────────────────────────────────────────────────────────────
+
 
 async def _cmd_users(chat_id: str) -> None:
     users = await _get_all_users()
@@ -472,7 +542,14 @@ async def _cmd_promote(chat_id: str, args: str) -> None:
         await _reply(chat_id, "Usage: /promote &lt;chat_id&gt;")
         return
     ok = await _set_admin(target, True)
-    await _reply(chat_id, f"✅ <code>{target}</code> promoted to admin." if ok else f"❌ User <code>{target}</code> not found.")
+    await _reply(
+        chat_id,
+        (
+            f"✅ <code>{target}</code> promoted to admin."
+            if ok
+            else f"❌ User <code>{target}</code> not found."
+        ),
+    )
 
 
 async def _cmd_demote(chat_id: str, args: str) -> None:
@@ -484,10 +561,18 @@ async def _cmd_demote(chat_id: str, args: str) -> None:
         await _reply(chat_id, "❌ You cannot demote yourself.")
         return
     ok = await _set_admin(target, False)
-    await _reply(chat_id, f"✅ <code>{target}</code> admin access removed." if ok else f"❌ User <code>{target}</code> not found.")
+    await _reply(
+        chat_id,
+        (
+            f"✅ <code>{target}</code> admin access removed."
+            if ok
+            else f"❌ User <code>{target}</code> not found."
+        ),
+    )
 
 
 # ── Update router ─────────────────────────────────────────────────────────────
+
 
 async def _handle_update(update: dict) -> None:
     msg = update.get("message") or update.get("edited_message")
@@ -501,7 +586,9 @@ async def _handle_update(update: dict) -> None:
 
     from_user = msg.get("from", {})
     username = from_user.get("username")
-    display_name = " ".join(filter(None, [from_user.get("first_name"), from_user.get("last_name")])) or None
+    display_name = (
+        " ".join(filter(None, [from_user.get("first_name"), from_user.get("last_name")])) or None
+    )
 
     # Parse command and args
     parts = text.split(None, 1)
@@ -518,7 +605,7 @@ async def _handle_update(update: dict) -> None:
     if not user or not user.is_active:
         await _reply(
             chat_id,
-            "❌ You're not registered.\n\nSend <code>/start &lt;invite_code&gt;</code> to register."
+            "❌ You're not registered.\n\nSend <code>/start &lt;invite_code&gt;</code> to register.",
         )
         return
 
@@ -568,6 +655,7 @@ async def _handle_update(update: dict) -> None:
 
 
 # ── Long-poll loop ────────────────────────────────────────────────────────────
+
 
 async def _poll_loop() -> None:
     global _running

@@ -14,9 +14,9 @@ Fixes applied here:
   4. get_ticker() checks crumb health on every call, auto-resets if poisoned
 """
 
-import time
-import threading
 import logging
+import threading
+import time
 
 import yfinance as yf
 from yfinance.data import YfData
@@ -38,6 +38,7 @@ YfData.user_agent_headers = {
 
 # ── 2. Crumb health check ──────────────────────────────────────────────────────
 
+
 def _crumb_is_poisoned(crumb: str | None) -> bool:
     """
     Real crumbs are short alphanumeric tokens (~11 chars, e.g. "AQ4mn7sFGHD").
@@ -52,6 +53,7 @@ def _crumb_is_poisoned(crumb: str | None) -> bool:
 
 
 # ── 3. Session/crumb reset ────────────────────────────────────────────────────
+
 
 def _get_yf_singleton() -> YfData | None:
     """Access the YfData singleton without triggering _set_session()."""

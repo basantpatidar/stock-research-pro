@@ -1,7 +1,9 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 def _compute_rvol(current_volume: int, avg_volume: int, market_state: str) -> dict:
@@ -21,7 +23,7 @@ def _compute_rvol(current_volume: int, avg_volume: int, market_state: str) -> di
         now = datetime.now(ZoneInfo("America/New_York"))
         market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
         elapsed_min = max((now - market_open).total_seconds() / 60, 1.0)
-        fraction = min(elapsed_min / 390.0, 1.0)   # 390 min = full 6.5-hr session
+        fraction = min(elapsed_min / 390.0, 1.0)  # 390 min = full 6.5-hr session
         expected = avg_volume * fraction
         rvol = round(current_volume / expected, 2) if expected > 0 else 1.0
     except Exception:
@@ -29,10 +31,7 @@ def _compute_rvol(current_volume: int, avg_volume: int, market_state: str) -> di
         return {"rvol": rvol, "signal": "N/A", "time_normalized": False}
 
     signal = (
-        "EXTREME" if rvol > 3.0 else
-        "HIGH"    if rvol > 2.0 else
-        "NORMAL"  if rvol > 0.5 else
-        "LOW"
+        "EXTREME" if rvol > 3.0 else "HIGH" if rvol > 2.0 else "NORMAL" if rvol > 0.5 else "LOW"
     )
     return {"rvol": rvol, "signal": signal, "time_normalized": True}
 
@@ -45,13 +44,13 @@ def _compute_pivots(hist) -> dict | None:
     H = float(prev["High"])
     L = float(prev["Low"])
     C = float(prev["Close"])
-    P  = (H + L + C) / 3
+    P = (H + L + C) / 3
     R1 = 2 * P - L
     R2 = P + (H - L)
     S1 = 2 * P - H
     S2 = P - (H - L)
     return {
-        "P":  round(P,  2),
+        "P": round(P, 2),
         "R1": round(R1, 2),
         "R2": round(R2, 2),
         "S1": round(S1, 2),
@@ -65,15 +64,25 @@ def _compute_support_resistance(hist, lookback: int = 30) -> dict:
         return {"resistance": [], "support": []}
 
     recent = hist.tail(lookback)
-    highs  = recent["High"].values.astype(float)
-    lows   = recent["Low"].values.astype(float)
+    highs = recent["High"].values.astype(float)
+    lows = recent["Low"].values.astype(float)
 
     swing_highs, swing_lows = [], []
     for i in range(2, len(highs) - 2):
-        if highs[i] >= highs[i-1] and highs[i] >= highs[i+1] and highs[i] >= highs[i-2] and highs[i] >= highs[i+2]:
+        if (
+            highs[i] >= highs[i - 1]
+            and highs[i] >= highs[i + 1]
+            and highs[i] >= highs[i - 2]
+            and highs[i] >= highs[i + 2]
+        ):
             swing_highs.append(round(highs[i], 2))
     for i in range(2, len(lows) - 2):
-        if lows[i] <= lows[i-1] and lows[i] <= lows[i+1] and lows[i] <= lows[i-2] and lows[i] <= lows[i+2]:
+        if (
+            lows[i] <= lows[i - 1]
+            and lows[i] <= lows[i + 1]
+            and lows[i] <= lows[i - 2]
+            and lows[i] <= lows[i + 2]
+        ):
             swing_lows.append(round(lows[i], 2))
 
     def _dedup(levels: list[float], tol: float = 0.005) -> list[float]:
@@ -86,7 +95,7 @@ def _compute_support_resistance(hist, lookback: int = 30) -> dict:
         return merged
 
     resistance = sorted(_dedup(swing_highs), reverse=True)[:3]
-    support    = sorted(_dedup(swing_lows))[:3]
+    support = sorted(_dedup(swing_lows))[:3]
     return {"resistance": resistance, "support": support}
 
 
@@ -105,8 +114,8 @@ def _compute_orb(intraday_df) -> dict | None:
 
         # Regular session only: 9:30 AM – 4:00 PM ET
         regular = df[
-            ((df.index.hour == 9) & (df.index.minute >= 30)) |
-            ((df.index.hour >= 10) & (df.index.hour < 16))
+            ((df.index.hour == 9) & (df.index.minute >= 30))
+            | ((df.index.hour >= 10) & (df.index.hour < 16))
         ]
 
         if len(regular) < 3:
@@ -117,11 +126,9 @@ def _compute_orb(intraday_df) -> dict | None:
 
         def _orb_stats(bars, post_bars):
             high = round(float(bars["High"].max()), 2)
-            low  = round(float(bars["Low"].min()), 2)
+            low = round(float(bars["Low"].min()), 2)
             position = (
-                "above" if current_price > high else
-                "below" if current_price < low  else
-                "inside"
+                "above" if current_price > high else "below" if current_price < low else "inside"
             )
             breakout = "none"
             if len(post_bars) > 0:
@@ -148,9 +155,9 @@ def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
         if len(hist) < 20:
             return None
 
-        highs   = hist["High"].values.astype(float)
-        lows    = hist["Low"].values.astype(float)
-        closes  = hist["Close"].values.astype(float)
+        highs = hist["High"].values.astype(float)
+        lows = hist["Low"].values.astype(float)
+        closes = hist["Close"].values.astype(float)
         volumes = hist["Volume"].values.astype(float)
 
         # Typical price for each bar
@@ -177,7 +184,7 @@ def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
 
         # Value area: 70% of total volume, expanding from VPOC
         total_vol = sum(bins.values())
-        target    = total_vol * 0.70
+        target = total_vol * 0.70
         sorted_by_vol = sorted(bins.items(), key=lambda x: x[1], reverse=True)
         va_indices: set[int] = set()
         accumulated = 0.0
@@ -202,8 +209,8 @@ def _compute_volume_profile(hist, n_bins: int = 100) -> dict | None:
 
         return {
             "vpoc": vpoc,
-            "vah":  vah,
-            "val":  val,
+            "vah": vah,
+            "val": val,
             "hvn_levels": hvn_levels,
             "period_days": len(hist),
         }
@@ -227,7 +234,9 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             quote_type = info.get("quoteType", "")
             if not quote_type:
                 return {"error": f"Ticker '{ticker}' not found — check the symbol is correct"}
-            return {"error": f"No price data for '{ticker}' — it may be delisted or have no recent trading activity"}
+            return {
+                "error": f"No price data for '{ticker}' — it may be delisted or have no recent trading activity"
+            }
 
         regular_close = hist["Close"].iloc[-1]
         prev_close = hist["Close"].iloc[-2] if len(hist) > 1 else regular_close
@@ -268,13 +277,14 @@ def get_price(ticker: str, period: str = "1y") -> dict:
         change_pct = ((current - prev_close) / prev_close) * 100
         extended_change_pct = (
             round((current - regular_close) / regular_close * 100, 2)
-            if in_extended and regular_close > 0 else None
+            if in_extended and regular_close > 0
+            else None
         )
 
-        volume_profile     = _compute_volume_profile(hist)
-        pivots             = _compute_pivots(hist)
+        volume_profile = _compute_volume_profile(hist)
+        pivots = _compute_pivots(hist)
         support_resistance = _compute_support_resistance(hist)
-        orb                = _compute_orb(intraday_df)
+        orb = _compute_orb(intraday_df)
 
         return {
             "ticker": ticker.upper(),
@@ -291,7 +301,9 @@ def get_price(ticker: str, period: str = "1y") -> dict:
             "volume": int(hist["Volume"].iloc[-1]),
             "avg_volume": int(hist["Volume"].mean()),
             "volume_ratio": round(hist["Volume"].iloc[-1] / hist["Volume"].mean(), 2),
-            "rvol": _compute_rvol(int(hist["Volume"].iloc[-1]), int(hist["Volume"].mean()), market_state),
+            "rvol": _compute_rvol(
+                int(hist["Volume"].iloc[-1]), int(hist["Volume"].mean()), market_state
+            ),
             "company_name": info.get("longName", ticker),
             "market_cap": info.get("marketCap"),
             "sector": info.get("sector", "Unknown"),

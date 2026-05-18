@@ -1,6 +1,8 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 from datetime import datetime
+
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 @tool
@@ -26,14 +28,18 @@ def analyze_earnings_transcript(ticker: str) -> dict:
                     surprise = row.get("epsDifference")
                     surprise_pct = row.get("surprisePercent")
                     period = row.get("period") if hasattr(row, "get") else None
-                    recent_quarters.append({
-                        "period": str(period) if period else None,
-                        "eps_actual": round(float(actual), 3) if actual else None,
-                        "eps_estimate": round(float(estimate), 3) if estimate else None,
-                        "eps_surprise": round(float(surprise), 3) if surprise else None,
-                        "eps_surprise_pct": round(float(surprise_pct) * 100, 1) if surprise_pct else None,
-                        "beat": float(surprise) > 0 if surprise else None,
-                    })
+                    recent_quarters.append(
+                        {
+                            "period": str(period) if period else None,
+                            "eps_actual": round(float(actual), 3) if actual else None,
+                            "eps_estimate": round(float(estimate), 3) if estimate else None,
+                            "eps_surprise": round(float(surprise), 3) if surprise else None,
+                            "eps_surprise_pct": (
+                                round(float(surprise_pct) * 100, 1) if surprise_pct else None
+                            ),
+                            "beat": float(surprise) > 0 if surprise else None,
+                        }
+                    )
         except Exception:
             recent_quarters = []
 
@@ -41,15 +47,23 @@ def analyze_earnings_transcript(ticker: str) -> dict:
         try:
             financials = stock.quarterly_financials
             rev_trend = []
-            if financials is not None and not financials.empty and "Total Revenue" in financials.index:
+            if (
+                financials is not None
+                and not financials.empty
+                and "Total Revenue" in financials.index
+            ):
                 rev_row = financials.loc["Total Revenue"]
                 for col in list(rev_row.index)[:4]:
                     val = rev_row[col]
-                    if val and not (hasattr(val, "__float__") and __import__("math").isnan(float(val))):
-                        rev_trend.append({
-                            "quarter": str(col.date()) if hasattr(col, "date") else str(col),
-                            "revenue": int(float(val)),
-                        })
+                    if val and not (
+                        hasattr(val, "__float__") and __import__("math").isnan(float(val))
+                    ):
+                        rev_trend.append(
+                            {
+                                "quarter": str(col.date()) if hasattr(col, "date") else str(col),
+                                "revenue": int(float(val)),
+                            }
+                        )
         except Exception:
             rev_trend = []
 

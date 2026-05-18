@@ -1,6 +1,6 @@
+import uuid
 from datetime import datetime
 from typing import Any
-import uuid
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -44,7 +44,9 @@ class AlertHistory(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -60,9 +62,7 @@ class ResearchCache(Base):
     cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("ticker", "mode", name="uq_research_cache_ticker_mode"),
-    )
+    __table_args__ = (UniqueConstraint("ticker", "mode", name="uq_research_cache_ticker_mode"),)
 
 
 class ScannerAlert(Base):
@@ -81,16 +81,26 @@ class ScannerAlert(Base):
     session_window: Mapped[str | None] = mapped_column(String(30), nullable=True)
     vix_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
     capital_used: Mapped[float] = mapped_column(Float, default=1000.0)
-    signal_type: Mapped[str | None] = mapped_column(String(30), nullable=True)   # dip_buy | orb_breakout | vwap_reclaim | failed_breakdown
-    source: Mapped[str] = mapped_column(String(20), default="live")   # "live" | "backtest"
-    status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open / win / loss / expired
+    signal_type: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )  # dip_buy | orb_breakout | vwap_reclaim | failed_breakdown
+    source: Mapped[str] = mapped_column(String(20), default="live")  # "live" | "backtest"
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", index=True
+    )  # open / win / loss / expired
     outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     outcome_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     actual_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     actual_pnl_dollar: Mapped[float | None] = mapped_column(Float, nullable=True)
-    resolved_by: Mapped[str | None] = mapped_column(String(30), nullable=True)  # target_hit / stop_hit / eod_close
-    five_min_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)  # up / down / flat — price direction at entry+5min (#29)
-    loose_gates: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # True = relaxed thresholds; excluded from main analytics / auto-trade
+    resolved_by: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )  # target_hit / stop_hit / eod_close
+    five_min_direction: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
+    )  # up / down / flat — price direction at entry+5min (#29)
+    loose_gates: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=False
+    )  # True = relaxed thresholds; excluded from main analytics / auto-trade
 
 
 class BrokerOrder(Base):
@@ -124,19 +134,23 @@ class BrokerOrder(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new", index=True)
     filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     filled_avg_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejected_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")  # manual | scanner_alert
-    scanner_alert_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="manual"
+    )  # manual | scanner_alert
+    scanner_alert_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     # We generate this UUID on the frontend so retries are idempotent on the
     # broker side. Unique constraint catches accidental double-clicks.
     client_order_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("client_order_id", name="uq_broker_orders_client_order_id"),
-    )
+    __table_args__ = (UniqueConstraint("client_order_id", name="uq_broker_orders_client_order_id"),)
 
 
 class TelegramUser(Base):
@@ -150,7 +164,9 @@ class TelegramUser(Base):
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class StockDataCache(Base):

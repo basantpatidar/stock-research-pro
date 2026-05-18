@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends
-from app.auth import verify_api_key
 import json
 import os
 from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends
+
+from app.auth import verify_api_key
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -30,7 +32,9 @@ async def usage_today(_: str = Depends(verify_api_key)):
     tokens = today.get("tokens", 0)
     api_calls = today.get("api_calls", 0)
     pct = round(tokens / _TOKEN_DAILY_LIMIT * 100, 1) if _TOKEN_DAILY_LIMIT > 0 else 0.0
-    api_pct = round(api_calls / _API_CALLS_DAILY_LIMIT * 100, 1) if _API_CALLS_DAILY_LIMIT > 0 else 0.0
+    api_pct = (
+        round(api_calls / _API_CALLS_DAILY_LIMIT * 100, 1) if _API_CALLS_DAILY_LIMIT > 0 else 0.0
+    )
 
     warning: str | None = None
     if pct >= 90:
@@ -61,11 +65,13 @@ async def usage_history(_: str = Depends(verify_api_key)):
     for i in range(29, -1, -1):
         d = (date.today() - timedelta(days=i)).isoformat()
         entry = daily_raw.get(d, {})
-        daily.append({
-            "date": d,
-            "tokens": entry.get("tokens", 0),
-            "api_calls": entry.get("api_calls", 0),
-        })
+        daily.append(
+            {
+                "date": d,
+                "tokens": entry.get("tokens", 0),
+                "api_calls": entry.get("api_calls", 0),
+            }
+        )
 
     return {
         "daily": daily,

@@ -1,15 +1,16 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Set
-import json
 import asyncio
+import json
 from datetime import datetime, timezone
+from typing import Set
 
-from app.db.database import get_db
-from app.db.models import AlertHistory
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.auth import verify_api_key
 from app.config import get_settings
+from app.db.database import get_db
+from app.db.models import AlertHistory
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -56,11 +57,15 @@ async def alerts_websocket(
 
     try:
         # Send connection confirmation
-        await websocket.send_text(json.dumps({
-            "type": "connected",
-            "message": "Stock Research Pro — real-time alerts active",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }))
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "connected",
+                    "message": "Stock Research Pro — real-time alerts active",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
 
         # Keep connection alive — client sends pings
         while True:
@@ -120,9 +125,7 @@ async def dismiss_alert(
     _: str = Depends(verify_api_key),
 ):
     """Dismiss an alert."""
-    result = await db.execute(
-        select(AlertHistory).where(AlertHistory.id == alert_id)
-    )
+    result = await db.execute(select(AlertHistory).where(AlertHistory.id == alert_id))
     alert = result.scalar_one_or_none()
     if not alert:
         return {"message": "Alert not found"}

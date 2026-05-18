@@ -1,6 +1,8 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 from typing import Literal
+
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 def _backtest_rsi(close, oversold: float = 30.0, overbought: float = 70.0) -> dict:
@@ -20,7 +22,13 @@ def _backtest_rsi(close, oversold: float = 30.0, overbought: float = 70.0) -> di
         elif in_trade and rsi.iloc[i] > overbought:
             exit_price = float(close.iloc[i])
             pnl = (exit_price - entry_price) / entry_price * 100
-            trades.append({"entry": round(entry_price, 2), "exit": round(exit_price, 2), "pnl_pct": round(pnl, 2)})
+            trades.append(
+                {
+                    "entry": round(entry_price, 2),
+                    "exit": round(exit_price, 2),
+                    "pnl_pct": round(pnl, 2),
+                }
+            )
             in_trade = False
 
     return trades
@@ -46,7 +54,13 @@ def _backtest_macd(close) -> list[dict]:
         elif in_trade and prev_diff > 0 and curr_diff <= 0:
             exit_price = float(close.iloc[i])
             pnl = (exit_price - entry_price) / entry_price * 100
-            trades.append({"entry": round(entry_price, 2), "exit": round(exit_price, 2), "pnl_pct": round(pnl, 2)})
+            trades.append(
+                {
+                    "entry": round(entry_price, 2),
+                    "exit": round(exit_price, 2),
+                    "pnl_pct": round(pnl, 2),
+                }
+            )
             in_trade = False
 
     return trades
@@ -72,7 +86,13 @@ def _backtest_golden_cross(close) -> list[dict]:
         elif in_trade and prev_above and not curr_above:
             exit_price = float(close.iloc[i])
             pnl = (exit_price - entry_price) / entry_price * 100
-            trades.append({"entry": round(entry_price, 2), "exit": round(exit_price, 2), "pnl_pct": round(pnl, 2)})
+            trades.append(
+                {
+                    "entry": round(entry_price, 2),
+                    "exit": round(exit_price, 2),
+                    "pnl_pct": round(pnl, 2),
+                }
+            )
             in_trade = False
 
     return trades
@@ -127,7 +147,11 @@ def run_backtest(
         close = hist["Close"]
         buy_hold = (float(close.iloc[-1]) - float(close.iloc[0])) / float(close.iloc[0]) * 100
 
-        results = {"ticker": ticker.upper(), "period": period, "buy_and_hold_pct": round(buy_hold, 1)}
+        results = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "buy_and_hold_pct": round(buy_hold, 1),
+        }
 
         if strategy in ("rsi", "all"):
             results["rsi"] = _summarize(_backtest_rsi(close), buy_hold)
@@ -139,7 +163,9 @@ def run_backtest(
             if len(close) >= 200:
                 results["golden_cross"] = _summarize(_backtest_golden_cross(close), buy_hold)
             else:
-                results["golden_cross"] = {"error": "Need at least 200 trading days for golden cross"}
+                results["golden_cross"] = {
+                    "error": "Need at least 200 trading days for golden cross"
+                }
 
         return results
     except Exception as e:

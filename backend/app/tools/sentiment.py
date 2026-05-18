@@ -1,5 +1,6 @@
-from langchain_core.tools import tool
 import requests
+from langchain_core.tools import tool
+
 from app.config import get_settings
 
 
@@ -19,8 +20,16 @@ def get_sentiment(ticker: str) -> dict:
 
         if "messages" in data:
             messages = data["messages"]
-            bull = sum(1 for m in messages if m.get("entities", {}).get("sentiment", {}).get("basic") == "Bullish")
-            bear = sum(1 for m in messages if m.get("entities", {}).get("sentiment", {}).get("basic") == "Bearish")
+            bull = sum(
+                1
+                for m in messages
+                if m.get("entities", {}).get("sentiment", {}).get("basic") == "Bullish"
+            )
+            bear = sum(
+                1
+                for m in messages
+                if m.get("entities", {}).get("sentiment", {}).get("basic") == "Bearish"
+            )
             total_tagged = bull + bear
             total = len(messages)
 
@@ -34,7 +43,9 @@ def get_sentiment(ticker: str) -> dict:
                 "recent_sample": [
                     {
                         "text": m.get("body", "")[:120],
-                        "sentiment": m.get("entities", {}).get("sentiment", {}).get("basic", "untagged"),
+                        "sentiment": m.get("entities", {})
+                        .get("sentiment", {})
+                        .get("basic", "untagged"),
                         "created": m.get("created_at", "")[:10],
                     }
                     for m in messages[:5]
@@ -50,6 +61,7 @@ def get_sentiment(ticker: str) -> dict:
     if settings.reddit_client_id and settings.reddit_client_secret:
         try:
             import praw
+
             reddit = praw.Reddit(
                 client_id=settings.reddit_client_id,
                 client_secret=settings.reddit_client_secret,
@@ -80,13 +92,15 @@ def get_sentiment(ticker: str) -> dict:
                         elif any(w in title_lower for w in neg_words):
                             sentiment = "bearish"
 
-                        reddit_posts.append({
-                            "subreddit": sub,
-                            "title": post.title[:120],
-                            "score": post.score,
-                            "comments": post.num_comments,
-                            "sentiment": sentiment,
-                        })
+                        reddit_posts.append(
+                            {
+                                "subreddit": sub,
+                                "title": post.title[:120],
+                                "score": post.score,
+                                "comments": post.num_comments,
+                                "sentiment": sentiment,
+                            }
+                        )
                 except Exception:
                     continue
 
@@ -104,16 +118,14 @@ def get_sentiment(ticker: str) -> dict:
         except Exception as e:
             results["reddit"] = {"error": f"Reddit fetch failed: {str(e)}"}
     else:
-        results["reddit"] = {"error": "Reddit credentials not configured (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET)"}
+        results["reddit"] = {
+            "error": "Reddit credentials not configured (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET)"
+        }
 
     # Aggregate
     st = results.get("stocktwits", {})
     st_bull = st.get("bullish_pct", 50) if "error" not in st else 50
-    overall_sentiment = (
-        "Bullish" if st_bull > 60
-        else "Bearish" if st_bull < 40
-        else "Neutral"
-    )
+    overall_sentiment = "Bullish" if st_bull > 60 else "Bearish" if st_bull < 40 else "Neutral"
 
     return {
         "ticker": ticker.upper(),

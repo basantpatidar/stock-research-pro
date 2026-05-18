@@ -19,8 +19,8 @@ from langchain_core.tools import tool
 from app.tools._yf_client import get_ticker
 from app.tools.signal import build_signal, composite_verdict
 
-
 # ── Piotroski F-Score ─────────────────────────────────────────────────────────
+
 
 def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
     """
@@ -34,8 +34,11 @@ def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
     roa = info.get("returnOnAssets")
     checks["positive_roa"] = bool(roa and roa > 0)
 
-    cfo = cf.get("Operating Cash Flow", [None])[0] if cf.get("Operating Cash Flow") is not None else None
-    total_assets = bs.get("Total Assets", [None])[0] if bs.get("Total Assets") is not None else None
+    cfo = (
+        cf.get("Operating Cash Flow", [None])[0]
+        if cf.get("Operating Cash Flow") is not None
+        else None
+    )
     checks["positive_cfo"] = bool(cfo and cfo > 0)
 
     # ROA trend: current vs prior year
@@ -93,7 +96,9 @@ def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
 
     try:
         at_curr = float(rev[0]) / float(ta_vals[0]) if rev[0] and ta_vals[0] else None
-        at_prior = float(rev[1]) / float(ta_vals[1]) if len(rev) > 1 and rev[1] and ta_vals[1] else None
+        at_prior = (
+            float(rev[1]) / float(ta_vals[1]) if len(rev) > 1 and rev[1] and ta_vals[1] else None
+        )
         checks["improving_asset_turnover"] = bool(at_curr and at_prior and at_curr > at_prior)
     except (TypeError, ZeroDivisionError):
         checks["improving_asset_turnover"] = False
@@ -104,8 +109,10 @@ def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
     if score >= 8:
         verdict, conviction, contribution = "BUY", "HIGH", 1.5
         headline = f"Financially strong — {score}/9 health checks passed"
-        why = ("Company shows improving profitability, declining debt load, and rising "
-               "efficiency. F-Score ≥ 8 has historically preceded 12-month outperformance.")
+        why = (
+            "Company shows improving profitability, declining debt load, and rising "
+            "efficiency. F-Score ≥ 8 has historically preceded 12-month outperformance."
+        )
         action = "Supports entering or adding to a long-term position."
         key_risk = "Score reflects trailing data — watch next earnings for deterioration."
     elif score >= 6:
@@ -129,7 +136,9 @@ def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
     else:
         verdict, conviction, contribution = "AVOID", "HIGH", -2.0
         headline = f"Severe financial deterioration — {score}/9 checks passed"
-        why = "Company is failing nearly all financial health checks. Strong historical short signal."
+        why = (
+            "Company is failing nearly all financial health checks. Strong historical short signal."
+        )
         action = "Do not enter. Exit existing positions."
         key_risk = "Score this low often precedes earnings disappointments or credit events."
 
@@ -163,6 +172,7 @@ def _piotroski(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
 
 
 # ── Beneish M-Score ───────────────────────────────────────────────────────────
+
 
 def _beneish(fin: dict, bs: dict, cf: dict) -> dict:
     """
@@ -245,14 +255,20 @@ def _beneish(fin: dict, bs: dict, cf: dict) -> dict:
             components["lvgi"] = round(lvgi, 3)
 
         if len(components) < 4:
-            return {"score": None, "components": components, "signal": build_signal(
-                value=None, verdict="HOLD", conviction="LOW",
-                headline="Insufficient data to compute M-Score",
-                why="Not enough historical financial statement data available.",
-                action="Cannot assess earnings quality — use other signals.",
-                key_risk="Missing data may itself be a yellow flag.",
-                score_contribution=0.0,
-            )}
+            return {
+                "score": None,
+                "components": components,
+                "signal": build_signal(
+                    value=None,
+                    verdict="HOLD",
+                    conviction="LOW",
+                    headline="Insufficient data to compute M-Score",
+                    why="Not enough historical financial statement data available.",
+                    action="Cannot assess earnings quality — use other signals.",
+                    key_risk="Missing data may itself be a yellow flag.",
+                    score_contribution=0.0,
+                ),
+            }
 
         # Beneish formula weights
         score = (
@@ -271,23 +287,29 @@ def _beneish(fin: dict, bs: dict, cf: dict) -> dict:
         if score > -1.78:
             verdict, conviction, contribution = "RISK_FLAG", "HIGH", -2.0
             headline = "Earnings manipulation likely — do not trust reported EPS"
-            why = ("M-Score above -1.78 matches companies that have historically "
-                   "restated earnings or committed accounting fraud. Treat all "
-                   "reported numbers with significant skepticism.")
+            why = (
+                "M-Score above -1.78 matches companies that have historically "
+                "restated earnings or committed accounting fraud. Treat all "
+                "reported numbers with significant skepticism."
+            )
             action = "Do not enter. If holding, reduce position immediately and investigate."
             key_risk = "This is a probabilistic model — not every high score is fraud, but the odds are not in your favour."
         elif score > -2.22:
             verdict, conviction, contribution = "SELL", "MODERATE", -1.0
             headline = "Elevated manipulation risk — earnings quality suspect"
-            why = ("Score in the grey zone. Some financial ratios are moving in patterns "
-                   "associated with earnings management. Not definitive, but warrants caution.")
+            why = (
+                "Score in the grey zone. Some financial ratios are moving in patterns "
+                "associated with earnings management. Not definitive, but warrants caution."
+            )
             action = "Avoid adding to position. Wait for cleaner quarter before acting."
             key_risk = "Could be legitimate accounting changes rather than manipulation."
         else:
             verdict, conviction, contribution = "BUY", "HIGH", 1.0
             headline = "No manipulation signals detected — earnings appear genuine"
-            why = ("Financial ratios are in ranges consistent with clean reporting. "
-                   "Reported EPS is likely backed by real economic activity.")
+            why = (
+                "Financial ratios are in ranges consistent with clean reporting. "
+                "Reported EPS is likely backed by real economic activity."
+            )
             action = "Earnings quality supports the investment thesis."
             key_risk = "M-Score catches past patterns — new manipulation would not yet be visible."
 
@@ -309,17 +331,24 @@ def _beneish(fin: dict, bs: dict, cf: dict) -> dict:
         }
 
     except Exception as e:
-        return {"score": None, "error": str(e), "signal": build_signal(
-            value=None, verdict="HOLD", conviction="LOW",
-            headline="Could not compute Beneish M-Score",
-            why="Calculation failed due to missing or inconsistent financial data.",
-            action="Use other quality signals until data is available.",
-            key_risk="Missing data.",
-            score_contribution=0.0,
-        )}
+        return {
+            "score": None,
+            "error": str(e),
+            "signal": build_signal(
+                value=None,
+                verdict="HOLD",
+                conviction="LOW",
+                headline="Could not compute Beneish M-Score",
+                why="Calculation failed due to missing or inconsistent financial data.",
+                action="Use other quality signals until data is available.",
+                key_risk="Missing data.",
+                score_contribution=0.0,
+            ),
+        }
 
 
 # ── Altman Z-Score ────────────────────────────────────────────────────────────
+
 
 def _altman(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
     """
@@ -344,10 +373,10 @@ def _altman(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
 
         ta_f = float(ta)
         x1 = (float(ca) - float(cl)) / ta_f if ca and cl else 0  # working capital / TA
-        x2 = float(re) / ta_f if re else 0                         # retained earnings / TA
-        x3 = float(ebit_val) / ta_f if ebit_val else 0             # EBIT / TA
+        x2 = float(re) / ta_f if re else 0  # retained earnings / TA
+        x3 = float(ebit_val) / ta_f if ebit_val else 0  # EBIT / TA
         x4 = float(market_cap) / book_debt if book_debt > 0 else 5  # mkt equity / book debt
-        x5 = float(rev) / ta_f                                      # sales / TA
+        x5 = float(rev) / ta_f  # sales / TA
 
         z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
         z = round(z, 2)
@@ -364,26 +393,36 @@ def _altman(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
             zone = "SAFE"
             verdict, conviction, contribution = "BUY", "HIGH", 1.0
             headline = f"Financially sound — Z-Score {z} is in the safe zone"
-            why = ("Company is well above bankruptcy risk thresholds. Strong working "
-                   "capital, earnings power, and equity cushion relative to debt.")
+            why = (
+                "Company is well above bankruptcy risk thresholds. Strong working "
+                "capital, earnings power, and equity cushion relative to debt."
+            )
             action = "No financial distress risk. Safe to invest."
-            key_risk = "Z-Score uses trailing data — a sudden credit event could change this quickly."
+            key_risk = (
+                "Z-Score uses trailing data — a sudden credit event could change this quickly."
+            )
         elif z > 1.81:
             zone = "GREY"
             verdict, conviction, contribution = "HOLD", "MODERATE", -0.3
             headline = f"Grey zone — Z-Score {z} warrants monitoring"
-            why = ("Company is between safe and distress thresholds. Not in immediate danger "
-                   "but financial flexibility is limited. Watch debt levels and cash flow.")
+            why = (
+                "Company is between safe and distress thresholds. Not in immediate danger "
+                "but financial flexibility is limited. Watch debt levels and cash flow."
+            )
             action = "Hold but do not add until score moves clearly above 2.99."
             key_risk = "Grey zone companies can deteriorate quickly in a downturn."
         else:
             zone = "DISTRESS"
             verdict, conviction, contribution = "AVOID", "HIGH", -2.0
             headline = f"Distress zone — Z-Score {z} signals elevated bankruptcy risk"
-            why = ("Score below 1.81 has historically predicted corporate distress. "
-                   "Company has insufficient earnings power or equity buffer to cover obligations.")
+            why = (
+                "Score below 1.81 has historically predicted corporate distress. "
+                "Company has insufficient earnings power or equity buffer to cover obligations."
+            )
             action = "Do not enter. Exit existing positions. Serious credit risk."
-            key_risk = "Not every low Z-Score ends in bankruptcy, but the odds strongly favor avoiding."
+            key_risk = (
+                "Not every low Z-Score ends in bankruptcy, but the odds strongly favor avoiding."
+            )
 
         return {
             "score": z,
@@ -403,17 +442,25 @@ def _altman(info: dict, fin: dict, bs: dict, cf: dict) -> dict:
         }
 
     except Exception as e:
-        return {"score": None, "zone": "UNKNOWN", "error": str(e), "signal": build_signal(
-            value=None, verdict="HOLD", conviction="LOW",
-            headline="Could not compute Altman Z-Score",
-            why="Missing financial data required for the calculation.",
-            action="Use other signals to assess financial health.",
-            key_risk="Missing data.",
-            score_contribution=0.0,
-        )}
+        return {
+            "score": None,
+            "zone": "UNKNOWN",
+            "error": str(e),
+            "signal": build_signal(
+                value=None,
+                verdict="HOLD",
+                conviction="LOW",
+                headline="Could not compute Altman Z-Score",
+                why="Missing financial data required for the calculation.",
+                action="Use other signals to assess financial health.",
+                key_risk="Missing data.",
+                score_contribution=0.0,
+            ),
+        }
 
 
 # ── Accruals Ratio (Sloan) ────────────────────────────────────────────────────
+
 
 def _accruals(fin: dict, bs: dict, cf: dict) -> dict:
     """
@@ -445,44 +492,56 @@ def _accruals(fin: dict, bs: dict, cf: dict) -> dict:
         if ratio < -5:
             verdict, conviction, contribution = "BUY", "HIGH", 1.5
             headline = "Exceptional earnings quality — cash far exceeds reported income"
-            why = ("Operating cash flow significantly exceeds net income. This is the "
-                   "gold standard of earnings quality — the company is converting profits "
-                   "to cash even faster than it books them.")
+            why = (
+                "Operating cash flow significantly exceeds net income. This is the "
+                "gold standard of earnings quality — the company is converting profits "
+                "to cash even faster than it books them."
+            )
             action = "High-quality earnings strongly support the long-term investment case."
             key_risk = "Highly negative accruals can occasionally reflect aggressive depreciation policies."
             direction = "IMPROVING"
         elif ratio < 0:
             verdict, conviction, contribution = "BUY", "MODERATE", 0.8
             headline = "Cash-backed earnings — accruals ratio is clean"
-            why = ("Cash flow exceeds net income. Reported earnings are backed by real "
-                   "cash generation — not accounting adjustments.")
+            why = (
+                "Cash flow exceeds net income. Reported earnings are backed by real "
+                "cash generation — not accounting adjustments."
+            )
             action = "Earnings quality supports the thesis. Safe to trust reported numbers."
             key_risk = "Small accrual buffer — monitor for reversal."
             direction = "STABLE"
         elif ratio < 5:
             verdict, conviction, contribution = "HOLD", "MODERATE", 0.0
             headline = "Borderline earnings quality — modest accrual build"
-            why = ("A small portion of earnings is accrual-based rather than cash-backed. "
-                   "Not alarming, but watch for the ratio rising further.")
+            why = (
+                "A small portion of earnings is accrual-based rather than cash-backed. "
+                "Not alarming, but watch for the ratio rising further."
+            )
             action = "Acceptable. Hold position but monitor accruals trend."
             key_risk = "Rising accruals over multiple quarters is an early warning sign."
             direction = "STABLE"
         elif ratio < 10:
             verdict, conviction, contribution = "SELL", "MODERATE", -1.0
             headline = "Elevated accruals — earnings quality deteriorating"
-            why = ("A meaningful portion of reported net income is accounting-based, not "
-                   "cash-backed. Companies with high accruals systematically underperform "
-                   "over the following 12 months (Sloan, 1996).")
+            why = (
+                "A meaningful portion of reported net income is accounting-based, not "
+                "cash-backed. Companies with high accruals systematically underperform "
+                "over the following 12 months (Sloan, 1996)."
+            )
             action = "Reduce position. Do not add. Reported EPS is likely overstated vs economic reality."
             key_risk = "May reflect timing differences rather than outright manipulation."
             direction = "DETERIORATING"
         else:
             verdict, conviction, contribution = "RISK_FLAG", "HIGH", -2.0
             headline = "Severe earnings quality problem — most income is paper, not cash"
-            why = ("Accruals ratio above 10% is a serious red flag. Most of the reported "
-                   "net income is accounting adjustments, not real cash generation. "
-                   "This pattern precedes earnings restatements and price collapses.")
-            action = "Do not enter. Exit existing position and investigate balance sheet aggressively."
+            why = (
+                "Accruals ratio above 10% is a serious red flag. Most of the reported "
+                "net income is accounting adjustments, not real cash generation. "
+                "This pattern precedes earnings restatements and price collapses."
+            )
+            action = (
+                "Do not enter. Exit existing position and investigate balance sheet aggressively."
+            )
             key_risk = "High accruals can persist for several quarters before unwinding — usually painfully."
             direction = "DETERIORATING"
 
@@ -507,17 +566,24 @@ def _accruals(fin: dict, bs: dict, cf: dict) -> dict:
         }
 
     except Exception as e:
-        return {"accruals_ratio_pct": None, "error": str(e), "signal": build_signal(
-            value=None, verdict="HOLD", conviction="LOW",
-            headline="Could not compute Accruals Ratio",
-            why="Missing cash flow or balance sheet data.",
-            action="Use other quality signals.",
-            key_risk="Missing data.",
-            score_contribution=0.0,
-        )}
+        return {
+            "accruals_ratio_pct": None,
+            "error": str(e),
+            "signal": build_signal(
+                value=None,
+                verdict="HOLD",
+                conviction="LOW",
+                headline="Could not compute Accruals Ratio",
+                why="Missing cash flow or balance sheet data.",
+                action="Use other quality signals.",
+                key_risk="Missing data.",
+                score_contribution=0.0,
+            ),
+        }
 
 
 # ── Main tool ─────────────────────────────────────────────────────────────────
+
 
 @tool
 def get_earnings_quality(ticker: str) -> dict:
@@ -534,9 +600,21 @@ def get_earnings_quality(ticker: str) -> dict:
         info = stock.info
 
         # Pull two years of annual financials for YoY comparisons
-        fin = stock.financials.to_dict("list") if stock.financials is not None and not stock.financials.empty else {}
-        bs = stock.balance_sheet.to_dict("list") if stock.balance_sheet is not None and not stock.balance_sheet.empty else {}
-        cf = stock.cashflow.to_dict("list") if stock.cashflow is not None and not stock.cashflow.empty else {}
+        fin = (
+            stock.financials.to_dict("list")
+            if stock.financials is not None and not stock.financials.empty
+            else {}
+        )
+        bs = (
+            stock.balance_sheet.to_dict("list")
+            if stock.balance_sheet is not None and not stock.balance_sheet.empty
+            else {}
+        )
+        cf = (
+            stock.cashflow.to_dict("list")
+            if stock.cashflow is not None and not stock.cashflow.empty
+            else {}
+        )
 
         piotroski = _piotroski(info, fin, bs, cf)
         beneish = _beneish(fin, bs, cf)

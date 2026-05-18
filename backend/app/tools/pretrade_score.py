@@ -21,7 +21,7 @@ def compute_pretrade_score(
     """
     checks: list[dict] = []
     curr = price.get("current_price")
-    mas  = technicals.get("moving_averages") or {}
+    mas = technicals.get("moving_averages") or {}
 
     # 1. Above 50d MA — short-term trend
     ma50 = mas.get("ma_50d")
@@ -40,14 +40,18 @@ def compute_pretrade_score(
     # 3. MACD bullish crossover
     macd_crossover = (technicals.get("macd") or {}).get("crossover")
     if macd_crossover:
-        checks.append(_chk("MACD Bullish", macd_crossover == "bullish", macd_crossover.capitalize()))
+        checks.append(
+            _chk("MACD Bullish", macd_crossover == "bullish", macd_crossover.capitalize())
+        )
     else:
         checks.append(_chk("MACD Bullish", None, "N/A"))
 
     # 4. RSI in the sweet spot (40–70) — not overbought or chasing
     rsi = technicals.get("rsi_14")
     if rsi is not None:
-        checks.append(_chk("RSI 40–70", 40 <= rsi <= 70, f"{rsi:.1f}", "Outside = chasing or exhaustion"))
+        checks.append(
+            _chk("RSI 40–70", 40 <= rsi <= 70, f"{rsi:.1f}", "Outside = chasing or exhaustion")
+        )
     else:
         checks.append(_chk("RSI 40–70", None, "N/A"))
 
@@ -60,7 +64,7 @@ def compute_pretrade_score(
 
     # 6. RVOL ≥ 1.5 (time-normalized during session; raw vol ratio otherwise)
     rvol_data = price.get("rvol") or {}
-    rvol_val  = rvol_data.get("rvol")
+    rvol_val = rvol_data.get("rvol")
     if rvol_val is not None and "extended" not in (rvol_data.get("signal") or ""):
         checks.append(_chk("RVOL ≥ 1.5x", rvol_val >= 1.5, f"{rvol_val:.2f}x"))
     else:
@@ -74,11 +78,13 @@ def compute_pretrade_score(
     vol = price.get("volume")
     avg_vol = price.get("avg_volume")
     if vol and avg_vol:
-        checks.append(_chk(
-            "Vol > Avg",
-            vol > avg_vol,
-            f"{vol / 1_000_000:.1f}M vs {avg_vol / 1_000_000:.1f}M avg",
-        ))
+        checks.append(
+            _chk(
+                "Vol > Avg",
+                vol > avg_vol,
+                f"{vol / 1_000_000:.1f}M vs {avg_vol / 1_000_000:.1f}M avg",
+            )
+        )
     else:
         checks.append(_chk("Vol > Avg", None, "N/A"))
 
@@ -91,9 +97,11 @@ def compute_pretrade_score(
     stock_sector = price.get("sector", "")
     sector_passed: bool | None = None
     sector_val = "N/A"
-    for s in ((sectors or {}).get("sectors") or []):
+    for s in (sectors or {}).get("sectors") or []:
         name = s.get("sector", "")
-        if stock_sector and (stock_sector.lower() in name.lower() or name.lower() in stock_sector.lower()):
+        if stock_sector and (
+            stock_sector.lower() in name.lower() or name.lower() in stock_sector.lower()
+        ):
             chg = s.get("change_5d_pct")
             if chg is not None:
                 sector_passed = chg > 0
@@ -120,9 +128,9 @@ def compute_pretrade_score(
         verdict, verdict_color = "AVOID", "red"
 
     return {
-        "score":        score,
-        "total":        total,
-        "verdict":      verdict,
+        "score": score,
+        "total": total,
+        "verdict": verdict,
         "verdict_color": verdict_color,
-        "checks":       checks,
+        "checks": checks,
     }

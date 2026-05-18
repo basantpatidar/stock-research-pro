@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 # Map our DTO enums onto alpaca-py's enums. Kept inline so a future SDK
 # version bump that renames their enums is one edit, not a hunt.
 _OUR_TO_ALPACA_SIDE = {
-    OrderSide.BUY:  "buy",
+    OrderSide.BUY: "buy",
     OrderSide.SELL: "sell",
 }
 _OUR_TO_ALPACA_TYPE = {
-    OrderType.MARKET:     "market",
-    OrderType.LIMIT:      "limit",
-    OrderType.STOP:       "stop",
+    OrderType.MARKET: "market",
+    OrderType.LIMIT: "limit",
+    OrderType.STOP: "stop",
     OrderType.STOP_LIMIT: "stop_limit",
 }
 _OUR_TO_ALPACA_TIF = {
@@ -45,15 +45,15 @@ _OUR_TO_ALPACA_TIF = {
     TimeInForce.FOK: "fok",
 }
 _ALPACA_TO_OUR_STATUS = {
-    "new":               OrderStatus.NEW,
-    "accepted":          OrderStatus.ACCEPTED,
-    "pending_new":       OrderStatus.NEW,
+    "new": OrderStatus.NEW,
+    "accepted": OrderStatus.ACCEPTED,
+    "pending_new": OrderStatus.NEW,
     "accepted_for_bidding": OrderStatus.ACCEPTED,
-    "partially_filled":  OrderStatus.PARTIALLY_FILLED,
-    "filled":            OrderStatus.FILLED,
-    "canceled":          OrderStatus.CANCELED,
-    "rejected":          OrderStatus.REJECTED,
-    "expired":           OrderStatus.EXPIRED,
+    "partially_filled": OrderStatus.PARTIALLY_FILLED,
+    "filled": OrderStatus.FILLED,
+    "canceled": OrderStatus.CANCELED,
+    "rejected": OrderStatus.REJECTED,
+    "expired": OrderStatus.EXPIRED,
 }
 
 
@@ -133,14 +133,17 @@ class AlpacaBroker(BaseBroker):
 
     def get_orders(self, status: str = "open", limit: int = 50) -> list[Order]:
         try:
-            from alpaca.trading.requests import GetOrdersRequest  # type: ignore
             from alpaca.trading.enums import QueryOrderStatus  # type: ignore
+            from alpaca.trading.requests import GetOrdersRequest  # type: ignore
+
             status_map = {
-                "open":   QueryOrderStatus.OPEN,
+                "open": QueryOrderStatus.OPEN,
                 "closed": QueryOrderStatus.CLOSED,
-                "all":    QueryOrderStatus.ALL,
+                "all": QueryOrderStatus.ALL,
             }
-            req = GetOrdersRequest(status=status_map.get(status, QueryOrderStatus.OPEN), limit=limit)
+            req = GetOrdersRequest(
+                status=status_map.get(status, QueryOrderStatus.OPEN), limit=limit
+            )
             raw = self._client.get_orders(filter=req)
         except Exception as exc:
             raise BrokerUnreachable(f"alpaca get_orders failed: {exc}") from exc
@@ -155,18 +158,22 @@ class AlpacaBroker(BaseBroker):
 
     def place_order(self, req: PlaceOrderRequest) -> Order:
         try:
-            from alpaca.trading.requests import (  # type: ignore
-                LimitOrderRequest,
-                MarketOrderRequest,
-                StopOrderRequest,
-                StopLimitOrderRequest,
-                TakeProfitRequest,
-                StopLossRequest,
+            from alpaca.trading.enums import (
+                OrderClass as APClass,
             )
             from alpaca.trading.enums import (  # type: ignore
                 OrderSide as APSide,
+            )
+            from alpaca.trading.enums import (
                 TimeInForce as APTIF,
-                OrderClass as APClass,
+            )
+            from alpaca.trading.requests import (  # type: ignore
+                LimitOrderRequest,
+                MarketOrderRequest,
+                StopLimitOrderRequest,
+                StopLossRequest,
+                StopOrderRequest,
+                TakeProfitRequest,
             )
 
             side = APSide.BUY if req.side == OrderSide.BUY else APSide.SELL
@@ -181,7 +188,9 @@ class AlpacaBroker(BaseBroker):
             if req.stop_price is not None or req.take_profit_price is not None:
                 bracket_kwargs["order_class"] = APClass.BRACKET
                 if req.take_profit_price is not None:
-                    bracket_kwargs["take_profit"] = TakeProfitRequest(limit_price=req.take_profit_price)
+                    bracket_kwargs["take_profit"] = TakeProfitRequest(
+                        limit_price=req.take_profit_price
+                    )
                 if req.stop_price is not None:
                     bracket_kwargs["stop_loss"] = StopLossRequest(stop_price=req.stop_price)
 
@@ -211,7 +220,10 @@ class AlpacaBroker(BaseBroker):
             msg = str(exc).lower()
             # Alpaca surfaces buying-power / position errors as 4xx — distinguish
             # those from network/5xx so the API layer can return 422 vs 503.
-            if any(t in msg for t in ("insufficient", "forbidden", "not allowed", "rejected", "422", "403")):
+            if any(
+                t in msg
+                for t in ("insufficient", "forbidden", "not allowed", "rejected", "422", "403")
+            ):
                 raise BrokerRejected(f"alpaca rejected order: {exc}") from exc
             raise BrokerUnreachable(f"alpaca submit_order failed: {exc}") from exc
         return self._to_order(raw)
@@ -251,9 +263,12 @@ class AlpacaBroker(BaseBroker):
             time_in_force=TimeInForce(str(o.time_in_force).lower()),
             status=_ALPACA_TO_OUR_STATUS.get(ap_status, OrderStatus.NEW),
             filled_qty=float(getattr(o, "filled_qty", 0) or 0),
-            filled_avg_price=float(o.filled_avg_price) if getattr(o, "filled_avg_price", None) else None,
+            filled_avg_price=(
+                float(o.filled_avg_price) if getattr(o, "filled_avg_price", None) else None
+            ),
             submitted_at=o.submitted_at,
             filled_at=getattr(o, "filled_at", None),
             canceled_at=getattr(o, "canceled_at", None),
-            rejected_reason=getattr(o, "failed_at", None) and str(getattr(o, "reject_reason", "") or ""),
+            rejected_reason=getattr(o, "failed_at", None)
+            and str(getattr(o, "reject_reason", "") or ""),
         )

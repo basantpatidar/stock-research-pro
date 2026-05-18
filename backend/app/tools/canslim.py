@@ -1,6 +1,7 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 import numpy as np
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 @tool
@@ -13,7 +14,6 @@ def get_canslim_score(ticker: str) -> dict:
         stock = get_ticker(ticker)
         info = stock.info
         hist = stock.history(period="1y")
-        inc = stock.income_stmt
         spy = __import__("yfinance").Ticker("SPY").history(period="1y")
 
         if hist.empty:
@@ -31,14 +31,20 @@ def get_canslim_score(ticker: str) -> dict:
             qe = stock.quarterly_earnings
             if qe is not None and not qe.empty and len(qe) >= 2:
                 last_q = float(qe.iloc[0].get("Earnings") or 0)
-                prior_yr_q = float(qe.iloc[4].get("Earnings") if len(qe) > 4 else qe.iloc[1].get("Earnings") or 0)
+                prior_yr_q = float(
+                    qe.iloc[4].get("Earnings") if len(qe) > 4 else qe.iloc[1].get("Earnings") or 0
+                )
                 if prior_yr_q != 0:
                     growth = (last_q - prior_yr_q) / abs(prior_yr_q) * 100
                     c_pass = growth >= 25
                     c_detail = f"Latest quarter EPS growth: {growth:.0f}% (need ≥25%)"
         except Exception:
             pass
-        criteria["C_quarterly_earnings"] = {"pass": c_pass, "detail": c_detail, "label": "Current Q EPS Growth ≥25%"}
+        criteria["C_quarterly_earnings"] = {
+            "pass": c_pass,
+            "detail": c_detail,
+            "label": "Current Q EPS Growth ≥25%",
+        }
 
         # A — Annual EPS growth > 20% for last 3 years
         a_pass = None
@@ -49,14 +55,21 @@ def get_canslim_score(ticker: str) -> dict:
                 eps_vals = [float(ae.iloc[i].get("Earnings") or 0) for i in range(min(4, len(ae)))]
                 eps_vals = [e for e in eps_vals if e != 0]
                 if len(eps_vals) >= 2:
-                    growth_rates = [(eps_vals[i] - eps_vals[i+1]) / abs(eps_vals[i+1]) * 100
-                                    for i in range(len(eps_vals)-1) if eps_vals[i+1] != 0]
+                    growth_rates = [
+                        (eps_vals[i] - eps_vals[i + 1]) / abs(eps_vals[i + 1]) * 100
+                        for i in range(len(eps_vals) - 1)
+                        if eps_vals[i + 1] != 0
+                    ]
                     avg_growth = np.mean(growth_rates) if growth_rates else 0
                     a_pass = avg_growth >= 20
                     a_detail = f"Annual EPS CAGR: {avg_growth:.0f}% (need ≥20%)"
         except Exception:
             pass
-        criteria["A_annual_earnings"] = {"pass": a_pass, "detail": a_detail, "label": "Annual EPS Growth ≥20% (3yr)"}
+        criteria["A_annual_earnings"] = {
+            "pass": a_pass,
+            "detail": a_detail,
+            "label": "Annual EPS Growth ≥20% (3yr)",
+        }
 
         # N — New 52-week high (price within 5% of high = near new high)
         high_52w = float(closes.rolling(252, min_periods=50).max().iloc[-1])
@@ -76,7 +89,6 @@ def get_canslim_score(ticker: str) -> dict:
         criteria["S_supply"] = {"pass": s_pass, "detail": s_detail, "label": "Float < 500M shares"}
 
         # L — Leader: RS Rating > 70 (from technicals if available)
-        rs_rating = info.get("52WeekChange")
         l_pass = None
         l_detail = "RS Rating not available"
         try:
@@ -102,13 +114,18 @@ def get_canslim_score(ticker: str) -> dict:
                 i_detail = f"Institutional ownership: {total_pct*100:.0f}% (need >20%)"
         except Exception:
             pass
-        criteria["I_institutional"] = {"pass": i_pass, "detail": i_detail, "label": "Institutional Ownership >20%"}
+        criteria["I_institutional"] = {
+            "pass": i_pass,
+            "detail": i_detail,
+            "label": "Institutional Ownership >20%",
+        }
 
         # M — Market direction: S&P trending up and VIX < 25
         m_pass = None
         m_detail = "No market data"
         try:
             import yfinance as yf
+
             vix = yf.Ticker("^VIX").history(period="5d")
             vix_val = float(vix["Close"].iloc[-1]) if not vix.empty else 25
             spy_trend = float(spy["Close"].pct_change(20).iloc[-1]) if not spy.empty else 0
@@ -116,7 +133,11 @@ def get_canslim_score(ticker: str) -> dict:
             m_detail = f"VIX {vix_val:.0f} ({'ok' if vix_val < 25 else 'elevated'}), S&P 20d: {spy_trend*100:.1f}%"
         except Exception:
             pass
-        criteria["M_market"] = {"pass": m_pass, "detail": m_detail, "label": "Market Direction Bullish"}
+        criteria["M_market"] = {
+            "pass": m_pass,
+            "detail": m_detail,
+            "label": "Market Direction Bullish",
+        }
 
         passed = sum(1 for c in criteria.values() if c["pass"] is True)
         total = 7

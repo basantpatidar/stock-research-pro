@@ -1,10 +1,14 @@
-from langchain_core.tools import tool
 from datetime import datetime, timedelta
+
 import requests
+from langchain_core.tools import tool
 
-
-_HOUSE_URL = "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
-_SENATE_URL = "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+_HOUSE_URL = (
+    "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
+)
+_SENATE_URL = (
+    "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+)
 
 _TIMEOUT = 10
 
@@ -24,15 +28,17 @@ def _fetch_house(ticker: str, days: int) -> list[dict]:
                 continue
             if tx_date < cutoff:
                 continue
-            results.append({
-                "chamber": "House",
-                "member": tx.get("representative", "Unknown"),
-                "ticker": tx.get("ticker"),
-                "transaction_type": tx.get("type", "unknown"),
-                "amount_range": tx.get("amount", "unknown"),
-                "date": tx.get("transaction_date"),
-                "description": tx.get("asset_description", ""),
-            })
+            results.append(
+                {
+                    "chamber": "House",
+                    "member": tx.get("representative", "Unknown"),
+                    "ticker": tx.get("ticker"),
+                    "transaction_type": tx.get("type", "unknown"),
+                    "amount_range": tx.get("amount", "unknown"),
+                    "date": tx.get("transaction_date"),
+                    "description": tx.get("asset_description", ""),
+                }
+            )
         return results
     except Exception:
         return []
@@ -53,15 +59,17 @@ def _fetch_senate(ticker: str, days: int) -> list[dict]:
                 continue
             if tx_date < cutoff:
                 continue
-            results.append({
-                "chamber": "Senate",
-                "member": tx.get("senator", "Unknown"),
-                "ticker": tx.get("ticker"),
-                "transaction_type": tx.get("type", "unknown"),
-                "amount_range": tx.get("amount", "unknown"),
-                "date": tx.get("transaction_date"),
-                "description": tx.get("asset_description", ""),
-            })
+            results.append(
+                {
+                    "chamber": "Senate",
+                    "member": tx.get("senator", "Unknown"),
+                    "ticker": tx.get("ticker"),
+                    "transaction_type": tx.get("type", "unknown"),
+                    "amount_range": tx.get("amount", "unknown"),
+                    "date": tx.get("transaction_date"),
+                    "description": tx.get("asset_description", ""),
+                }
+            )
         return results
     except Exception:
         return []
@@ -79,21 +87,43 @@ def get_congressional_trades(ticker: str, days: int = 180) -> dict:
         senate = _fetch_senate(ticker, days)
         all_trades = house + senate
 
-        buys = [t for t in all_trades if "purchase" in t.get("transaction_type", "").lower()
-                or "buy" in t.get("transaction_type", "").lower()]
-        sells = [t for t in all_trades if "sale" in t.get("transaction_type", "").lower()
-                 or "sell" in t.get("transaction_type", "").lower()]
+        buys = [
+            t
+            for t in all_trades
+            if "purchase" in t.get("transaction_type", "").lower()
+            or "buy" in t.get("transaction_type", "").lower()
+        ]
+        sells = [
+            t
+            for t in all_trades
+            if "sale" in t.get("transaction_type", "").lower()
+            or "sell" in t.get("transaction_type", "").lower()
+        ]
 
         members_buying = list({t["member"] for t in buys})
         members_selling = list({t["member"] for t in sells})
 
         sentiment = (
-            "strongly bullish — more buys than sells" if len(buys) > len(sells) * 1.5
-            else "slightly bullish" if len(buys) > len(sells)
-            else "mixed" if len(buys) == len(sells)
-            else "slightly bearish" if len(sells) > len(buys)
-            else "strongly bearish — more sells than buys"
-        ) if all_trades else "no recent activity"
+            (
+                "strongly bullish — more buys than sells"
+                if len(buys) > len(sells) * 1.5
+                else (
+                    "slightly bullish"
+                    if len(buys) > len(sells)
+                    else (
+                        "mixed"
+                        if len(buys) == len(sells)
+                        else (
+                            "slightly bearish"
+                            if len(sells) > len(buys)
+                            else "strongly bearish — more sells than buys"
+                        )
+                    )
+                )
+            )
+            if all_trades
+            else "no recent activity"
+        )
 
         return {
             "ticker": ticker.upper(),

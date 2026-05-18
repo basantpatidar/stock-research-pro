@@ -1,16 +1,16 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
-from app.tools.technicals import _compute_rsi, _compute_macd
 import pandas as pd
+from langchain_core.tools import tool
 
+from app.tools._yf_client import get_ticker
+from app.tools.technicals import _compute_macd, _compute_rsi
 
 # Weight allocation mirrors how day traders prioritize timeframes:
 # daily trend > hourly momentum > 15m setup > 5m entry
 _TIMEFRAMES = {
-    "5m":  {"period": "1d",  "interval": "5m",  "weight": 0.10},
-    "15m": {"period": "5d",  "interval": "15m", "weight": 0.20},
-    "1h":  {"period": "30d", "interval": "1h",  "weight": 0.30},
-    "1d":  {"period": "1y",  "interval": "1d",  "weight": 0.40},
+    "5m": {"period": "1d", "interval": "5m", "weight": 0.10},
+    "15m": {"period": "5d", "interval": "15m", "weight": 0.20},
+    "1h": {"period": "30d", "interval": "1h", "weight": 0.30},
+    "1d": {"period": "1y", "interval": "1d", "weight": 0.40},
 }
 
 
@@ -33,7 +33,9 @@ def _analyze_timeframe(hist: pd.DataFrame) -> dict | None:
     price_above_vwap = float(close.iloc[-1]) > float(vwap)
 
     bullish_count = sum([rsi_bullish, macd_bullish, price_above_vwap])
-    direction = "BULLISH" if bullish_count >= 2 else ("NEUTRAL" if bullish_count == 1 else "BEARISH")
+    direction = (
+        "BULLISH" if bullish_count >= 2 else ("NEUTRAL" if bullish_count == 1 else "BEARISH")
+    )
 
     return {
         "direction": direction,
@@ -70,24 +72,38 @@ def get_mtf_confluence(ticker: str) -> dict:
                     weighted_score += analysis["score"] * cfg["weight"]
                     valid_weight += cfg["weight"]
                 else:
-                    results[tf] = {"direction": "INSUFFICIENT_DATA", "bullish_signals": 0, "score": 0.0}
+                    results[tf] = {
+                        "direction": "INSUFFICIENT_DATA",
+                        "bullish_signals": 0,
+                        "score": 0.0,
+                    }
             except Exception:
                 results[tf] = {"direction": "ERROR", "bullish_signals": 0, "score": 0.0}
 
         final_score = round((weighted_score / valid_weight * 100) if valid_weight > 0 else 50.0, 1)
 
         label = (
-            "STRONG BULL" if final_score >= 75 else
-            "BULL"        if final_score >= 55 else
-            "NEUTRAL"     if final_score >= 45 else
-            "BEAR"        if final_score >= 25 else
-            "STRONG BEAR"
+            "STRONG BULL"
+            if final_score >= 75
+            else (
+                "BULL"
+                if final_score >= 55
+                else (
+                    "NEUTRAL"
+                    if final_score >= 45
+                    else "BEAR" if final_score >= 25 else "STRONG BEAR"
+                )
+            )
         )
 
-        valid = {tf: r for tf, r in results.items() if r.get("direction") not in ("ERROR", "INSUFFICIENT_DATA")}
-        bullish_tfs  = [tf for tf, r in valid.items() if r["direction"] == "BULLISH"]
-        bearish_tfs  = [tf for tf, r in valid.items() if r["direction"] == "BEARISH"]
-        neutral_tfs  = [tf for tf, r in valid.items() if r["direction"] == "NEUTRAL"]
+        valid = {
+            tf: r
+            for tf, r in results.items()
+            if r.get("direction") not in ("ERROR", "INSUFFICIENT_DATA")
+        }
+        bullish_tfs = [tf for tf, r in valid.items() if r["direction"] == "BULLISH"]
+        bearish_tfs = [tf for tf, r in valid.items() if r["direction"] == "BEARISH"]
+        neutral_tfs = [tf for tf, r in valid.items() if r["direction"] == "NEUTRAL"]
 
         if len(bullish_tfs) == len(valid) and valid:
             alignment = "All timeframes aligned bullish — high conviction long setup"
@@ -95,9 +111,12 @@ def get_mtf_confluence(ticker: str) -> dict:
             alignment = "All timeframes aligned bearish — avoid long entries"
         else:
             parts = []
-            if bullish_tfs: parts.append(f"{', '.join(bullish_tfs)} bullish")
-            if neutral_tfs: parts.append(f"{', '.join(neutral_tfs)} neutral")
-            if bearish_tfs: parts.append(f"{', '.join(bearish_tfs)} bearish")
+            if bullish_tfs:
+                parts.append(f"{', '.join(bullish_tfs)} bullish")
+            if neutral_tfs:
+                parts.append(f"{', '.join(neutral_tfs)} neutral")
+            if bearish_tfs:
+                parts.append(f"{', '.join(bearish_tfs)} bearish")
             alignment = " · ".join(parts) if parts else "Insufficient data"
 
         return {

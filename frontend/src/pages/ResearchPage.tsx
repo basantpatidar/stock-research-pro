@@ -416,7 +416,7 @@ export function ResearchPage() {
                   background: `${rvColor}18`, border: `1px solid ${rvColor}`,
                 }}>
                   <span style={{ fontSize: 10, color: T.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>RVOL</span>
-                  <span style={{ fontSize: 14, fontFamily: T.mono, fontWeight: 700, color: rvColor }}>{rv.rvol.toFixed(2)}x</span>
+                  <span style={{ fontSize: 14, fontFamily: T.mono, fontWeight: 700, color: rvColor }}>{rv.rvol!.toFixed(2)}x</span>
                   <span style={{ fontSize: 10, fontWeight: 600, color: rvColor, fontFamily: T.mono, letterSpacing: "0.06em" }}>{rv.signal}</span>
                 </div>
                 <span style={{ fontSize: 11, color: T.text3 }}>relative to avg volume at this time of day</span>

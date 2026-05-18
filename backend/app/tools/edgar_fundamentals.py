@@ -1,6 +1,7 @@
-from langchain_core.tools import tool
-import requests
 import time
+
+import requests
+from langchain_core.tools import tool
 
 _HEADERS = {"User-Agent": "StockResearchPro research@stockresearchpro.local"}
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -16,7 +17,9 @@ def _get_cik(ticker: str) -> str | None:
             r = requests.get(_TICKERS_URL, headers=_HEADERS, timeout=10)
             if r.ok:
                 data = r.json()
-                _ticker_to_cik = {v["ticker"].upper(): str(v["cik_str"]).zfill(10) for v in data.values()}
+                _ticker_to_cik = {
+                    v["ticker"].upper(): str(v["cik_str"]).zfill(10) for v in data.values()
+                }
         except Exception:
             pass
     return _ticker_to_cik.get(ticker.upper())
@@ -25,15 +28,21 @@ def _get_cik(ticker: str) -> str | None:
 def _extract_series(facts: dict, taxonomy: str, concept: str, unit: str = "USD") -> list[dict]:
     """Pull annual (10-K) values for a given XBRL concept."""
     try:
-        entries = facts.get("facts", {}).get(taxonomy, {}).get(concept, {}).get("units", {}).get(unit, [])
-        annual = [e for e in entries if e.get("form") in ("10-K", "10-K/A") and e.get("val") is not None]
+        entries = (
+            facts.get("facts", {}).get(taxonomy, {}).get(concept, {}).get("units", {}).get(unit, [])
+        )
+        annual = [
+            e for e in entries if e.get("form") in ("10-K", "10-K/A") and e.get("val") is not None
+        ]
         # deduplicate by fiscal year end
         seen: dict[str, dict] = {}
         for e in annual:
             fy = e.get("end", "")[:4]
             if fy not in seen or e.get("filed", "") > seen[fy].get("filed", ""):
                 seen[fy] = e
-        return [{"year": int(fy), "value": v["val"]} for fy, v in sorted(seen.items()) if fy.isdigit()][-8:]
+        return [
+            {"year": int(fy), "value": v["val"]} for fy, v in sorted(seen.items()) if fy.isdigit()
+        ][-8:]
     except Exception:
         return []
 
@@ -57,9 +66,13 @@ def get_edgar_fundamentals(ticker: str) -> dict:
         facts = r.json()
         entity_name = facts.get("entityName", ticker.upper())
 
-        revenue = _extract_series(facts, "us-gaap", "Revenues") or \
-                  _extract_series(facts, "us-gaap", "RevenueFromContractWithCustomerExcludingAssessedTax") or \
-                  _extract_series(facts, "us-gaap", "SalesRevenueNet")
+        revenue = (
+            _extract_series(facts, "us-gaap", "Revenues")
+            or _extract_series(
+                facts, "us-gaap", "RevenueFromContractWithCustomerExcludingAssessedTax"
+            )
+            or _extract_series(facts, "us-gaap", "SalesRevenueNet")
+        )
 
         net_income = _extract_series(facts, "us-gaap", "NetIncomeLoss")
 
@@ -75,8 +88,9 @@ def get_edgar_fundamentals(ticker: str) -> dict:
                 cap = capex_map.get(e["year"], 0)
                 fcf.append({"year": e["year"], "value": e["value"] - cap})
 
-        total_debt = _extract_series(facts, "us-gaap", "LongTermDebt") or \
-                     _extract_series(facts, "us-gaap", "DebtCurrent")
+        total_debt = _extract_series(facts, "us-gaap", "LongTermDebt") or _extract_series(
+            facts, "us-gaap", "DebtCurrent"
+        )
 
         def _to_b(series: list[dict]) -> list[dict]:
             return [{"year": e["year"], "value": round(e["value"] / 1e9, 2)} for e in series]
@@ -90,9 +104,7 @@ def get_edgar_fundamentals(ticker: str) -> dict:
             "operating_income_b": _to_b(op_income),
             "fcf_b": _to_b(fcf),
             "total_debt_b": _to_b(total_debt),
-            "years_available": max(
-                len(revenue), len(net_income), len(op_income), len(fcf)
-            ),
+            "years_available": max(len(revenue), len(net_income), len(op_income), len(fcf)),
             "source": "SEC EDGAR XBRL",
         }
     except Exception as e:

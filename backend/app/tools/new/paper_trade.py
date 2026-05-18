@@ -1,6 +1,8 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 from typing import Optional
+
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 @tool
@@ -60,9 +62,17 @@ def analyze_paper_trade(
         ma200 = round(float(close.rolling(200).mean().iloc[-1]), 2) if len(close) >= 200 else None
 
         # Stop/target distance
-        stop_distance_pct = round((entry_price - stop_loss) / entry_price * 100, 1) if stop_loss else None
-        target_distance_pct = round((target_price - entry_price) / entry_price * 100, 1) if target_price else None
-        rr_ratio = round(target_distance_pct / stop_distance_pct, 2) if (stop_distance_pct and target_distance_pct and stop_distance_pct != 0) else None
+        stop_distance_pct = (
+            round((entry_price - stop_loss) / entry_price * 100, 1) if stop_loss else None
+        )
+        target_distance_pct = (
+            round((target_price - entry_price) / entry_price * 100, 1) if target_price else None
+        )
+        rr_ratio = (
+            round(target_distance_pct / stop_distance_pct, 2)
+            if (stop_distance_pct and target_distance_pct and stop_distance_pct != 0)
+            else None
+        )
 
         trade_data = {
             "ticker": ticker.upper(),
@@ -112,17 +122,25 @@ def analyze_paper_trade(
             )
         else:
             hit_stop = stop_loss and (
-                (trade_type == "long" and current_price <= stop_loss) or
-                (trade_type == "short" and current_price >= stop_loss)
+                (trade_type == "long" and current_price <= stop_loss)
+                or (trade_type == "short" and current_price >= stop_loss)
             )
             hit_target = target_price and (
-                (trade_type == "long" and current_price >= target_price) or
-                (trade_type == "short" and current_price <= target_price)
+                (trade_type == "long" and current_price >= target_price)
+                or (trade_type == "short" and current_price <= target_price)
             )
             coaching_prompt += (
                 f"This trade is OPEN with current P&L of {round(pnl_pct, 2)}% (${round(pnl_dollar, 2)}).\n"
-                + (f"⚠️ STOP LOSS HIT — price has breached your stop at {stop_loss}.\n" if hit_stop else "")
-                + (f"🎯 TARGET REACHED — price has hit your target at {target_price}.\n" if hit_target else "")
+                + (
+                    f"⚠️ STOP LOSS HIT — price has breached your stop at {stop_loss}.\n"
+                    if hit_stop
+                    else ""
+                )
+                + (
+                    f"🎯 TARGET REACHED — price has hit your target at {target_price}.\n"
+                    if hit_target
+                    else ""
+                )
                 + f"Provide coaching on:\n"
                 f"1. Hold or exit — should they stay in the trade or take profits/cut losses now?\n"
                 f"2. Stop adjustment — should the stop loss be moved (trail it, tighten it)?\n"

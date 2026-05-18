@@ -1,7 +1,7 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 import pandas as pd
-import numpy as np
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 def _compute_rsi(series: pd.Series, period: int = 14) -> float:
@@ -41,9 +41,13 @@ def _compute_bollinger(series: pd.Series, period: int = 20):
         "lower": round(float(lower.iloc[-1]), 2),
         "position": round(position, 2),
         "interpretation": (
-            "near upper band — overbought territory" if position > 0.8
-            else "near lower band — oversold territory" if position < 0.2
-            else "middle of bands — neutral"
+            "near upper band — overbought territory"
+            if position > 0.8
+            else (
+                "near lower band — oversold territory"
+                if position < 0.2
+                else "middle of bands — neutral"
+            )
         ),
     }
 
@@ -87,31 +91,35 @@ def _compute_rs_rating(stock_hist, spy_hist) -> dict | None:
     NOTE: true IBD ranks against ~3 000 stocks; this approximates
     using SPY as the baseline (50 = inline with SPY).
     """
+
     def _weighted(hist) -> float | None:
         if len(hist) < 252:
             return None
         c = hist["Close"]
         # 63 trading days ≈ 1 quarter
-        q1 = float(c.iloc[-1]   / c.iloc[-64]  - 1) * 100
-        q2 = float(c.iloc[-64]  / c.iloc[-127] - 1) * 100
+        q1 = float(c.iloc[-1] / c.iloc[-64] - 1) * 100
+        q2 = float(c.iloc[-64] / c.iloc[-127] - 1) * 100
         q3 = float(c.iloc[-127] / c.iloc[-190] - 1) * 100
         q4 = float(c.iloc[-190] / c.iloc[-252] - 1) * 100
         return (q1 * 2 + q2 + q3 + q4) / 5
 
     stock_score = _weighted(stock_hist)
-    spy_score   = _weighted(spy_hist)
+    spy_score = _weighted(spy_hist)
     if stock_score is None or spy_score is None:
         return None
 
     raw = stock_score - spy_score
     # Each 0.5 percentage point of outperformance = 1 RS point above 50
-    rs  = max(1, min(99, round(50 + raw * 2)))
+    rs = max(1, min(99, round(50 + raw * 2)))
 
     signal = (
-        "Top performer — strong relative strength" if rs >= 80 else
-        "Above market average"                     if rs >= 60 else
-        "In line with market"                      if rs >= 40 else
-        "Underperforming market"
+        "Top performer — strong relative strength"
+        if rs >= 80
+        else (
+            "Above market average"
+            if rs >= 60
+            else "In line with market" if rs >= 40 else "Underperforming market"
+        )
     )
     return {"rs_rating": rs, "rs_signal": signal}
 
@@ -146,12 +154,16 @@ def get_technicals(ticker: str) -> dict:
 
         rsi = _compute_rsi(close)
         rsi_signal = (
-            "oversold — potential buy signal" if rsi < 30
-            else "overbought — potential sell signal" if rsi > 70
-            else "neutral range"
+            "oversold — potential buy signal"
+            if rsi < 30
+            else "overbought — potential sell signal" if rsi > 70 else "neutral range"
         )
 
-        rs = _compute_rs_rating(hist, spy_hist) if spy_hist is not None and not spy_hist.empty else None
+        rs = (
+            _compute_rs_rating(hist, spy_hist)
+            if spy_hist is not None and not spy_hist.empty
+            else None
+        )
 
         return {
             "ticker": ticker.upper(),
@@ -169,7 +181,7 @@ def get_technicals(ticker: str) -> dict:
                 "above_average": bool(volume.iloc[-1] > volume.rolling(20).mean().iloc[-1]),
             },
             "rs_rating": rs["rs_rating"] if rs else None,
-            "rs_signal":  rs["rs_signal"]  if rs else None,
+            "rs_signal": rs["rs_signal"] if rs else None,
         }
     except Exception as e:
         return {"error": f"Failed to compute technicals for {ticker}: {str(e)}"}

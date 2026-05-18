@@ -18,15 +18,14 @@ from __future__ import annotations
 
 import math
 from datetime import date, datetime
-from typing import Any
 
 from langchain_core.tools import tool
 
 from app.tools._yf_client import get_ticker
 from app.tools.signal import build_signal, composite_verdict
 
-
 # ── Math helpers (Black-Scholes, no scipy needed) ─────────────────────────────
+
 
 def _norm_pdf(x: float) -> float:
     return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
@@ -37,7 +36,7 @@ def _bs_gamma(spot: float, strike: float, sigma: float, T: float, r: float = 0.0
     if T <= 0 or sigma <= 0 or spot <= 0 or strike <= 0:
         return 0.0
     try:
-        d1 = (math.log(spot / strike) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+        d1 = (math.log(spot / strike) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
         return _norm_pdf(d1) / (spot * sigma * math.sqrt(T))
     except (ValueError, ZeroDivisionError):
         return 0.0
@@ -67,6 +66,7 @@ def _realized_vol_30d(hist) -> float | None:
 
 # ── GEX ───────────────────────────────────────────────────────────────────────
 
+
 def _compute_gex(calls, puts, spot: float, expiry: str) -> dict:
     """
     Net Gamma Exposure.
@@ -92,7 +92,7 @@ def _compute_gex(calls, puts, spot: float, expiry: str) -> dict:
         if K <= 0 or oi <= 0 or iv <= 0:
             continue
         g = _bs_gamma(spot, K, iv, T)
-        contribution = g * oi * CONTRACT * spot ** 2 / 100
+        contribution = g * oi * CONTRACT * spot**2 / 100
         call_gex += contribution
         gex_by_strike[K] = gex_by_strike.get(K, 0.0) + contribution
 
@@ -104,7 +104,7 @@ def _compute_gex(calls, puts, spot: float, expiry: str) -> dict:
         if K <= 0 or oi <= 0 or iv <= 0:
             continue
         g = _bs_gamma(spot, K, iv, T)
-        contribution = g * oi * CONTRACT * spot ** 2 / 100
+        contribution = g * oi * CONTRACT * spot**2 / 100
         put_gex += contribution
         gex_by_strike[K] = gex_by_strike.get(K, 0.0) - contribution
 
@@ -126,17 +126,23 @@ def _compute_gex(calls, puts, spot: float, expiry: str) -> dict:
     if net_gex > 0:
         verdict, conviction, score = "BUY", "MODERATE", 0.5
         headline = f"Positive GEX ${net_gex/1e6:.0f}M — market makers will DAMPEN moves today"
-        why = ("Dealers are net long gamma. They buy dips and sell rallies to hedge, acting as a "
-               "natural price stabiliser. Expect range-bound price action.")
+        why = (
+            "Dealers are net long gamma. They buy dips and sell rallies to hedge, acting as a "
+            "natural price stabiliser. Expect range-bound price action."
+        )
         action = "Favour mean-reversion strategies. Tight ranges make premium-selling attractive."
         key_risk = "A news catalyst can overwhelm GEX suppression — watch for gap opens."
         direction = "STABLE"
     else:
         verdict, conviction, score = "SELL", "HIGH", -1.0
         headline = f"Negative GEX ${abs(net_gex)/1e6:.0f}M — market makers will AMPLIFY moves today"
-        why = ("Dealers are net short gamma. They must chase moves to delta-hedge, adding fuel to "
-               "both rallies and selloffs. Volatility expands.")
-        action = "Favour momentum and breakout strategies. Widen stops to account for amplified swings."
+        why = (
+            "Dealers are net short gamma. They must chase moves to delta-hedge, adding fuel to "
+            "both rallies and selloffs. Volatility expands."
+        )
+        action = (
+            "Favour momentum and breakout strategies. Widen stops to account for amplified swings."
+        )
         key_risk = "GEX flips rapidly — recalculate at each session open."
         direction = "DETERIORATING" if net_gex < -500_000_000 else "STABLE"
 
@@ -162,14 +168,13 @@ def _compute_gex(calls, puts, spot: float, expiry: str) -> dict:
 
 # ── Max Pain ──────────────────────────────────────────────────────────────────
 
+
 def _compute_max_pain(calls, puts, spot: float) -> dict:
     """
     Max pain = strike where total option value (all calls + all puts) is minimised.
     Option sellers profit most when price lands here at expiry.
     """
-    all_strikes = sorted(set(
-        list(calls["strike"].dropna()) + list(puts["strike"].dropna())
-    ))
+    all_strikes = sorted(set(list(calls["strike"].dropna()) + list(puts["strike"].dropna())))
     if not all_strikes:
         return {}
 
@@ -177,12 +182,16 @@ def _compute_max_pain(calls, puts, spot: float) -> dict:
     max_pain_strike = all_strikes[0]
 
     for test_strike in all_strikes:
-        call_pain = float(calls.apply(
-            lambda r: max(0.0, test_strike - r["strike"]) * (r.get("openInterest") or 0), axis=1
-        ).sum())
-        put_pain = float(puts.apply(
-            lambda r: max(0.0, r["strike"] - test_strike) * (r.get("openInterest") or 0), axis=1
-        ).sum())
+        call_pain = float(
+            calls.apply(
+                lambda r: max(0.0, test_strike - r["strike"]) * (r.get("openInterest") or 0), axis=1
+            ).sum()
+        )
+        put_pain = float(
+            puts.apply(
+                lambda r: max(0.0, r["strike"] - test_strike) * (r.get("openInterest") or 0), axis=1
+            ).sum()
+        )
         total = call_pain + put_pain
         if total < min_pain:
             min_pain = total
@@ -194,7 +203,9 @@ def _compute_max_pain(calls, puts, spot: float) -> dict:
     if abs_dist < 1.0:
         verdict, score = "HOLD", 0.0
         conviction = "MODERATE"
-        headline = f"Max pain at ${max_pain_strike:.0f} — {abs_dist:.1f}% from current price (close)"
+        headline = (
+            f"Max pain at ${max_pain_strike:.0f} — {abs_dist:.1f}% from current price (close)"
+        )
         action = "Price near max pain. Option sellers have minimal pressure to move price."
     elif distance_pct < -2.0:
         verdict, score = "SELL", -0.75
@@ -215,8 +226,10 @@ def _compute_max_pain(calls, puts, spot: float) -> dict:
             verdict=verdict,
             conviction=conviction,
             headline=headline,
-            why=("Max pain is the price where all outstanding options lose the most total value. "
-                 "Market makers and option sellers have a financial incentive to pin price here at expiry."),
+            why=(
+                "Max pain is the price where all outstanding options lose the most total value. "
+                "Market makers and option sellers have a financial incentive to pin price here at expiry."
+            ),
             action=action,
             key_risk="Max pain is only relevant in the days leading up to expiration — less meaningful weeks out.",
             direction="UNKNOWN",
@@ -227,6 +240,7 @@ def _compute_max_pain(calls, puts, spot: float) -> dict:
 
 # ── IV vs Realized Vol ────────────────────────────────────────────────────────
 
+
 def _compute_iv_analysis(calls, puts, spot: float, hist) -> dict:
     """
     Compare ATM implied vol to 30-day realised vol.
@@ -235,8 +249,10 @@ def _compute_iv_analysis(calls, puts, spot: float, hist) -> dict:
     """
     # ATM implied vol: average IV of calls and puts nearest to spot
     atm_calls = calls.iloc[(calls["strike"] - spot).abs().argsort()[:3]]
-    atm_puts  = puts.iloc[(puts["strike"]  - spot).abs().argsort()[:3]]
-    atm_ivs   = list(atm_calls["impliedVolatility"].dropna()) + list(atm_puts["impliedVolatility"].dropna())
+    atm_puts = puts.iloc[(puts["strike"] - spot).abs().argsort()[:3]]
+    atm_ivs = list(atm_calls["impliedVolatility"].dropna()) + list(
+        atm_puts["impliedVolatility"].dropna()
+    )
     atm_iv = float(sum(atm_ivs) / len(atm_ivs)) if atm_ivs else None
 
     rv_30d = _realized_vol_30d(hist)
@@ -254,12 +270,18 @@ def _compute_iv_analysis(calls, puts, spot: float, hist) -> dict:
 
     if ratio > 1.3:
         verdict, score, conviction = "SELL", -0.75, "MODERATE"
-        headline = f"IV {atm_iv_pct}% vs RV {rv_pct}% — options are expensive, premium selling favoured"
-        action = "Selling covered calls or cash-secured puts is high edge here. Avoid buying premium."
+        headline = (
+            f"IV {atm_iv_pct}% vs RV {rv_pct}% — options are expensive, premium selling favoured"
+        )
+        action = (
+            "Selling covered calls or cash-secured puts is high edge here. Avoid buying premium."
+        )
         direction = "DETERIORATING"
     elif ratio < 0.8:
         verdict, score, conviction = "BUY", 0.75, "MODERATE"
-        headline = f"IV {atm_iv_pct}% vs RV {rv_pct}% — options are cheap, buying premium is attractive"
+        headline = (
+            f"IV {atm_iv_pct}% vs RV {rv_pct}% — options are cheap, buying premium is attractive"
+        )
         action = "Protective puts or speculative calls are cheap relative to expected moves. Consider buying."
         direction = "IMPROVING"
     else:
@@ -277,9 +299,11 @@ def _compute_iv_analysis(calls, puts, spot: float, hist) -> dict:
             verdict=verdict,
             conviction=conviction,
             headline=headline,
-            why=("IV/RV ratio compares how much the options market expects the stock to move (IV) "
-                 "vs how much it has actually moved recently (realised vol). "
-                 "A ratio above 1.3 means you're overpaying for options; below 0.8 means options are a bargain."),
+            why=(
+                "IV/RV ratio compares how much the options market expects the stock to move (IV) "
+                "vs how much it has actually moved recently (realised vol). "
+                "A ratio above 1.3 means you're overpaying for options; below 0.8 means options are a bargain."
+            ),
             action=action,
             key_risk="IV can spike suddenly on news — even cheap IV can overshoot realised vol.",
             direction=direction,
@@ -291,26 +315,25 @@ def _compute_iv_analysis(calls, puts, spot: float, hist) -> dict:
 
 # ── Put/Call Skew ─────────────────────────────────────────────────────────────
 
+
 def _compute_skew(calls, puts, spot: float) -> dict:
     """
     25-delta equivalent skew: OTM put IV vs OTM call IV.
     High put skew = heavy downside hedging = bearish pressure.
     """
-    otm_threshold = 0.05  # within 5–15% OTM
+    otm_calls = calls[(calls["strike"] > spot * 1.03) & (calls["strike"] < spot * 1.15)][
+        "impliedVolatility"
+    ].dropna()
 
-    otm_calls = calls[
-        (calls["strike"] > spot * 1.03) & (calls["strike"] < spot * 1.15)
-    ]["impliedVolatility"].dropna()
-
-    otm_puts = puts[
-        (puts["strike"] < spot * 0.97) & (puts["strike"] > spot * 0.85)
-    ]["impliedVolatility"].dropna()
+    otm_puts = puts[(puts["strike"] < spot * 0.97) & (puts["strike"] > spot * 0.85)][
+        "impliedVolatility"
+    ].dropna()
 
     if otm_calls.empty or otm_puts.empty:
         return {}
 
     avg_call_iv = float(otm_calls.mean())
-    avg_put_iv  = float(otm_puts.mean())
+    avg_put_iv = float(otm_puts.mean())
     skew = avg_put_iv - avg_call_iv
     skew_pct = round(skew * 100, 1)
 
@@ -318,7 +341,9 @@ def _compute_skew(calls, puts, spot: float) -> dict:
         verdict, score, conviction = "SELL", -1.0, "HIGH"
         headline = f"Put skew {skew_pct}% — heavy downside hedging, market expects a drop"
         direction = "DETERIORATING"
-        action = "Smart money is buying downside protection aggressively. Reduce or hedge long exposure."
+        action = (
+            "Smart money is buying downside protection aggressively. Reduce or hedge long exposure."
+        )
     elif skew_pct > 4:
         verdict, score, conviction = "SELL", -0.5, "MODERATE"
         headline = f"Put skew {skew_pct}% — elevated downside hedging, cautious bias"
@@ -344,9 +369,11 @@ def _compute_skew(calls, puts, spot: float) -> dict:
             verdict=verdict,
             conviction=conviction,
             headline=headline,
-            why=("Put/call skew measures how much more expensive OTM puts are vs equivalent OTM calls. "
-                 "High skew means investors are paying a premium to protect against a drop — "
-                 "a consistent precursor to institutional risk-off moves."),
+            why=(
+                "Put/call skew measures how much more expensive OTM puts are vs equivalent OTM calls. "
+                "High skew means investors are paying a premium to protect against a drop — "
+                "a consistent precursor to institutional risk-off moves."
+            ),
             action=action,
             key_risk="Skew can be elevated as a permanent risk premium for certain stocks — compare to its own history.",
             direction=direction,
@@ -356,6 +383,7 @@ def _compute_skew(calls, puts, spot: float) -> dict:
 
 
 # ── Vol Term Structure ────────────────────────────────────────────────────────
+
 
 def _compute_term_structure(stock, spot: float) -> dict:
     """
@@ -370,10 +398,14 @@ def _compute_term_structure(stock, spot: float) -> dict:
         try:
             chain = stock.option_chain(exp)
             atm_calls = chain.calls.iloc[(chain.calls["strike"] - spot).abs().argsort()[:2]]
-            atm_puts  = chain.puts.iloc[(chain.puts["strike"]  - spot).abs().argsort()[:2]]
-            ivs = list(atm_calls["impliedVolatility"].dropna()) + list(atm_puts["impliedVolatility"].dropna())
+            atm_puts = chain.puts.iloc[(chain.puts["strike"] - spot).abs().argsort()[:2]]
+            ivs = list(atm_calls["impliedVolatility"].dropna()) + list(
+                atm_puts["impliedVolatility"].dropna()
+            )
             if ivs:
-                term.append({"expiry": exp, "atm_iv_pct": round(float(sum(ivs) / len(ivs)) * 100, 1)})
+                term.append(
+                    {"expiry": exp, "atm_iv_pct": round(float(sum(ivs) / len(ivs)) * 100, 1)}
+                )
         except Exception:
             continue
 
@@ -381,8 +413,8 @@ def _compute_term_structure(stock, spot: float) -> dict:
         return {}
 
     near_iv = term[0]["atm_iv_pct"]
-    far_iv  = term[-1]["atm_iv_pct"]
-    slope   = round(far_iv - near_iv, 1)
+    far_iv = term[-1]["atm_iv_pct"]
+    slope = round(far_iv - near_iv, 1)
 
     if near_iv > far_iv + 3:
         shape = "backwardation"
@@ -393,13 +425,19 @@ def _compute_term_structure(stock, spot: float) -> dict:
     elif near_iv > far_iv:
         shape = "mild backwardation"
         verdict, score, conviction = "SELL", -0.5, "MODERATE"
-        headline = f"Mild vol backwardation — near-term slightly elevated at {near_iv}% vs {far_iv}%"
-        action = "Some near-term uncertainty. Consider waiting for event resolution before entering."
+        headline = (
+            f"Mild vol backwardation — near-term slightly elevated at {near_iv}% vs {far_iv}%"
+        )
+        action = (
+            "Some near-term uncertainty. Consider waiting for event resolution before entering."
+        )
         direction = "STABLE"
     else:
         shape = "contango"
         verdict, score, conviction = "BUY", 0.5, "MODERATE"
-        headline = f"Vol contango — near-term IV {near_iv}% < far IV {far_iv}% (market calm near-term)"
+        headline = (
+            f"Vol contango — near-term IV {near_iv}% < far IV {far_iv}% (market calm near-term)"
+        )
         action = "Near-term vol is cheap. Short-dated options or premium-selling are reasonable."
         direction = "IMPROVING"
 
@@ -414,9 +452,11 @@ def _compute_term_structure(stock, spot: float) -> dict:
             verdict=verdict,
             conviction=conviction,
             headline=headline,
-            why=("Vol term structure shows whether fear is concentrated near-term (backwardation) "
-                 "or spread evenly (contango). Backwardation often precedes a binary event — "
-                 "earnings, FOMC, FDA decisions — where near-term outcome is uncertain."),
+            why=(
+                "Vol term structure shows whether fear is concentrated near-term (backwardation) "
+                "or spread evenly (contango). Backwardation often precedes a binary event — "
+                "earnings, FOMC, FDA decisions — where near-term outcome is uncertain."
+            ),
             action=action,
             key_risk="Term structure can shift instantly on news — most useful in the week leading into events.",
             direction=direction,
@@ -427,6 +467,7 @@ def _compute_term_structure(stock, spot: float) -> dict:
 
 
 # ── Main tool ─────────────────────────────────────────────────────────────────
+
 
 @tool
 def get_options_intelligence(ticker: str) -> dict:
@@ -455,11 +496,11 @@ def get_options_intelligence(ticker: str) -> dict:
 
         hist = stock.history(period="1y")
 
-        gex      = _compute_gex(calls, puts, spot, nearest)
+        gex = _compute_gex(calls, puts, spot, nearest)
         max_pain = _compute_max_pain(calls, puts, spot)
-        iv_anal  = _compute_iv_analysis(calls, puts, spot, hist)
-        skew     = _compute_skew(calls, puts, spot)
-        term     = _compute_term_structure(stock, spot)
+        iv_anal = _compute_iv_analysis(calls, puts, spot, hist)
+        skew = _compute_skew(calls, puts, spot)
+        term = _compute_term_structure(stock, spot)
 
         signals = [
             gex.get("signal"),

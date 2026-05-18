@@ -1,14 +1,13 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
 
-from app.db.models import WatchlistItem, AlertHistory, ScreenerPreset
 from app.db.database import AsyncSessionLocal
+from app.db.models import AlertHistory, ScreenerPreset, WatchlistItem
 from app.tools.price import get_price
 from app.tools.technicals import get_technicals
-from app.tools.remaining_tools import get_convergence_score
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +76,7 @@ async def evaluate_watchlist():
     logger.info("Running watchlist evaluation...")
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WatchlistItem).where(WatchlistItem.is_active == True)
-        )
+        result = await db.execute(select(WatchlistItem).where(WatchlistItem.is_active.is_(True)))
         items = result.scalars().all()
 
         for item in items:
@@ -88,9 +85,7 @@ async def evaluate_watchlist():
                 price_data = await asyncio.to_thread(
                     get_price.invoke, {"ticker": item.ticker, "period": "1mo"}
                 )
-                tech_data = await asyncio.to_thread(
-                    get_technicals.invoke, {"ticker": item.ticker}
-                )
+                tech_data = await asyncio.to_thread(get_technicals.invoke, {"ticker": item.ticker})
 
                 if "error" in price_data or "error" in tech_data:
                     continue
@@ -136,6 +131,7 @@ async def evaluate_watchlist():
                     # Push to Telegram
                     try:
                         from app.services import notifier
+
                         await notifier.send_watchlist_alert(
                             ticker=item.ticker,
                             signal=signal,
@@ -149,17 +145,20 @@ async def evaluate_watchlist():
                     # Broadcast via WebSocket
                     try:
                         from app.api.alerts import broadcast
-                        await broadcast({
-                            "type": "watchlist_alert",
-                            "ticker": item.ticker,
-                            "signal": signal,
-                            "score": score,
-                            "price": current_price,
-                            "change_7d": change_7d,
-                            "title": title,
-                            "body": body,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        })
+
+                        await broadcast(
+                            {
+                                "type": "watchlist_alert",
+                                "ticker": item.ticker,
+                                "signal": signal,
+                                "score": score,
+                                "price": current_price,
+                                "change_7d": change_7d,
+                                "title": title,
+                                "body": body,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
                     except Exception as e:
                         logger.warning(f"WebSocket broadcast failed: {e}")
 
@@ -180,23 +179,24 @@ async def run_screener_background():
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ScreenerPreset).where(ScreenerPreset.auto_monitor == True)
+            select(ScreenerPreset).where(ScreenerPreset.auto_monitor.is_(True))
         )
         presets = result.scalars().all()
 
         for preset in presets:
             try:
                 from app.tools.remaining_tools import run_screener
-                screener_result = await asyncio.to_thread(
-                    run_screener.invoke, preset.filters
-                )
+
+                screener_result = await asyncio.to_thread(run_screener.invoke, preset.filters)
 
                 matches = screener_result.get("results", [])
                 if matches:
                     for match in matches[:3]:
                         ticker = match["ticker"]
                         change = match["change_7d_pct"]
-                        title = f"{ticker} matches screener '{preset.name}' — down {abs(change):.1f}%"
+                        title = (
+                            f"{ticker} matches screener '{preset.name}' — down {abs(change):.1f}%"
+                        )
                         body = (
                             f"{match['company']} qualifies: ${match['market_cap_b']}B cap, "
                             f"{match['avg_volume']:,} avg volume, {change:.1f}% 7-day change. "
@@ -215,15 +215,18 @@ async def run_screener_background():
 
                         try:
                             from app.api.alerts import broadcast
-                            await broadcast({
-                                "type": "screener_alert",
-                                "ticker": ticker,
-                                "preset": preset.name,
-                                "title": title,
-                                "body": body,
-                                "stock": match,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
+
+                            await broadcast(
+                                {
+                                    "type": "screener_alert",
+                                    "ticker": ticker,
+                                    "preset": preset.name,
+                                    "title": title,
+                                    "body": body,
+                                    "stock": match,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                }
+                            )
                         except Exception:
                             pass
 

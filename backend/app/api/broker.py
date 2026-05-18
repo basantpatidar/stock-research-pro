@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +42,7 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_broker_or_raise(response: Response) -> BaseBroker:
     """Resolve broker from settings; map config/connectivity failures to 503
@@ -82,6 +83,7 @@ def _broker_order_to_dto(row: BrokerOrder) -> Order:
 
 
 # ── Account / Clock / Positions ───────────────────────────────────────────────
+
 
 @router.get("/account", response_model=AccountInfo, dependencies=[Depends(verify_api_key)])
 def get_broker_account(response: Response) -> AccountInfo:
@@ -129,6 +131,7 @@ def get_broker_positions(response: Response) -> list[Position]:
 
 # ── Orders — read ─────────────────────────────────────────────────────────────
 
+
 @router.get("/orders", response_model=list[Order], dependencies=[Depends(verify_api_key)])
 async def list_broker_orders(
     response: Response,
@@ -143,12 +146,14 @@ async def list_broker_orders(
     broker = _get_broker_or_raise(response)
 
     # Local rows for current mode only — paper and live MUST never mix.
-    rows = (await db.scalars(
-        select(BrokerOrder)
-        .where(BrokerOrder.mode == broker.mode)
-        .order_by(BrokerOrder.submitted_at.desc())
-        .limit(limit)
-    )).all()
+    rows = (
+        await db.scalars(
+            select(BrokerOrder)
+            .where(BrokerOrder.mode == broker.mode)
+            .order_by(BrokerOrder.submitted_at.desc())
+            .limit(limit)
+        )
+    ).all()
 
     try:
         live = broker.get_orders(status=status, limit=limit)
@@ -206,9 +211,9 @@ async def cancel_broker_order(
     except BrokerError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    row = (await db.scalars(
-        select(BrokerOrder).where(BrokerOrder.broker_order_id == order_id)
-    )).one_or_none()
+    row = (
+        await db.scalars(select(BrokerOrder).where(BrokerOrder.broker_order_id == order_id))
+    ).one_or_none()
     if row is not None and row.status not in ("filled", "canceled", "rejected", "expired"):
         row.status = "canceled"
         row.canceled_at = datetime.now(timezone.utc)
@@ -217,9 +222,11 @@ async def cancel_broker_order(
 
 # ── Orders — write ────────────────────────────────────────────────────────────
 
+
 class PlaceOrderBody(PlaceOrderRequest):
     """Public request body. Adds source linkage so Phase 3 auto-trade can
     record which scanner signal triggered the order."""
+
     source: Literal["manual", "scanner_alert"] = "manual"
     scanner_alert_id: uuid.UUID | None = None
     # Required in live mode to gate against fat-finger fills. The expected
@@ -268,9 +275,11 @@ async def place_broker_order(
     # rather than placing twice. Frontend generates the UUID, so retries are safe.
     if not body.client_order_id:
         body.client_order_id = str(uuid.uuid4())
-    existing = (await db.scalars(
-        select(BrokerOrder).where(BrokerOrder.client_order_id == body.client_order_id)
-    )).one_or_none()
+    existing = (
+        await db.scalars(
+            select(BrokerOrder).where(BrokerOrder.client_order_id == body.client_order_id)
+        )
+    ).one_or_none()
     if existing is not None:
         return _broker_order_to_dto(existing)
 
@@ -319,7 +328,9 @@ async def place_broker_order(
     except BrokerRejected as exc:
         row.status = "rejected"
         row.rejected_reason = str(exc)[:200]
-        raise HTTPException(status_code=422, detail={"error": "broker_rejected", "message": str(exc)})
+        raise HTTPException(
+            status_code=422, detail={"error": "broker_rejected", "message": str(exc)}
+        )
     except BrokerUnreachable as exc:
         # Leave row in status='new' — Phase 3 reconciler will resolve it.
         response.headers["X-Broker-Status"] = "unreachable"
@@ -336,10 +347,12 @@ async def place_broker_order(
 
 # ── Auto-trade status ─────────────────────────────────────────────────────────
 
+
 class AutoTradeStatus(BaseModel):
     """Snapshot of the auto-trade subscriber's current state for the portfolio
     page. All counts are ET-day-anchored to match the risk caps and the
     scanner halt."""
+
     enabled: bool
     allowlist: list[str]
     poll_seconds: int
@@ -352,7 +365,9 @@ class AutoTradeStatus(BaseModel):
     last_auto_order_symbol: str | None = None
 
 
-@router.get("/auto-trade/status", response_model=AutoTradeStatus, dependencies=[Depends(verify_api_key)])
+@router.get(
+    "/auto-trade/status", response_model=AutoTradeStatus, dependencies=[Depends(verify_api_key)]
+)
 async def get_auto_trade_status(
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -360,26 +375,34 @@ async def get_auto_trade_status(
     """What the auto-trade subscriber sees right now. The UI uses this to
     show a banner with: are we on? what's the allowlist? how many fired
     today? did the scanner halt? Doesn't touch the broker — pure DB read."""
-    from app.services.trading.auto_trade import (
-        _parse_allowlist, _today_et_midnight_utc, count_alerts_today,
-    )
     from sqlalchemy import func as _func
+
+    from app.services.trading.auto_trade import (
+        _parse_allowlist,
+        _today_et_midnight_utc,
+        count_alerts_today,
+    )
 
     settings = get_settings()
     cutoff = _today_et_midnight_utc()
 
     # Orders count — across both manual + auto, since the cap is shared.
-    orders_today = await db.scalar(
-        select(_func.count(BrokerOrder.id)).where(BrokerOrder.submitted_at >= cutoff)
-    ) or 0
+    orders_today = (
+        await db.scalar(
+            select(_func.count(BrokerOrder.id)).where(BrokerOrder.submitted_at >= cutoff)
+        )
+        or 0
+    )
 
     # Most-recent scanner_alert-sourced order — for the "last fired" line.
-    last_row = (await db.scalars(
-        select(BrokerOrder)
-        .where(BrokerOrder.source == "scanner_alert", BrokerOrder.submitted_at >= cutoff)
-        .order_by(BrokerOrder.submitted_at.desc())
-        .limit(1)
-    )).one_or_none()
+    last_row = (
+        await db.scalars(
+            select(BrokerOrder)
+            .where(BrokerOrder.source == "scanner_alert", BrokerOrder.submitted_at >= cutoff)
+            .order_by(BrokerOrder.submitted_at.desc())
+            .limit(1)
+        )
+    ).one_or_none()
 
     signals_today = await count_alerts_today(db)
     return AutoTradeStatus(

@@ -1,6 +1,8 @@
 import asyncio
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
 from app.auth import verify_api_key
 from app.tools.gap_scanner import scan_gaps
 

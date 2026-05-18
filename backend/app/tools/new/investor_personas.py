@@ -1,4 +1,5 @@
 from langchain_core.tools import tool
+
 from app.tools._yf_client import get_ticker
 
 
@@ -60,7 +61,13 @@ def investor_personas(ticker: str) -> dict:
                 {
                     "name": "Warren Buffett",
                     "style": "Quality at fair price — durable competitive moat, strong ROE, predictable earnings",
-                    "key_metrics": ["roe", "profit_margin", "pe_ratio", "debt_to_equity", "free_cashflow"],
+                    "key_metrics": [
+                        "roe",
+                        "profit_margin",
+                        "pe_ratio",
+                        "debt_to_equity",
+                        "free_cashflow",
+                    ],
                     "verdict_instruction": (
                         f"As Warren Buffett, evaluate {ticker.upper()} on: "
                         f"(1) economic moat — does it have pricing power and durable competitive advantage? "
@@ -86,7 +93,12 @@ def investor_personas(ticker: str) -> dict:
                 {
                     "name": "Michael Burry",
                     "style": "Contrarian — deeply undervalued, high debt risk, mean-reversion plays",
-                    "key_metrics": ["price_to_book", "debt_to_equity", "drawdown_from_52w_high_pct", "ev_to_ebitda"],
+                    "key_metrics": [
+                        "price_to_book",
+                        "debt_to_equity",
+                        "drawdown_from_52w_high_pct",
+                        "ev_to_ebitda",
+                    ],
                     "verdict_instruction": (
                         f"As Michael Burry, evaluate {ticker.upper()} on: "
                         f"(1) mispricing — is the market ignoring real asset value? "

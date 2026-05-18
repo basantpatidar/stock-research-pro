@@ -33,6 +33,7 @@ _ET = pytz.timezone("America/New_York")
 
 # ── Rejection codes — surface in HTTP 422 body for the UI to map to copy ──────
 
+
 class CapRejection:
     MAX_ORDER_DOLLARS = "max_order_dollars_exceeded"
     MAX_POSITION_DOLLARS = "max_position_dollars_exceeded"
@@ -59,6 +60,7 @@ class CapResult:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _market_price_estimate(symbol: str) -> float | None:
     """Quote for market-order notional check. Uses yfinance — same source the
     rest of the app trusts. Returns None if the quote is unavailable; callers
@@ -66,6 +68,7 @@ def _market_price_estimate(symbol: str) -> float | None:
     """
     try:
         import yfinance as yf
+
         info = yf.Ticker(symbol).fast_info
         px = float(info.get("lastPrice") or info.get("regularMarketPrice") or 0)
         return px if px > 0 else None
@@ -83,6 +86,7 @@ def _today_et_midnight_utc() -> datetime:
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
 
 async def check_order_caps(
     req: PlaceOrderRequest,

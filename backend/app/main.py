@@ -2,20 +2,27 @@ import logging
 import logging.handlers
 import os
 import time
-
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import (
+    alerts,
+    broker,
+    dip_scanner,
+    gap_scanner,
+    macro,
+    mcf_scanner,
+    research,
+    research_v2,
+    screener,
+    usage,
+    watchlist,
+)
 from app.config import get_settings
 from app.db.database import create_tables
 from app.services.scheduler import start_scheduler, stop_scheduler
-from app.api import research, watchlist, screener, alerts, macro
-from app.api import research_v2, usage
-from app.api import gap_scanner
-from app.api import dip_scanner
-from app.api import mcf_scanner
-from app.api import broker
 
 settings = get_settings()
 
@@ -58,6 +65,7 @@ async def lifespan(app: FastAPI):
     start_scheduler()
 
     from app.services.telegram_handler import start_polling, stop_polling
+
     start_polling()
 
     yield
@@ -80,6 +88,7 @@ app = FastAPI(
 # ── Request logging middleware ────────────────────────────────────────────────
 _req_logger = logging.getLogger("app.requests")
 
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
@@ -87,7 +96,9 @@ async def log_requests(request: Request, call_next):
     ms = (time.perf_counter() - start) * 1000
     # Skip noisy health/root pings at INFO; log them at DEBUG
     level = logging.DEBUG if request.url.path in ("/health", "/") else logging.INFO
-    _req_logger.log(level, "%s %s %d %.0fms", request.method, request.url.path, response.status_code, ms)
+    _req_logger.log(
+        level, "%s %s %d %.0fms", request.method, request.url.path, response.status_code, ms
+    )
     return response
 
 

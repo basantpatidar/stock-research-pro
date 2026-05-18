@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
 from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import verify_api_key
 from app.db.database import get_db
 from app.db.models import WatchlistItem
-from app.auth import verify_api_key
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
 
@@ -30,7 +31,7 @@ async def get_watchlist(
     """Get all active watchlist items with their latest signals."""
     result = await db.execute(
         select(WatchlistItem)
-        .where(WatchlistItem.is_active == True)
+        .where(WatchlistItem.is_active.is_(True))
         .order_by(WatchlistItem.last_score.desc().nullslast())
     )
     items = result.scalars().all()
@@ -60,9 +61,7 @@ async def add_to_watchlist(
     """Add a ticker to the watchlist."""
     ticker = request.ticker.upper().strip()
 
-    existing = await db.execute(
-        select(WatchlistItem).where(WatchlistItem.ticker == ticker)
-    )
+    existing = await db.execute(select(WatchlistItem).where(WatchlistItem.ticker == ticker))
     existing_item = existing.scalar_one_or_none()
 
     if existing_item:
@@ -86,9 +85,7 @@ async def remove_from_watchlist(
 ):
     """Remove a ticker from the watchlist (soft delete)."""
     ticker = ticker.upper().strip()
-    result = await db.execute(
-        select(WatchlistItem).where(WatchlistItem.ticker == ticker)
-    )
+    result = await db.execute(select(WatchlistItem).where(WatchlistItem.ticker == ticker))
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail=f"{ticker} not in watchlist")
@@ -110,8 +107,8 @@ async def get_watchlist_signals(
     result = await db.execute(
         select(WatchlistItem)
         .where(
-            WatchlistItem.is_active == True,
-            WatchlistItem.last_signal.in_(["Buy now", "Buy — 1 week", "Sell", "Avoid"])
+            WatchlistItem.is_active.is_(True),
+            WatchlistItem.last_signal.in_(["Buy now", "Buy — 1 week", "Sell", "Avoid"]),
         )
         .order_by(WatchlistItem.last_score.desc())
     )

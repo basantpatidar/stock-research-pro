@@ -1,19 +1,25 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
-import pandas as pd
 import numpy as np
+import pandas as pd
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 def _garch_forecast(returns: pd.Series, horizon: int = 5) -> dict:
     try:
         from arch import arch_model
+
         scaled = returns * 100
         am = arch_model(scaled, vol="Garch", p=1, q=1, dist="Normal")
         res = am.fit(disp="off", show_warning=False)
         fc = res.forecast(horizon=horizon, reindex=False)
         var_h = fc.variance.iloc[-1].values
         vol_h = np.sqrt(var_h) / 100  # back to decimal
-        return {"ok": True, "daily_vol": vol_h.tolist(), "annualized_vol": float(np.mean(vol_h) * np.sqrt(252))}
+        return {
+            "ok": True,
+            "daily_vol": vol_h.tolist(),
+            "annualized_vol": float(np.mean(vol_h) * np.sqrt(252)),
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -49,12 +55,14 @@ def get_volatility_forecast(ticker: str) -> dict:
         forecasts = []
         for i, v in enumerate(daily_vols, 1):
             half = current_price * v
-            forecasts.append({
-                "day": i,
-                "expected_range_low": round(current_price - half, 2),
-                "expected_range_high": round(current_price + half, 2),
-                "daily_vol_pct": round(v * 100, 2),
-            })
+            forecasts.append(
+                {
+                    "day": i,
+                    "expected_range_low": round(current_price - half, 2),
+                    "expected_range_high": round(current_price + half, 2),
+                    "daily_vol_pct": round(v * 100, 2),
+                }
+            )
 
         ann_vol_pct = round(ann_vol * 100, 1)
         if ann_vol_pct < 20:

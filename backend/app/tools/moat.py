@@ -1,6 +1,7 @@
-from langchain_core.tools import tool
-from app.tools._yf_client import get_ticker
 import numpy as np
+from langchain_core.tools import tool
+
+from app.tools._yf_client import get_ticker
 
 
 @tool
@@ -13,8 +14,6 @@ def get_moat_score(ticker: str) -> dict:
         stock = get_ticker(ticker)
         info = stock.info
         inc = stock.income_stmt
-        bal = stock.balance_sheet
-
         components = {}
         score = 0
 
@@ -28,16 +27,27 @@ def get_moat_score(ticker: str) -> dict:
                 "pass": roe_pass,
                 "note": "Sustainable high ROE = pricing power or cost advantage",
             }
-            if roe_pass: score += 1
+            if roe_pass:
+                score += 1
         else:
-            components["roe"] = {"label": "ROE ≥15%", "value": "N/A", "pass": None, "note": "Data unavailable"}
+            components["roe"] = {
+                "label": "ROE ≥15%",
+                "value": "N/A",
+                "pass": None,
+                "note": "Data unavailable",
+            }
 
         # 2. Gross margin trend (expanding = moat strengthening)
         gm_pass = None
         gm_trend = "unknown"
         gm_current = None
         try:
-            if inc is not None and not inc.empty and "Gross Profit" in inc.index and "Total Revenue" in inc.index:
+            if (
+                inc is not None
+                and not inc.empty
+                and "Gross Profit" in inc.index
+                and "Total Revenue" in inc.index
+            ):
                 gp = inc.loc["Gross Profit"].dropna()
                 rev = inc.loc["Total Revenue"].dropna()
                 margins = (gp / rev).dropna()
@@ -54,7 +64,8 @@ def get_moat_score(ticker: str) -> dict:
             "pass": gm_pass,
             "note": f"Trend: {gm_trend}",
         }
-        if gm_pass: score += 1
+        if gm_pass:
+            score += 1
 
         # 3. ROIC > WACC proxy (ROIC > 10%)
         roic = info.get("returnOnAssets")  # use ROA as ROIC proxy
@@ -67,9 +78,15 @@ def get_moat_score(ticker: str) -> dict:
                 "pass": roic_pass,
                 "note": "Returns above cost-of-capital = capital allocator advantage",
             }
-            if roic_pass: score += 1
+            if roic_pass:
+                score += 1
         else:
-            components["roic"] = {"label": "ROIC ≥10%", "value": "N/A", "pass": None, "note": "Data unavailable"}
+            components["roic"] = {
+                "label": "ROIC ≥10%",
+                "value": "N/A",
+                "pass": None,
+                "note": "Data unavailable",
+            }
 
         # 4. Revenue growth consistency (low CV of annual growth rates)
         rev_consistent = None
@@ -86,11 +103,17 @@ def get_moat_score(ticker: str) -> dict:
                         "pass": rev_consistent,
                         "note": "Low variance growth = durable competitive position",
                     }
-                    if rev_consistent: score += 1
+                    if rev_consistent:
+                        score += 1
         except Exception:
             pass
         if "revenue_consistency" not in components:
-            components["revenue_consistency"] = {"label": "Revenue Growth Consistent", "value": "N/A", "pass": None, "note": "Insufficient data"}
+            components["revenue_consistency"] = {
+                "label": "Revenue Growth Consistent",
+                "value": "N/A",
+                "pass": None,
+                "note": "Insufficient data",
+            }
 
         # 5. Profit margin > 10% (pricing power)
         margin = info.get("profitMargins")
@@ -101,7 +124,8 @@ def get_moat_score(ticker: str) -> dict:
             "pass": margin_pass,
             "note": "High margin = pricing power or scale advantage",
         }
-        if margin_pass: score += 1
+        if margin_pass:
+            score += 1
 
         if score >= 4:
             moat_width = "WIDE"

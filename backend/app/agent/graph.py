@@ -1,39 +1,39 @@
-from langgraph.graph import StateGraph, END
+from langchain_core.messages import SystemMessage
+from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.agent.state import AgentState
 from app.agent.prompts import get_system_prompt
-from app.llm.factory import get_llm_with_fallback
+from app.agent.state import AgentState
 from app.config import get_settings
+from app.llm.factory import get_llm_with_fallback
+from app.tools.analyst import get_analyst_consensus
+from app.tools.cascade import get_cascade_impact
+from app.tools.convergence import get_convergence_score
+from app.tools.earnings import get_earnings
+from app.tools.forecast import get_price_forecast
+from app.tools.fundamentals import get_fundamentals
+from app.tools.geopolitical import get_geopolitical_events
+from app.tools.google_trends import get_trends
+from app.tools.insider import get_insider_activity
+from app.tools.institutional import get_institutional_changes
+from app.tools.macro import get_macro_environment
+from app.tools.new.backtester import run_backtest
+from app.tools.new.bull_bear import bull_bear_debate
+from app.tools.new.congressional import get_congressional_trades
+from app.tools.new.earnings_transcript import analyze_earnings_transcript
+from app.tools.new.investor_personas import investor_personas
+from app.tools.new.paper_trade import analyze_paper_trade
+from app.tools.news import get_news_impact
+from app.tools.options import get_options_signals
 
 # Import all tools
 from app.tools.price import get_price
-from app.tools.technicals import get_technicals
-from app.tools.news import get_news_impact
-from app.tools.sentiment import get_sentiment
-from app.tools.analyst import get_analyst_consensus
-from app.tools.earnings import get_earnings
-from app.tools.fundamentals import get_fundamentals
-from app.tools.options import get_options_signals
-from app.tools.insider import get_insider_activity
-from app.tools.institutional import get_institutional_changes
-from app.tools.short_interest import get_short_interest
-from app.tools.geopolitical import get_geopolitical_events
-from app.tools.macro import get_macro_environment
-from app.tools.sector import get_sector_heatmap
-from app.tools.cascade import get_cascade_impact
-from app.tools.forecast import get_price_forecast
 from app.tools.risk_reward import get_risk_reward
 from app.tools.screener import run_screener
-from app.tools.convergence import get_convergence_score
-from app.tools.google_trends import get_trends
-from app.tools.new.investor_personas import investor_personas
-from app.tools.new.bull_bear import bull_bear_debate
-from app.tools.new.congressional import get_congressional_trades
-from app.tools.new.backtester import run_backtest
-from app.tools.new.earnings_transcript import analyze_earnings_transcript
-from app.tools.new.paper_trade import analyze_paper_trade
+from app.tools.sector import get_sector_heatmap
+from app.tools.sentiment import get_sentiment
+from app.tools.short_interest import get_short_interest
+from app.tools.technicals import get_technicals
 
 ALL_TOOLS = [
     get_price,

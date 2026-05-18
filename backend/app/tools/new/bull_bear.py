@@ -1,4 +1,5 @@
 from langchain_core.tools import tool
+
 from app.tools._yf_client import get_ticker
 
 
@@ -43,7 +44,11 @@ def bull_bear_debate(ticker: str) -> dict:
         # Volume trend
         avg_vol_30d = int(hist["Volume"].tail(30).mean())
         recent_vol = int(hist["Volume"].tail(5).mean())
-        volume_trend = "rising" if recent_vol > avg_vol_30d * 1.1 else "falling" if recent_vol < avg_vol_30d * 0.9 else "stable"
+        volume_trend = (
+            "rising"
+            if recent_vol > avg_vol_30d * 1.1
+            else "falling" if recent_vol < avg_vol_30d * 0.9 else "stable"
+        )
 
         data = {
             "ticker": ticker.upper(),

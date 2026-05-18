@@ -1,15 +1,12 @@
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from typing import Literal, Any
 import asyncio
 import concurrent.futures
 import logging
 import time
+from typing import Any, Literal
 
 import numpy as np
-
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import verify_api_key
@@ -23,44 +20,41 @@ from app.services.data_cache import (
     set_stock_cache,
     stock_data_expiry,
 )
-
-from app.tools.price import get_price
-from app.tools.technicals import get_technicals
 from app.tools.analyst import get_analyst_consensus
-from app.tools.earnings import get_earnings
-from app.tools.fundamentals import get_fundamentals
-from app.tools.short_interest import get_short_interest
-from app.tools.new.congressional import get_congressional_trades
-from app.tools.macro import get_macro_environment
-from app.tools.sector import get_sector_heatmap
-
-from app.tools.news import get_news_impact
-from app.tools.sentiment import get_sentiment
-from app.tools.convergence import get_convergence_score
-from app.tools.forecast import get_price_forecast
-from app.tools.risk_reward import get_risk_reward
-from app.tools.earnings_quality import get_earnings_quality
-from app.tools.options_intelligence import get_options_intelligence
-from app.tools.technicals_mtf import get_mtf_confluence
-
-from app.tools.pretrade_score import compute_pretrade_score
-from app.tools.smart_money import compute_smart_money_score
-from app.tools.seasonality import get_seasonality
-from app.tools.new.investor_personas import investor_personas
-from app.tools.new.bull_bear import bull_bear_debate
-from app.tools.new.backtester import run_backtest
-from app.tools.new.earnings_transcript import analyze_earnings_transcript
-from app.tools.new.paper_trade import analyze_paper_trade
-from app.tools.volatility_forecast import get_volatility_forecast
-from app.tools.regime import get_regime
-from app.tools.valuation import get_valuation
-from app.tools.edgar_fundamentals import get_edgar_fundamentals
 from app.tools.canslim import get_canslim_score
-from app.tools.patterns import get_vcp_pattern
+from app.tools.convergence import get_convergence_score
 from app.tools.dividend import get_dividend_health
-from app.tools.moat import get_moat_score
+from app.tools.earnings import get_earnings
+from app.tools.earnings_quality import get_earnings_quality
+from app.tools.edgar_fundamentals import get_edgar_fundamentals
 from app.tools.edgar_risk_factors import get_risk_factor_changes
+from app.tools.forecast import get_price_forecast
+from app.tools.fundamentals import get_fundamentals
 from app.tools.guru_tracker import get_guru_holdings
+from app.tools.macro import get_macro_environment
+from app.tools.moat import get_moat_score
+from app.tools.new.backtester import run_backtest
+from app.tools.new.bull_bear import bull_bear_debate
+from app.tools.new.congressional import get_congressional_trades
+from app.tools.new.earnings_transcript import analyze_earnings_transcript
+from app.tools.new.investor_personas import investor_personas
+from app.tools.new.paper_trade import analyze_paper_trade
+from app.tools.news import get_news_impact
+from app.tools.options_intelligence import get_options_intelligence
+from app.tools.patterns import get_vcp_pattern
+from app.tools.pretrade_score import compute_pretrade_score
+from app.tools.price import get_price
+from app.tools.regime import get_regime
+from app.tools.risk_reward import get_risk_reward
+from app.tools.seasonality import get_seasonality
+from app.tools.sector import get_sector_heatmap
+from app.tools.sentiment import get_sentiment
+from app.tools.short_interest import get_short_interest
+from app.tools.smart_money import compute_smart_money_score
+from app.tools.technicals import get_technicals
+from app.tools.technicals_mtf import get_mtf_confluence
+from app.tools.valuation import get_valuation
+from app.tools.volatility_forecast import get_volatility_forecast
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +210,8 @@ async def tier1(
         # All remaining fetches are independent — run them in parallel
         fetch_map: dict[str, Any] = {
             "technicals": lambda: get_technicals.invoke({"ticker": sym}),
-            "macro":      lambda: get_macro_environment.invoke({}),
-            "sectors":    lambda: get_sector_heatmap.invoke({}),
+            "macro": lambda: get_macro_environment.invoke({}),
+            "sectors": lambda: get_sector_heatmap.invoke({}),
         }
         if needs["earnings"]:
             fetch_map["earnings"] = lambda: get_earnings.invoke({"ticker": sym})
@@ -238,16 +232,21 @@ async def tier1(
             results = {key: fut.result() for key, fut in fut_map.items()}
 
         technicals = results["technicals"]
-        macro      = results["macro"]
-        sectors    = results["sectors"]
-        fresh      = {k: v for k, v in results.items() if k not in ("technicals", "macro", "sectors")}
+        macro = results["macro"]
+        sectors = results["sectors"]
+        fresh = {k: v for k, v in results.items() if k not in ("technicals", "macro", "sectors")}
 
         return price, technicals, macro, sectors, fresh
 
     fresh_keys = [k for k, needed in needs.items() if needed]
     cached_keys = [k for k, needed in needs.items() if not needed]
-    logger.info("tier1 %s — cache: %d/6 hits %s, fetching: %s",
-                sym, len(cached_keys), cached_keys or "none", fresh_keys or "none")
+    logger.info(
+        "tier1 %s — cache: %d/6 hits %s, fetching: %s",
+        sym,
+        len(cached_keys),
+        cached_keys or "none",
+        fresh_keys or "none",
+    )
 
     try:
         price, technicals, macro, sectors, fresh = await asyncio.to_thread(_run_fresh)
@@ -272,11 +271,15 @@ async def tier1(
     cache_writes = []
     if "earnings" in fresh:
         cache_writes.append(
-            set_stock_cache(db, sym, "earnings", fresh["earnings"], earnings_expiry(fresh["earnings"]))
+            set_stock_cache(
+                db, sym, "earnings", fresh["earnings"], earnings_expiry(fresh["earnings"])
+            )
         )
     if "fundamentals" in fresh:
         cache_writes.append(
-            set_stock_cache(db, sym, "fundamentals", fresh["fundamentals"], stock_data_expiry("fundamentals"))
+            set_stock_cache(
+                db, sym, "fundamentals", fresh["fundamentals"], stock_data_expiry("fundamentals")
+            )
         )
     if "analyst" in fresh:
         cache_writes.append(
@@ -284,11 +287,19 @@ async def tier1(
         )
     if "short_interest" in fresh:
         cache_writes.append(
-            set_stock_cache(db, sym, "short_interest", fresh["short_interest"], stock_data_expiry("short_interest"))
+            set_stock_cache(
+                db,
+                sym,
+                "short_interest",
+                fresh["short_interest"],
+                stock_data_expiry("short_interest"),
+            )
         )
     if "congressional" in fresh:
         cache_writes.append(
-            set_stock_cache(db, sym, "congressional", fresh["congressional"], stock_data_expiry("congressional"))
+            set_stock_cache(
+                db, sym, "congressional", fresh["congressional"], stock_data_expiry("congressional")
+            )
         )
     if "news" in fresh:
         cache_writes.append(
@@ -301,8 +312,15 @@ async def tier1(
             pass
 
     cache_hits = sum(
-        1 for v in [cached_earnings, cached_fundamentals, cached_analyst,
-                    cached_short_interest, cached_news, cached_congressional]
+        1
+        for v in [
+            cached_earnings,
+            cached_fundamentals,
+            cached_analyst,
+            cached_short_interest,
+            cached_news,
+            cached_congressional,
+        ]
         if v is not None
     )
 
@@ -320,24 +338,26 @@ async def tier1(
         short_interest=short_interest if isinstance(short_interest, dict) else {},
     )
 
-    return _sanitize({
-        "ticker": sym,
-        "price": price,
-        "technicals": technicals,
-        "analyst": analyst,
-        "earnings": earnings,
-        "fundamentals": fundamentals,
-        "short_interest": short_interest,
-        "congressional": congressional,
-        "news": news,
-        "macro": macro,
-        "sectors": sectors,
-        "pretrade_score": pretrade_score,
-        "smart_money": smart_money,
-        "cached": cache_hits > 0,
-        "cache_hits": cache_hits,
-        "exec_mode": request.exec_mode,
-    })
+    return _sanitize(
+        {
+            "ticker": sym,
+            "price": price,
+            "technicals": technicals,
+            "analyst": analyst,
+            "earnings": earnings,
+            "fundamentals": fundamentals,
+            "short_interest": short_interest,
+            "congressional": congressional,
+            "news": news,
+            "macro": macro,
+            "sectors": sectors,
+            "pretrade_score": pretrade_score,
+            "smart_money": smart_money,
+            "cached": cache_hits > 0,
+            "cache_hits": cache_hits,
+            "exec_mode": request.exec_mode,
+        }
+    )
 
 
 @router.post("/tier2")
@@ -355,14 +375,16 @@ async def tier2(
     cached = await get_llm_cache(db, sym, request.tool)
     if cached:
         logger.info("tier2 %s %s — cache hit", request.tool, sym)
-        return _sanitize({
-            "ticker": sym,
-            "tool": request.tool,
-            "result": cached,
-            "tokens_used": 0,
-            "cached": True,
-            "exec_mode": request.exec_mode,
-        })
+        return _sanitize(
+            {
+                "ticker": sym,
+                "tool": request.tool,
+                "result": cached,
+                "tokens_used": 0,
+                "cached": True,
+                "exec_mode": request.exec_mode,
+            }
+        )
 
     t0 = time.perf_counter()
     invoke_params = {"ticker": sym, **request.params}
@@ -378,21 +400,27 @@ async def tier2(
         logger.exception("tier2 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier2 tool failed: {str(e)}")
 
-    logger.info("tier2 %s %s — %.0fms, ~%d tokens",
-                request.tool, sym, (time.perf_counter() - t0) * 1000,
-                _TOKEN_ESTIMATES.get(request.tool, 500))
+    logger.info(
+        "tier2 %s %s — %.0fms, ~%d tokens",
+        request.tool,
+        sym,
+        (time.perf_counter() - t0) * 1000,
+        _TOKEN_ESTIMATES.get(request.tool, 500),
+    )
 
     # Persist for next request within the TTL window
     await set_llm_cache(db, sym, request.tool, result)
 
-    return _sanitize({
-        "ticker": sym,
-        "tool": request.tool,
-        "result": result,
-        "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 500),
-        "cached": False,
-        "exec_mode": request.exec_mode,
-    })
+    return _sanitize(
+        {
+            "ticker": sym,
+            "tool": request.tool,
+            "result": result,
+            "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 500),
+            "cached": False,
+            "exec_mode": request.exec_mode,
+        }
+    )
 
 
 @router.post("/tier3")
@@ -410,13 +438,15 @@ async def tier3(
     cached = await get_llm_cache(db, sym, request.tool)
     if cached:
         logger.info("tier3 %s %s — cache hit", request.tool, sym)
-        return _sanitize({
-            "ticker": sym,
-            "tool": request.tool,
-            "result": cached,
-            "tokens_used": 0,
-            "cached": True,
-        })
+        return _sanitize(
+            {
+                "ticker": sym,
+                "tool": request.tool,
+                "result": cached,
+                "tokens_used": 0,
+                "cached": True,
+            }
+        )
 
     t0 = time.perf_counter()
     invoke_params = {"ticker": sym, **request.params}
@@ -427,14 +457,20 @@ async def tier3(
         )
     except asyncio.TimeoutError:
         logger.warning("tier3 %s %s — timed out after 90s", request.tool, sym)
-        raise HTTPException(status_code=504, detail=f"{request.tool} timed out — LLM or data fetch took too long")
+        raise HTTPException(
+            status_code=504, detail=f"{request.tool} timed out — LLM or data fetch took too long"
+        )
     except Exception as e:
         logger.exception("tier3 %s failed for %s", request.tool, sym)
         raise HTTPException(status_code=500, detail=f"Tier3 tool failed: {str(e)}")
 
-    logger.info("tier3 %s %s — %.0fms, ~%d tokens",
-                request.tool, sym, (time.perf_counter() - t0) * 1000,
-                _TOKEN_ESTIMATES.get(request.tool, 1000))
+    logger.info(
+        "tier3 %s %s — %.0fms, ~%d tokens",
+        request.tool,
+        sym,
+        (time.perf_counter() - t0) * 1000,
+        _TOKEN_ESTIMATES.get(request.tool, 1000),
+    )
 
     # analyze_earnings_transcript is stable for the whole quarter — cache until next earnings date
     if request.tool == "analyze_earnings_transcript":
@@ -442,13 +478,15 @@ async def tier3(
     else:
         await set_llm_cache(db, sym, request.tool, result)
 
-    return _sanitize({
-        "ticker": sym,
-        "tool": request.tool,
-        "result": result,
-        "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 1000),
-        "cached": False,
-    })
+    return _sanitize(
+        {
+            "ticker": sym,
+            "tool": request.tool,
+            "result": result,
+            "tokens_used": _TOKEN_ESTIMATES.get(request.tool, 1000),
+            "cached": False,
+        }
+    )
 
 
 @router.get("/tier3/estimate")

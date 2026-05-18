@@ -1,7 +1,6 @@
 from langchain_core.tools import tool
+
 from app.tools._yf_client import get_ticker
-import numpy as np
-import pandas as pd
 
 
 @tool
@@ -27,8 +26,6 @@ def get_dividend_health(ticker: str) -> dict:
 
         # Payout ratio
         payout_ratio = info.get("payoutRatio")
-        eps = info.get("trailingEps") or 1
-
         # Dividend history for CAGR
         divs = stock.dividends
         div_cagr_3y = None
@@ -45,17 +42,21 @@ def get_dividend_health(ticker: str) -> dict:
                 if len(annual) >= 4:
                     newest = float(annual.iloc[-1])
                     three_ago = float(annual.iloc[-4])
-                    div_cagr_3y = round((newest / three_ago) ** (1/3) - 1, 4) if three_ago > 0 else None
+                    div_cagr_3y = (
+                        round((newest / three_ago) ** (1 / 3) - 1, 4) if three_ago > 0 else None
+                    )
 
                 # 5yr CAGR
                 if len(annual) >= 6:
                     five_ago = float(annual.iloc[-6])
-                    div_cagr_5y = round((newest / five_ago) ** (1/5) - 1, 4) if five_ago > 0 else None
+                    div_cagr_5y = (
+                        round((newest / five_ago) ** (1 / 5) - 1, 4) if five_ago > 0 else None
+                    )
 
                 # Consecutive growth years
                 vals = annual.values.tolist()
-                for i in range(len(vals)-1, 0, -1):
-                    if vals[i] > vals[i-1]:
+                for i in range(len(vals) - 1, 0, -1):
+                    if vals[i] > vals[i - 1]:
                         consecutive_growth += 1
                     else:
                         break
@@ -65,8 +66,16 @@ def get_dividend_health(ticker: str) -> dict:
         try:
             cf = stock.cashflow
             if cf is not None and not cf.empty:
-                ocf = cf.loc["Operating Cash Flow"].iloc[0] if "Operating Cash Flow" in cf.index else 0
-                capex = cf.loc["Capital Expenditure"].iloc[0] if "Capital Expenditure" in cf.index else 0
+                ocf = (
+                    cf.loc["Operating Cash Flow"].iloc[0]
+                    if "Operating Cash Flow" in cf.index
+                    else 0
+                )
+                capex = (
+                    cf.loc["Capital Expenditure"].iloc[0]
+                    if "Capital Expenditure" in cf.index
+                    else 0
+                )
                 fcf = float(ocf or 0) + float(capex or 0)
                 shares = info.get("sharesOutstanding") or 1
                 total_divs_paid = float(div_rate or 0) * shares
