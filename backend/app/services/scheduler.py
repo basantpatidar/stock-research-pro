@@ -92,6 +92,39 @@ async def _run_dip_scan():
                 "dip_scan: fired alert %s score=%d window=%s",
                 best["ticker"], best["score"], best.get("session_window"),
             )
+
+            # Persist + notify. Before this, the live dip-scanner alert existed
+            # only as a transient WS event — no scanner_alerts row, so it didn't
+            # show in the dashboard's history and the auto-trade subscriber had
+            # nothing to act on; no Telegram push either. Mirrors the MCF flow.
+            # _save_alert returns None when its 15-min dedup gate skips the row,
+            # in which case we skip the notify too.
+            try:
+                from app.api.dip_scanner import _save_alert, DEFAULT_CAPITAL
+                from app.db.database import get_db_direct
+                from app.services import notifier
+
+                opp = {
+                    "ticker":         best["ticker"],
+                    "signal_type":    best.get("signal_type", "dip_buy"),
+                    "entry_price":    best["entry_price"],
+                    "target_price":   best["target_price"],
+                    "stop_price":     best["stop_price"],
+                    "entry_time":     result.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                    "score":          best["score"],
+                    "signals":        best.get("signals", []),
+                    "session_window": best.get("session_window"),
+                    "vix":            best.get("vix"),
+                    "capital_used":   best.get("capital_used", DEFAULT_CAPITAL),
+                    "source":         "live",
+                    "status":         "open",
+                }
+                async for db in get_db_direct():
+                    saved = await _save_alert(db, opp)
+                if saved is not None:
+                    await notifier.send_scanner_alert(saved)
+            except Exception as exc:
+                logger.warning("dip_scan persist/notify error: %s", exc)
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         logger.warning("dip_scan job error: %s", exc)

@@ -44,11 +44,14 @@ def _get_tickers(tiers: list[int]) -> list[str]:
 DEDUP_WINDOW_MINUTES = 15
 
 
-async def _save_alert(db: AsyncSession, opp: dict) -> None:
+async def _save_alert(db: AsyncSession, opp: dict) -> ScannerAlert | None:
     """Persist a live scanner opportunity. Suppresses near-duplicates per ticker
     within DEDUP_WINDOW_MINUTES — prevents correlated risk from back-to-back
     fires on the same name (e.g., XLF firing twice 12 min apart on 2026-05-08).
     Backtest rows skip this gate (source != 'live').
+
+    Returns the persisted ScannerAlert (so callers can pass it to the notifier)
+    or None if the row was deduped.
     """
     entry_ts = datetime.fromisoformat(opp.get("entry_time", datetime.now(timezone.utc).isoformat()))
     source = opp.get("source", "live")
@@ -69,7 +72,7 @@ async def _save_alert(db: AsyncSession, opp: dict) -> None:
                 "dedup-skip: %s within %dmin of prior alert",
                 opp["ticker"], DEDUP_WINDOW_MINUTES,
             )
-            return
+            return None
 
     alert = ScannerAlert(
         id=uuid.uuid4(),
@@ -93,6 +96,7 @@ async def _save_alert(db: AsyncSession, opp: dict) -> None:
     )
     db.add(alert)
     await db.commit()
+    return alert
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
